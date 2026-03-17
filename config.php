@@ -2,7 +2,7 @@
 function getPDO(): PDO
 {
     $host = 'localhost';
-    $db   = 'caacu';
+    $db   = 'caacuprecio';
     $user = 'root';
     $pass = '';
     $charset = 'utf8mb4';
