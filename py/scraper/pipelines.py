@@ -16,30 +16,33 @@ class MySQLPipeline:
         self.cursor = self.connection.cursor()
 
     def close_spider(self, spider=None):
-        self.cursor.close()
-        self.connection.close()
+        if getattr(self, "cursor", None):
+            self.cursor.close()
+        if getattr(self, "connection", None):
+            self.connection.close()
 
     def process_item(self, item, spider=None):
         adapter = ItemAdapter(item)
 
-        nombre = (adapter.get("nombre") or "").strip()
-        precio = adapter.get("precio")
-        url = (adapter.get("url") or "").strip()
-        categoria = (adapter.get("categoria") or "Sin categoría").strip()
-        tienda = (adapter.get("tienda") or "Computex").strip()
-        stock_texto = (adapter.get("stock") or "").strip()
-        imagen = (adapter.get("imagen") or "").strip()
+        nombre = self.clean_text(adapter.get("nombre"))
+        precio = self.normalize_price(adapter.get("precio"))
+        url = self.clean_text(adapter.get("url"))
+        categoria = self.clean_text(adapter.get("categoria")) or "Sin categoría"
+        tienda = self.clean_text(adapter.get("tienda")) or self.default_store_name(spider)
+        stock_texto = self.clean_text(adapter.get("stock"))
+        imagen = self.clean_image(adapter.get("imagen"))
+        marca = self.clean_text(adapter.get("marca"))
+        descripcion = self.clean_text(adapter.get("descripcion"))
+        moneda = self.clean_text(adapter.get("moneda")) or "PYG"
 
         if not nombre or not url:
             return item
 
         en_stock = self.parse_stock(stock_texto)
-        imagen = self.clean_image(imagen)
 
         categoria_id = self.get_or_create_categoria(categoria)
         tienda_id = self.get_or_create_tienda(tienda)
 
-        # Buscar producto existente por URL
         self.cursor.execute("""
             SELECT idproductos, pro_precio, pro_en_stock
             FROM productos
@@ -49,16 +52,20 @@ class MySQLPipeline:
         row = self.cursor.fetchone()
 
         if row:
-            producto_id, precio_anterior_db, stock_anterior_db = row
+            producto_id, precio_actual_db, stock_actual_db = row
 
-            # Actualizar producto principal
+            precio_anterior = precio_actual_db if precio_actual_db != precio else precio_actual_db
+
             self.cursor.execute("""
                 UPDATE productos
                 SET pro_nombre = %s,
+                    pro_descripcion = %s,
+                    pro_marca = %s,
                     pro_precio_anterior = %s,
                     pro_precio = %s,
                     pro_imagen = %s,
                     pro_en_stock = %s,
+                    pro_moneda = %s,
                     pro_fecha_scraping = NOW(),
                     pro_activo = 1,
                     tiendas_idtiendas = %s,
@@ -66,38 +73,30 @@ class MySQLPipeline:
                 WHERE idproductos = %s
             """, (
                 nombre,
-                precio_anterior_db,
+                descripcion,
+                marca,
+                precio_anterior,
                 precio if precio is not None else 0,
                 imagen,
                 en_stock,
+                moneda,
                 tienda_id,
                 categoria_id,
                 producto_id
             ))
 
-            # Guardar historial si cambió algo importante
             if (
-                (precio is not None and precio_anterior_db != precio)
-                or stock_anterior_db != en_stock
+                (precio is not None and precio_actual_db != precio)
+                or stock_actual_db != en_stock
             ):
-                self.cursor.execute("""
-                    INSERT INTO historial_precios (
-                        productos_idproductos,
-                        his_precio,
-                        his_en_stock,
-                        his_fecha
-                    ) VALUES (%s, %s, %s, NOW())
-                """, (
-                    producto_id,
-                    precio if precio is not None else 0,
-                    en_stock
-                ))
+                self.insert_historial(producto_id, precio, en_stock)
+
         else:
-            # Insertar nuevo producto
             self.cursor.execute("""
                 INSERT INTO productos (
                     pro_nombre,
                     pro_descripcion,
+                    pro_marca,
                     pro_precio,
                     pro_precio_anterior,
                     pro_imagen,
@@ -108,35 +107,24 @@ class MySQLPipeline:
                     pro_activo,
                     tiendas_idtiendas,
                     categorias_idcategorias
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'PYG', NOW(), 1, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 1, %s, %s)
             """, (
                 nombre,
-                "",
+                descripcion,
+                marca,
                 precio if precio is not None else 0,
                 None,
                 imagen,
                 url,
                 en_stock,
+                moneda,
                 tienda_id,
                 categoria_id
             ))
 
             producto_id = self.cursor.lastrowid
+            self.insert_historial(producto_id, precio, en_stock)
 
-            self.cursor.execute("""
-                INSERT INTO historial_precios (
-                    productos_idproductos,
-                    his_precio,
-                    his_en_stock,
-                    his_fecha
-                ) VALUES (%s, %s, %s, NOW())
-            """, (
-                producto_id,
-                precio if precio is not None else 0,
-                en_stock
-            ))
-
-        # Mantener también productos_precios
         self.upsert_producto_precio(
             producto_id=producto_id,
             tienda_id=tienda_id,
@@ -147,6 +135,20 @@ class MySQLPipeline:
         )
 
         return item
+
+    def insert_historial(self, producto_id, precio, en_stock):
+        self.cursor.execute("""
+            INSERT INTO historial_precios (
+                productos_idproductos,
+                his_precio,
+                his_en_stock,
+                his_fecha
+            ) VALUES (%s, %s, %s, NOW())
+        """, (
+            producto_id,
+            precio if precio is not None else 0,
+            en_stock
+        ))
 
     def get_or_create_categoria(self, nombre):
         self.cursor.execute("""
@@ -201,7 +203,9 @@ class MySQLPipeline:
         row = self.cursor.fetchone()
 
         if row:
-            proprecio_id, precio_anterior_db = row
+            proprecio_id, precio_actual_db = row
+            precio_anterior = precio_actual_db if precio_actual_db != precio else precio_actual_db
+
             self.cursor.execute("""
                 UPDATE productos_precios
                 SET precio = %s,
@@ -213,7 +217,7 @@ class MySQLPipeline:
                 WHERE proprecio_id = %s
             """, (
                 precio if precio is not None else 0,
-                precio_anterior_db,
+                precio_anterior,
                 imagen,
                 stock_texto or None,
                 proprecio_id
@@ -246,18 +250,61 @@ class MySQLPipeline:
         if not texto:
             return 1
 
-        if "agotado" in texto or "sin stock" in texto or "no disponible" in texto:
-            return 0
+        negativos = [
+            "agotado",
+            "sin stock",
+            "no disponible",
+            "out of stock",
+            "indisponible",
+        ]
+
+        for palabra in negativos:
+            if palabra in texto:
+                return 0
 
         return 1
 
     def clean_image(self, imagen):
+        imagen = self.clean_text(imagen)
         if not imagen:
             return None
-
-        imagen = imagen.strip()
-
         if imagen.startswith("data:image"):
             return None
-
         return imagen
+
+    def clean_text(self, value):
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def normalize_price(self, value):
+        if value is None or value == "":
+            return None
+
+        if isinstance(value, (int, float)):
+            return int(value)
+
+        text = str(value).strip()
+        text = (
+            text.replace("₲", "")
+            .replace("Gs.", "")
+            .replace("Gs", "")
+            .replace(".", "")
+            .replace(",", "")
+            .strip()
+        )
+
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if not digits:
+            return None
+
+        return int(digits)
+
+    def default_store_name(self, spider):
+        if spider and getattr(spider, "store_name", None):
+            return str(spider.store_name).strip()
+
+        if spider and getattr(spider, "name", None):
+            return str(spider.name).replace("_", " ").strip().title()
+
+        return "Tienda desconocida"

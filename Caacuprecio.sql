@@ -55,7 +55,6 @@ CREATE TABLE `productos` (
   `pro_imagen` VARCHAR(500) NULL,
   `pro_url` VARCHAR(500) NULL,
   `pro_en_stock` TINYINT(1) NOT NULL DEFAULT 1,
-  `pro_moneda` VARCHAR(10) NOT NULL DEFAULT 'PYG',
   `pro_fecha_scraping` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `pro_activo` TINYINT(1) NOT NULL DEFAULT 1,
   `tiendas_idtiendas` INT NOT NULL,

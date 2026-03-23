@@ -8,3 +8,5 @@ class ProductoItem(scrapy.Item):
     tienda = scrapy.Field()
     stock = scrapy.Field()
     imagen = scrapy.Field()
+    marca = scrapy.Field()
+    descripcion = scrapy.Field()
