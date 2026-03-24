@@ -2,6 +2,7 @@ import json
 import re
 import scrapy
 from scraper.items import ProductoItem
+from scraper.utils.brands import extract_brand
 
 
 class CHProductosSpider(scrapy.Spider):
@@ -26,8 +27,11 @@ class CHProductosSpider(scrapy.Spider):
         vistos = set()
         for href in response.css('a[href*="/catalogo/"]::attr(href)').getall():
             href = response.urljoin(href.strip())
+            href = href.split("?")[0].rstrip("/")
+
             if not href or href in vistos:
                 continue
+
             vistos.add(href)
             yield response.follow(
                 href,
@@ -63,9 +67,11 @@ class CHProductosSpider(scrapy.Spider):
             )
 
             categoria = producto.get("categoria") or categoria_origen or "Sin categoría"
-            marca = producto.get("marca") or ""
+            marca_sitio = (producto.get("marca") or "").strip()
+            marca = marca_sitio if marca_sitio else extract_brand(nombre)
             precio = data.get("precioMonto")
             stock = "En stock" if variante.get("tieneStock") else "Sin stock"
+            descripcion = self.extraer_descripcion(response, data)
 
             imagen = None
             img_obj = variante.get("img", {})
@@ -77,24 +83,24 @@ class CHProductosSpider(scrapy.Spider):
             elif imagen:
                 imagen = response.urljoin(imagen)
 
-            url = variante.get("url") or response.url
+            url = (variante.get("url") or response.url).split("?")[0].rstrip("/")
 
             item["nombre"] = (nombre or "").strip()
             item["precio"] = self.to_int(precio)
-            item["url"] = url.strip()
+            item["url"] = url
             item["categoria"] = categoria.strip()
             item["tienda"] = self.store_name
             item["stock"] = stock
             item["imagen"] = imagen or ""
+            item["marca"] = marca
+            item["descripcion"] = descripcion
 
-            # Campo opcional si más adelante querés guardarlo
-            item["marca"] = marca.strip()
+            item = self.normalizar_item(item)
 
             if item["nombre"]:
                 yield item
             return
 
-        # Fallback si el JSON no aparece
         nombre = response.css("h1::text").get(default="").strip()
         precio_texto = " ".join(response.css("body ::text").getall())
         precio = self.parse_precio(precio_texto)
@@ -107,22 +113,107 @@ class CHProductosSpider(scrapy.Spider):
         if imagen:
             imagen = response.urljoin(imagen)
 
+        descripcion = self.extraer_descripcion(response, None)
+
         item["nombre"] = nombre
         item["precio"] = precio
-        item["url"] = response.url
+        item["url"] = response.url.split("?")[0].rstrip("/")
         item["categoria"] = categoria
-        item["tienda"] = "Comfort House"
+        item["tienda"] = self.store_name
         item["stock"] = stock
         item["imagen"] = imagen or ""
+        item["marca"] = extract_brand(nombre)
+        item["descripcion"] = descripcion
+
+        item = self.normalizar_item(item)
 
         if item["nombre"]:
             yield item
+
+
+    def normalizar_item(self, item):
+        marca = (item.get("marca") or "").strip()
+        if not marca or marca.lower() in {"sin marca", "no brand", "n/a", "na"}:
+            item["marca"] = "Genérico"
+        else:
+            item["marca"] = marca
+
+        categoria = (item.get("categoria") or "").strip()
+        if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
+            item["categoria"] = "Otros"
+        else:
+            item["categoria"] = categoria
+
+        return item
+
+    def extraer_descripcion(self, response, data=None):
+        # 1. JSON
+        if data:
+            carac = data.get("carac")
+            if isinstance(carac, list) and carac:
+                partes = []
+                for c in carac:
+                    if isinstance(c, str) and c.strip():
+                        partes.append(c.strip())
+                    elif isinstance(c, dict):
+                        for v in c.values():
+                            if isinstance(v, str) and v.strip():
+                                partes.append(v.strip())
+                if partes:
+                    return " | ".join(partes)[:1000]
+
+            for key in ["descripcion", "description", "desc"]:
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:1000]
+
+        # 2. Selectores HTML más específicos
+        descripcion = " ".join(
+            t.strip()
+            for t in response.css(
+                ".product-description *::text, "
+                ".description *::text, "
+                ".content-description *::text, "
+                ".product-detail-description *::text"
+            ).getall()
+            if t.strip()
+        )
+        if descripcion:
+            return descripcion[:1000]
+
+        # 3. Fallback desde "Características"
+        textos = response.css("body ::text").getall()
+        textos = [t.strip() for t in textos if t.strip()]
+
+        inicio = None
+        fin = None
+
+        for i, t in enumerate(textos):
+            t_lower = t.lower()
+            if t_lower == "características" or t_lower == "caracteristicas":
+                inicio = i + 1
+                continue
+
+            if inicio is not None and (
+                "productos que te pueden interesar" in t_lower
+                or "productos relacionados" in t_lower
+                or "consultá por este producto" in t_lower
+                or "consulta por este producto" in t_lower
+            ):
+                fin = i
+                break
+
+        if inicio is not None:
+            bloque = textos[inicio:fin] if fin is not None else textos[inicio:inicio + 25]
+            bloque = [t for t in bloque if len(t) > 1]
+            return " ".join(bloque)[:1000]
+
+        return ""
 
     def extract_product_json(self, response):
         scripts = response.css("script::text").getall()
         body_text = "\n".join(scripts + response.css("body ::text").getall())
 
-        # Busca el objeto que contiene producto/variante/precioMonto
         match = re.search(
             r'(\{"sku":\{.*?"precioMonto":\d+.*?\})',
             body_text,

@@ -2,12 +2,34 @@ import json
 import re
 import scrapy
 from scraper.items import ProductoItem
+from scraper.utils.brands import extract_brand
 
 
 class InverfinProductosSpider(scrapy.Spider):
     name = "inverfin_productos"
     store_name = "Inverfin"
     allowed_domains = ["inverfin.com.py"]
+
+    custom_settings = {
+        "DOWNLOAD_DELAY": 6,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 1,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": 3,
+        "AUTOTHROTTLE_MAX_DELAY": 20,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
+        "RETRY_TIMES": 8,
+        "COOKIES_ENABLED": False,
+        "DEFAULT_REQUEST_HEADERS": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        },
+    }
+
     start_urls = [
         "https://inverfin.com.py/collections/motos",
         "https://inverfin.com.py/collections/tv-y-audio",
@@ -27,12 +49,16 @@ class InverfinProductosSpider(scrapy.Spider):
 
         vistos = set()
 
-        # En las colecciones aparecen enlaces de detalle dentro de tarjetas con "Ver detalles"
-        # y productos como /products/<slug>
         for href in response.css('a[href*="/products/"]::attr(href)').getall():
             href = response.urljoin(href.strip())
 
-            if not href or href in vistos:
+            if not href:
+                continue
+
+            # Normalizar URL para no visitar variantes
+            href = href.split("?")[0].rstrip("/")
+
+            if href in vistos:
                 continue
 
             vistos.add(href)
@@ -42,7 +68,6 @@ class InverfinProductosSpider(scrapy.Spider):
                 meta={"categoria_origen": categoria_origen},
             )
 
-        # Shopify suele paginar con ?page=2, rel=next o texto "Siguiente"
         next_page = (
             response.css('link[rel="next"]::attr(href)').get()
             or response.css('a[rel="next"]::attr(href)').get()
@@ -51,7 +76,9 @@ class InverfinProductosSpider(scrapy.Spider):
 
         if not next_page:
             for a in response.css("a"):
-                text = " ".join(t.strip() for t in a.css("::text").getall() if t.strip()).lower()
+                text = " ".join(
+                    t.strip() for t in a.css("::text").getall() if t.strip()
+                ).lower()
                 href = a.attrib.get("href", "").strip()
                 if href and ("siguiente" in text or "next" in text):
                     next_page = href
@@ -83,7 +110,6 @@ class InverfinProductosSpider(scrapy.Spider):
             first_variant = variants[0] if variants else {}
 
             precio = self.shopify_price_to_int(first_variant.get("price"))
-            precio_compare = self.shopify_price_to_int(first_variant.get("compare_at_price"))
 
             stock = "En stock"
             if variants:
@@ -97,7 +123,7 @@ class InverfinProductosSpider(scrapy.Spider):
 
             item["nombre"] = nombre
             item["precio"] = precio
-            item["url"] = response.url
+            item["url"] = response.url.split("?")[0].rstrip("/")
             item["categoria"] = str(categoria).strip()
             item["tienda"] = self.store_name
             item["stock"] = stock
@@ -105,7 +131,9 @@ class InverfinProductosSpider(scrapy.Spider):
             item["marca"] = marca
             item["descripcion"] = descripcion
 
-            if item["nombre"]:
+            item = self.normalizar_item(item)
+
+            if item["nombre"] and item["precio"] is not None:
                 yield item
             return
 
@@ -146,19 +174,36 @@ class InverfinProductosSpider(scrapy.Spider):
 
         item["nombre"] = nombre
         item["precio"] = precio
-        item["url"] = response.url
+        item["url"] = response.url.split("?")[0].rstrip("/")
         item["categoria"] = categoria_origen or "Sin categoría"
         item["tienda"] = self.store_name
         item["stock"] = stock
         item["imagen"] = imagen
-        item["marca"] = ""
+        item["marca"] = extract_brand(nombre)
         item["descripcion"] = descripcion
 
-        if item["nombre"]:
+        item = self.normalizar_item(item)
+
+        if item["nombre"] and item["precio"] is not None:
             yield item
 
+
+    def normalizar_item(self, item):
+        marca = (item.get("marca") or "").strip()
+        if not marca or marca.lower() in {"sin marca", "no brand", "n/a", "na"}:
+            item["marca"] = "Genérico"
+        else:
+            item["marca"] = marca
+
+        categoria = (item.get("categoria") or "").strip()
+        if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
+            item["categoria"] = "Otros"
+        else:
+            item["categoria"] = categoria
+
+        return item
+
     def extract_product_json(self, response):
-        # Shopify suele incluir JSON-LD y/o un objeto Product JSON
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             raw = raw.strip()
             if not raw:
@@ -182,7 +227,6 @@ class InverfinProductosSpider(scrapy.Spider):
                     "images": image if isinstance(image, list) else ([image] if image else []),
                     "variants": [{
                         "price": offers.get("price") if isinstance(offers, dict) else None,
-                        "compare_at_price": None,
                         "available": (
                             offers.get("availability", "").endswith("InStock")
                             if isinstance(offers, dict) else True
@@ -190,7 +234,6 @@ class InverfinProductosSpider(scrapy.Spider):
                     }],
                 }
 
-        # Fallback: buscar bloque JSON de producto de Shopify
         scripts = response.css("script::text").getall()
         for raw in scripts:
             if '"variants"' not in raw or '"title"' not in raw:
@@ -240,7 +283,6 @@ class InverfinProductosSpider(scrapy.Spider):
             return None
 
         try:
-            # Puede venir como "10990000", "10990000.0", "10990000.00"
             return int(float(str(value)))
         except (TypeError, ValueError):
             return None

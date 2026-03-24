@@ -33,7 +33,6 @@ class MySQLPipeline:
         imagen = self.clean_image(adapter.get("imagen"))
         marca = self.clean_text(adapter.get("marca"))
         descripcion = self.clean_text(adapter.get("descripcion"))
-        moneda = self.clean_text(adapter.get("moneda")) or "PYG"
 
         if not nombre or not url:
             return item
@@ -65,7 +64,6 @@ class MySQLPipeline:
                     pro_precio = %s,
                     pro_imagen = %s,
                     pro_en_stock = %s,
-                    pro_moneda = %s,
                     pro_fecha_scraping = NOW(),
                     pro_activo = 1,
                     tiendas_idtiendas = %s,
@@ -79,7 +77,6 @@ class MySQLPipeline:
                 precio if precio is not None else 0,
                 imagen,
                 en_stock,
-                moneda,
                 tienda_id,
                 categoria_id,
                 producto_id
@@ -102,12 +99,11 @@ class MySQLPipeline:
                     pro_imagen,
                     pro_url,
                     pro_en_stock,
-                    pro_moneda,
                     pro_fecha_scraping,
                     pro_activo,
                     tiendas_idtiendas,
                     categorias_idcategorias
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), 1, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), 1, %s, %s)
             """, (
                 nombre,
                 descripcion,
@@ -117,7 +113,6 @@ class MySQLPipeline:
                 imagen,
                 url,
                 en_stock,
-                moneda,
                 tienda_id,
                 categoria_id
             ))
