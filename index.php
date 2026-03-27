@@ -14,6 +14,7 @@ $stats = [
     'tiendas' => (int) $pdo->query('SELECT COUNT(*) FROM tiendas')->fetchColumn(),
     'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
     'productos' => (int) $pdo->query('SELECT COUNT(*) FROM productos WHERE pro_activo = 1')->fetchColumn(),
+    'favoritos' => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
 ];
 
 $categorias = $pdo->query('SELECT idcategorias, cat_nombre FROM categorias ORDER BY cat_nombre ASC')->fetchAll();
@@ -22,7 +23,7 @@ $where = ['p.pro_activo = 1'];
 $params = [];
 
 if ($q !== '') {
-    $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR t.tie_nombre LIKE :q OR c.cat_nombre LIKE :q)';
+    $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR p.pro_marca LIKE :q OR t.tie_nombre LIKE :q OR c.cat_nombre LIKE :q)';
     $params[':q'] = '%' . $q . '%';
 }
 
@@ -33,14 +34,52 @@ if ($categoriaId > 0) {
 
 $whereSql = implode(' AND ', $where);
 
-$countStmt = $pdo->prepare("\n    SELECT COUNT(*)\n    FROM productos p\n    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas\n    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias\n    WHERE {$whereSql}\n");
+$countStmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM productos p
+    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+    WHERE {$whereSql}
+");
 $countStmt->execute($params);
 $totalProducts = (int) $countStmt->fetchColumn();
 $totalPages = max(1, (int) ceil($totalProducts / $perPage));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
 
-$sql = "\n    SELECT\n        p.idproductos,\n        p.pro_nombre,\n        p.pro_descripcion,\n        p.pro_precio,\n        p.pro_precio_anterior,\n        p.pro_imagen,\n        p.pro_url,\n        p.pro_en_stock,\n        p.pro_fecha_scraping,\n        t.idtiendas,\n        t.tie_nombre,\n        c.cat_nombre\n    FROM productos p\n    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas\n    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias\n    WHERE {$whereSql}\n    ORDER BY " . sort_sql($sort) . "\n    LIMIT :limit OFFSET :offset\n";
+$sql = "
+    SELECT
+        p.idproductos,
+        p.pro_nombre,
+        p.pro_descripcion,
+        p.pro_marca,
+        p.pro_precio,
+        p.pro_precio_anterior,
+        p.pro_imagen,
+        p.pro_url,
+        p.pro_en_stock,
+        p.pro_fecha_scraping,
+        t.idtiendas,
+        t.tie_nombre,
+        c.cat_nombre,
+        (
+            SELECT COUNT(*)
+            FROM historial_precios hp
+            WHERE hp.productos_idproductos = p.idproductos
+        ) AS total_historial,
+        (
+            SELECT COUNT(*)
+            FROM productos_precios pp
+            WHERE pp.productos_idproductos = p.idproductos
+              AND pp.prop_estado = 'activo'
+        ) AS total_ofertas
+    FROM productos p
+    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+    WHERE {$whereSql}
+    ORDER BY " . sort_sql($sort) . "
+    LIMIT :limit OFFSET :offset
+";
 $stmt = $pdo->prepare($sql);
 foreach ($params as $key => $value) {
     $stmt->bindValue($key, $value);
@@ -50,84 +89,125 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $products = $stmt->fetchAll();
 
-$stores = $pdo->query("\n    SELECT\n        t.idtiendas,\n        t.tie_nombre,\n        t.tie_descripcion,\n        t.tie_logo,\n        t.tie_ubicacion,\n        t.tie_url,\n        COUNT(p.idproductos) AS total_productos,\n        MIN(p.pro_precio) AS precio_minimo\n    FROM tiendas t\n    LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas AND p.pro_activo = 1\n    GROUP BY t.idtiendas, t.tie_nombre, t.tie_descripcion, t.tie_logo, t.tie_ubicacion, t.tie_url\n    ORDER BY total_productos DESC, t.tie_nombre ASC\n    LIMIT 8\n")->fetchAll();
+$stores = $pdo->query("
+    SELECT
+        t.idtiendas,
+        t.tie_nombre,
+        t.tie_descripcion,
+        t.tie_logo,
+        t.tie_ubicacion,
+        t.tie_url,
+        COUNT(p.idproductos) AS total_productos,
+        MIN(p.pro_precio) AS precio_minimo,
+        MAX(p.pro_fecha_scraping) AS ultima_actualizacion
+    FROM tiendas t
+    LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas AND p.pro_activo = 1
+    GROUP BY t.idtiendas, t.tie_nombre, t.tie_descripcion, t.tie_logo, t.tie_ubicacion, t.tie_url
+    ORDER BY total_productos DESC, t.tie_nombre ASC
+    LIMIT 8
+")->fetchAll();
+
+$recentLogs = $pdo->query("
+    SELECT s.scrape_estado, s.scrape_productos_actualizados, s.scrape_fin, t.tie_nombre
+    FROM scrape_logs s
+    INNER JOIN tiendas t ON t.idtiendas = s.tiendas_idtiendas
+    ORDER BY COALESCE(s.scrape_fin, s.scrape_inicio) DESC
+    LIMIT 4
+")->fetchAll();
 
 render_head('Inicio');
 render_navbar('home');
 ?>
-<section class="hero">
-  <div class="container">
+
+<div class="site-bg" aria-hidden="true">
+  <span class="bg-orb orb-1"></span>
+  <span class="bg-orb orb-2"></span>
+  <span class="bg-orb orb-3"></span>
+  <span class="bg-grid"></span>
+</div>
+
+<section class="hero hero-home position-relative overflow-hidden">
+  <div class="container position-relative z-1">
     <div class="row g-4 align-items-center">
       <div class="col-lg-7">
-        <span class="badge rounded-pill custom-badge px-3 py-2 mb-3">
-          <i class="bi bi-stars me-1"></i>Home lista para PHP + MySQL
+        <span class="eyebrow-pill mb-3 d-inline-flex align-items-center gap-2">
+          <span class="eyebrow-dot"></span>
+          Comparador de precios actualizado con MySQL
         </span>
-        <h1 class="display-5 fw-bold mb-3">Encontrá el mejor precio antes de comprar</h1>
-        <p class="lead text-body-secondary mb-4">Esta portada consulta categorías, tiendas y productos desde tu base <strong>Caacuprecio</strong>, usando tu esquema actual de MySQL con tablas relacionadas para catálogo e historial. fileciteturn9file9turn9file13</p>
+        <h1 class="display-4 fw-bold mb-3 hero-title">Compará precios de varias tiendas en un solo lugar</h1>
+        <p class="lead text-body-secondary mb-4 hero-copy">
+          La portada ahora consulta el esquema actual de <strong>caacuprecio</strong>: productos, categorías, tiendas, historial, logs y favoritos,
+          con una interfaz más moderna, visual y animada.
+        </p>
 
         <div class="row g-3">
-          <div class="col-sm-4">
-            <div class="stats-card p-3 h-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="icon-wrap"><i class="bi bi-shop"></i></div>
-                <div>
-                  <div class="fw-bold fs-5"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
-                  <div class="text-body-secondary small">Tiendas</div>
-                </div>
-              </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="stats-card p-3 h-100 floating-card">
+              <div class="stat-label">Tiendas</div>
+              <div class="stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
             </div>
           </div>
-          <div class="col-sm-4">
-            <div class="stats-card p-3 h-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="icon-wrap"><i class="bi bi-grid"></i></div>
-                <div>
-                  <div class="fw-bold fs-5"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
-                  <div class="text-body-secondary small">Categorías</div>
-                </div>
-              </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="stats-card p-3 h-100 floating-card delay-1">
+              <div class="stat-label">Categorías</div>
+              <div class="stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
             </div>
           </div>
-          <div class="col-sm-4">
-            <div class="stats-card p-3 h-100">
-              <div class="d-flex align-items-center gap-3">
-                <div class="icon-wrap"><i class="bi bi-tags"></i></div>
-                <div>
-                  <div class="fw-bold fs-5"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
-                  <div class="text-body-secondary small">Productos activos</div>
-                </div>
-              </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="stats-card p-3 h-100 floating-card delay-2">
+              <div class="stat-label">Productos</div>
+              <div class="stat-value"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="stats-card p-3 h-100 floating-card delay-3">
+              <div class="stat-label">Favoritos</div>
+              <div class="stat-value"><?= number_format($stats['favoritos'], 0, ',', '.') ?></div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="col-lg-5">
-        <div class="hero-visual p-4 p-lg-5 h-100">
-          <div class="d-flex justify-content-between align-items-start mb-4">
+        <div class="hero-panel glass-card p-4 p-lg-5 h-100">
+          <div class="d-flex justify-content-between align-items-start mb-4 gap-3">
             <div>
-              <small class="text-white-50">Inspiración visual</small>
-              <h3 class="h4 fw-bold mb-0">Bootstrap + SQL</h3>
+              <div class="panel-kicker">Vista general</div>
+              <h2 class="h3 fw-bold mb-1">Panel del catálogo</h2>
+              <p class="text-body-secondary mb-0">Inspirado en landing pages modernas con brillo, profundidad y movimiento suave.</p>
             </div>
-            <span class="badge bg-warning text-dark rounded-pill px-3 py-2">Dark default</span>
+            <span class="pulse-badge">Live</span>
           </div>
-          <div class="mini-stat mb-3">
-            <div class="d-flex justify-content-between mb-2"><span class="text-white-50">Consultas</span><strong>PDO</strong></div>
-            <div class="progress" style="height:8px"><div class="progress-bar" style="width:88%"></div></div>
+
+          <div class="hero-metric mb-3">
+            <span>Productos activos</span>
+            <strong><?= number_format($stats['productos'], 0, ',', '.') ?></strong>
           </div>
-          <div class="mini-stat mb-3">
-            <div class="d-flex justify-content-between mb-2"><span class="text-white-50">Frontend</span><strong>Bootstrap 5</strong></div>
-            <div class="progress bg-light-subtle" style="height:8px"><div class="progress-bar bg-warning" style="width:74%"></div></div>
+          <div class="hero-metric mb-3">
+            <span>Tiendas indexadas</span>
+            <strong><?= number_format($stats['tiendas'], 0, ',', '.') ?></strong>
           </div>
-          <div class="mini-stat">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <div class="fw-semibold">Tema persistente</div>
-                <small class="text-white-50">Guardado en localStorage</small>
-              </div>
-              <i class="bi bi-moon-stars fs-3"></i>
+          <div class="hero-metric">
+            <span>Categorías disponibles</span>
+            <strong><?= number_format($stats['categorias'], 0, ',', '.') ?></strong>
+          </div>
+
+          <?php if ($recentLogs): ?>
+            <div class="mini-log-list mt-4">
+              <?php foreach ($recentLogs as $log): ?>
+                <div class="mini-log-item">
+                  <div>
+                    <div class="fw-semibold"><?= e($log['tie_nombre']) ?></div>
+                    <small class="text-body-secondary"><?= e($log['scrape_estado']) ?></small>
+                  </div>
+                  <div class="text-end">
+                    <div class="fw-semibold"><?= (int) $log['scrape_productos_actualizados'] ?></div>
+                    <small class="text-body-secondary"><?= !empty($log['scrape_fin']) ? e(date('d/m/Y H:i', strtotime((string) $log['scrape_fin']))) : 'En curso' ?></small>
+                  </div>
+                </div>
+              <?php endforeach; ?>
             </div>
-          </div>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -135,10 +215,10 @@ render_navbar('home');
 </section>
 
 <div class="container sticky-search">
-  <div class="search-bar p-3 p-lg-2">
+  <div class="search-bar glass-card p-3 p-lg-2">
     <form class="row g-2 align-items-center" method="get" action="index.php">
       <div class="col-lg-5">
-        <input type="text" name="q" class="form-control" placeholder="Buscá por producto, tienda o categoría" value="<?= e($q) ?>">
+        <input type="text" name="q" class="form-control" placeholder="Buscá por producto, marca, tienda o categoría" value="<?= e($q) ?>">
       </div>
       <div class="col-sm-6 col-lg-3">
         <select name="categoria" class="form-select">
@@ -165,19 +245,20 @@ render_navbar('home');
 </div>
 
 <main>
-  <section id="categorias" class="py-5">
+  <section id="categorias" class="py-5 position-relative">
     <div class="container">
-      <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
+      <div class="section-header mb-4">
         <div>
+          <div class="section-kicker">Exploración</div>
           <h2 class="section-title mb-2">Categorías</h2>
-          <p class="section-subtitle mb-0">Estas categorías salen de la tabla <code>categorias</code> definida en tu SQL. fileciteturn9file9</p>
+          <p class="section-subtitle mb-0">Se cargan directamente desde la tabla <code>categorias</code> y enlazan con <code>productos.categorias_idcategorias</code>.</p>
         </div>
       </div>
       <div class="row g-3">
         <?php if ($categorias): ?>
           <?php foreach ($categorias as $categoria): ?>
             <div class="col-6 col-md-4 col-xl-2">
-              <a class="category-pill" href="index.php?categoria=<?= (int) $categoria['idcategorias'] ?>#productos">
+              <a class="category-pill fancy-hover" href="index.php?categoria=<?= (int) $categoria['idcategorias'] ?>#productos">
                 <span class="icon-wrap"><i class="bi bi-grid"></i></span>
                 <span><?= e($categoria['cat_nombre']) ?></span>
               </a>
@@ -190,12 +271,13 @@ render_navbar('home');
     </div>
   </section>
 
-  <section id="productos" class="pb-5">
+  <section id="productos" class="pb-5 position-relative">
     <div class="container">
-      <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
+      <div class="section-header mb-4 d-flex justify-content-between align-items-end gap-3 flex-wrap">
         <div>
+          <div class="section-kicker">Catálogo</div>
           <h2 class="section-title mb-2">Productos</h2>
-          <p class="section-subtitle mb-0">Cada fila viene de la tabla <code>productos</code> y está asociada a una tienda y una categoría por claves foráneas. fileciteturn9file0turn9file9</p>
+          <p class="section-subtitle mb-0">Listado principal conectado con <code>productos</code>, <code>tiendas</code>, <code>categorias</code>, <code>historial_precios</code> y <code>productos_precios</code>.</p>
         </div>
         <div class="small text-body-secondary"><?= number_format($totalProducts, 0, ',', '.') ?> resultado(s)</div>
       </div>
@@ -209,16 +291,21 @@ render_navbar('home');
             $discount = ($oldPrice && $oldPrice > $currentPrice) ? (int) round((($oldPrice - $currentPrice) / $oldPrice) * 100) : 0;
             ?>
             <div class="col-md-6 col-xl-3">
-              <article class="custom-card h-100 p-3">
-                <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="text-decoration-none text-reset">
-                  <img class="offer-thumb mb-3" src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>">
+              <article class="custom-card product-card h-100 p-3 fancy-hover">
+                <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="text-decoration-none text-reset d-block">
+                  <div class="product-thumb-wrap mb-3">
+                    <img class="offer-thumb" src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>">
+                  </div>
                 </a>
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                   <span class="badge soft-badge"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
                   <?php if ($discount > 0): ?><span class="price-badge">-<?= $discount ?>%</span><?php endif; ?>
                 </div>
                 <h3 class="h6 fw-bold mb-1"><a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="text-decoration-none text-reset stretched-link-sibling"><?= e($product['pro_nombre']) ?></a></h3>
-                <p class="text-body-secondary small mb-3 line-clamp-2"><?= e($product['pro_descripcion'] ?: 'Sin descripción disponible.') ?></p>
+                <p class="text-body-secondary small mb-2 line-clamp-2"><?= e($product['pro_descripcion'] ?: 'Sin descripción disponible.') ?></p>
+                <?php if (!empty($product['pro_marca'])): ?>
+                  <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['pro_marca']) ?></strong></div>
+                <?php endif; ?>
                 <div class="d-flex align-items-end justify-content-between mb-3 gap-2">
                   <div>
                     <div class="price-now"><?= gs($currentPrice) ?></div>
@@ -229,9 +316,11 @@ render_navbar('home');
                     <div><?= e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) ?></div>
                   </div>
                 </div>
-                <div class="d-flex justify-content-between align-items-center border-top pt-3 gap-2">
+                <div class="product-meta d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-3">
                   <a class="small text-body-secondary text-decoration-none position-relative z-2" href="tienda.php?id=<?= (int) $product['idtiendas'] ?>"><i class="bi bi-shop me-1"></i><?= e($product['tie_nombre']) ?></a>
-                  <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="btn btn-sm btn-primary rounded-pill px-3 position-relative z-2">Ver detalle</a>
+                  <div class="small text-body-secondary position-relative z-2">
+                    <?= (int) $product['total_historial'] ?> historial · <?= (int) $product['total_ofertas'] ?> ofertas
+                  </div>
                 </div>
               </article>
             </div>
@@ -255,19 +344,20 @@ render_navbar('home');
     </div>
   </section>
 
-  <section id="tiendas" class="pb-5">
+  <section id="tiendas" class="pb-5 position-relative">
     <div class="container">
-      <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
+      <div class="section-header mb-4">
         <div>
+          <div class="section-kicker">Directorio</div>
           <h2 class="section-title mb-2">Tiendas</h2>
-          <p class="section-subtitle mb-0">El directorio se arma desde la tabla <code>tiendas</code>, enlazada con <code>productos</code>. fileciteturn9file9</p>
+          <p class="section-subtitle mb-0">Cada tienda está conectada con su catálogo por <code>productos.tiendas_idtiendas</code>.</p>
         </div>
       </div>
       <div class="row g-4">
         <?php if ($stores): ?>
           <?php foreach ($stores as $store): ?>
             <div class="col-sm-6 col-lg-3">
-              <div class="store-card p-4 h-100">
+              <div class="store-card p-4 h-100 fancy-hover">
                 <div class="store-logo d-flex align-items-center justify-content-center mb-3 store-logo-box">
                   <?php if (!empty($store['tie_logo'])): ?>
                     <img src="<?= e($store['tie_logo']) ?>" alt="<?= e($store['tie_nombre']) ?>" class="img-fluid rounded-3 store-logo-img">
@@ -276,10 +366,13 @@ render_navbar('home');
                   <?php endif; ?>
                 </div>
                 <h3 class="h6 fw-bold mb-1"><?= e($store['tie_nombre']) ?></h3>
-                <p class="text-body-secondary small mb-3"><?= e($store['tie_ubicacion'] ?: ($store['tie_descripcion'] ?: 'Sin descripción')) ?></p>
+                <p class="text-body-secondary small mb-3 line-clamp-2"><?= e($store['tie_ubicacion'] ?: ($store['tie_descripcion'] ?: 'Sin descripción')) ?></p>
                 <div class="d-flex justify-content-between small text-body-secondary mb-3">
                   <span><?= number_format((int) $store['total_productos'], 0, ',', '.') ?> productos</span>
-                  <span><?= gs($store['precio_minimo']) ?></span>
+                  <span><?= $store['precio_minimo'] !== null ? gs($store['precio_minimo']) : 'Sin precio' ?></span>
+                </div>
+                <div class="small text-body-secondary mb-3">
+                  <?= $store['ultima_actualizacion'] ? 'Actualizado ' . e(date('d/m/Y H:i', strtotime((string) $store['ultima_actualizacion']))) : 'Sin actualizaciones' ?>
                 </div>
                 <a href="tienda.php?id=<?= (int) $store['idtiendas'] ?>" class="btn btn-outline-primary rounded-pill w-100">Ver tienda</a>
               </div>
@@ -292,4 +385,5 @@ render_navbar('home');
     </div>
   </section>
 </main>
+
 <?php render_footer(); ?>
