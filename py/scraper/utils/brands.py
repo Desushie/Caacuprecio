@@ -156,6 +156,8 @@ BRAND_ALIASES = {
     "Speakon": ["speakon"],
 }
 
+
+
 def normalize_text(text: str) -> str:
     """
     Limpia el texto y lo deja en minúsculas sin espacios duplicados

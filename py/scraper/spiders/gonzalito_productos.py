@@ -1,6 +1,10 @@
 import json
 import re
+from urllib.parse import urlencode
+
 import scrapy
+from parsel import Selector
+
 from scraper.items import ProductoItem
 from scraper.utils.brands import extract_brand
 from scraper.utils.categories import extract_category
@@ -29,33 +33,261 @@ class GonzalitoProductosSpider(scrapy.Spider):
     custom_settings = {
         "DOWNLOAD_DELAY": 0.35,
         "ROBOTSTXT_OBEY": False,
+        "DUPEFILTER_DEBUG": True,
+        "COOKIES_ENABLED": True,
+        "DEFAULT_REQUEST_HEADERS": {
+            "accept-language": "es,en;q=0.8",
+            "referer": "https://www.tiendagonzalito.com.py/",
+        },
     }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seen_product_urls = set()
+        self._seen_api_pages = set()
 
     def parse(self, response):
         categoria_origen = self.clean_text(
             response.css("h1::text").get()
+            or response.css("meta[property='og:title']::attr(content)").get()
             or response.css("title::text").get(default="")
         )
-        vistos = set()
 
-        # Productos dentro del listado
-        for href in response.css('a[href*="/producto/"]::attr(href)').getall():
-            href = response.urljoin((href or "").strip())
-            href = href.split("?")[0].rstrip("/")
-            if not href or href in vistos:
+        categoria_id = self.extract_category_id(response.url)
+        if not categoria_id:
+            self.logger.warning("No se pudo detectar categoria_id desde %s", response.url)
+            return
+
+        yield from self.request_product_page(
+            response=response,
+            categoria_id=categoria_id,
+            page=1,
+            categoria_origen=categoria_origen,
+        )
+
+    def request_product_page(self, response, categoria_id, page, categoria_origen):
+        api_url = self.build_api_url(categoria_id, page)
+        if api_url in self._seen_api_pages:
+            return
+        self._seen_api_pages.add(api_url)
+
+        headers = {
+            "accept": "*/*",
+            "referer": response.url,
+        }
+
+        xsrf = self.get_xsrf_token(response)
+        if xsrf:
+            headers["x-xsrf-token"] = xsrf
+
+        yield scrapy.Request(
+            api_url,
+            callback=self.parse_api,
+            headers=headers,
+            meta={
+                "categoria_id": categoria_id,
+                "categoria_origen": categoria_origen,
+                "api_page": page,
+                "referer_url": response.url,
+            },
+            dont_filter=True,
+        )
+
+    def parse_api(self, response):
+        categoria_id = response.meta["categoria_id"]
+        categoria_origen = response.meta.get("categoria_origen", "")
+        page = response.meta.get("api_page", 1)
+
+        product_urls = []
+        next_page_hint = None
+
+        content_type = (response.headers.get("Content-Type") or b"").decode("latin1").lower()
+        text = response.text or ""
+
+        payload = None
+        if "json" in content_type or text[:1] in "[{":
+            try:
+                payload = json.loads(text)
+            except Exception:
+                payload = None
+
+        if payload is not None:
+            product_urls.extend(self.extract_product_urls_from_json(payload, response))
+            next_page_hint = self.detect_next_page_from_json(payload, page)
+
+            html_blocks = self.extract_html_blocks_from_json(payload)
+            for block in html_blocks:
+                product_urls.extend(self.extract_product_urls_from_html(block, response))
+        else:
+            product_urls.extend(self.extract_product_urls_from_html(text, response))
+            next_page_hint = self.detect_next_page_from_html(text, response, page)
+
+        product_urls = sorted({self.normalize_url(url) for url in product_urls if self.normalize_url(url)})
+
+        self.logger.warning(
+            "[API categoria=%s page=%s] productos detectados: %s",
+            categoria_id,
+            page,
+            len(product_urls),
+        )
+
+        for url in product_urls:
+            if url in self._seen_product_urls:
                 continue
-            vistos.add(href)
-            yield response.follow(
-                href,
+            self._seen_product_urls.add(url)
+            yield scrapy.Request(
+                url,
                 callback=self.parse_producto,
                 meta={"categoria_origen": categoria_origen},
             )
 
-        # Algunas páginas incluyen "Ver todo" y otros enlaces de categoría.
-        # No seguimos más categorías para evitar bucles; solo paginación real.
-        next_page = self.find_next_page(response)
-        if next_page:
-            yield response.follow(next_page, callback=self.parse)
+        if product_urls:
+            next_page = next_page_hint or (page + 1)
+            fake_response = response.replace(url=response.meta.get("referer_url", response.url))
+            yield from self.request_product_page(
+                response=fake_response,
+                categoria_id=categoria_id,
+                page=next_page,
+                categoria_origen=categoria_origen,
+            )
+
+    def extract_product_urls_from_json(self, data, response):
+        found = set()
+
+        def walk(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    key_lower = str(key).lower()
+
+                    if key_lower in {"url", "href", "link", "permalink"} and isinstance(value, str):
+                        if "/producto/" in value:
+                            found.add(response.urljoin(value.replace("\\/", "/")))
+
+                    if isinstance(value, (dict, list)):
+                        walk(value)
+                    elif isinstance(value, str) and "/producto/" in value:
+                        for match in re.findall(r'https?://[^"\'\s>]+/producto/\d+/[^"\'\s>]+', value.replace("\\/", "/")):
+                            found.add(match)
+                        for match in re.findall(r'/producto/\d+/[^"\'\s>]+', value.replace("\\/", "/")):
+                            found.add(response.urljoin(match))
+
+            elif isinstance(obj, list):
+                for item in obj:
+                    walk(item)
+
+        walk(data)
+        return list(found)
+
+    def extract_html_blocks_from_json(self, data):
+        blocks = []
+
+        def walk(obj):
+            if isinstance(obj, dict):
+                for value in obj.values():
+                    if isinstance(value, str) and ("/producto/" in value or "<a" in value or "product" in value.lower()):
+                        blocks.append(value)
+                    elif isinstance(value, (dict, list)):
+                        walk(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    walk(item)
+
+        walk(data)
+        return blocks
+
+    def extract_product_urls_from_html(self, html, response):
+        if not html:
+            return []
+
+        found = set()
+        selector = Selector(text=html)
+
+        hrefs = set()
+        css_candidates = [
+            'a[href*="/producto/"]::attr(href)',
+            '[data-href*="/producto/"]::attr(data-href)',
+            '[href*="/producto/"]::attr(href)',
+        ]
+        for css in css_candidates:
+            for href in selector.css(css).getall():
+                if href:
+                    hrefs.add(href)
+
+        raw = html.replace('\\/', '/')
+        patterns = [
+            r'https?://[^"\'\s>]+/producto/\d+/[^"\'\s>]+',
+            r'/producto/\d+/[^"\'\s>]+',
+        ]
+        for pattern in patterns:
+            for match in re.findall(pattern, raw):
+                hrefs.add(match)
+
+        for href in hrefs:
+            normalized = self.normalize_url(response.urljoin((href or "").strip()))
+            if normalized and "/producto/" in normalized:
+                found.add(normalized)
+
+        return list(found)
+
+    def detect_next_page_from_json(self, data, current_page):
+        if isinstance(data, dict):
+            for key in ("next_page", "nextPage", "page", "pagina"):
+                val = data.get(key)
+                if isinstance(val, int) and val > current_page:
+                    return val
+            meta = data.get("meta") or data.get("pagination") or data.get("paginacion")
+            if isinstance(meta, dict):
+                current = meta.get("current_page") or meta.get("currentPage") or current_page
+                last = meta.get("last_page") or meta.get("lastPage")
+                if isinstance(current, int) and isinstance(last, int) and current < last:
+                    return current + 1
+        return None
+
+    def detect_next_page_from_html(self, html, response, current_page):
+        selector = Selector(text=html)
+        href = (
+            selector.css('a[rel="next"]::attr(href)').get()
+            or selector.css('a.next::attr(href)').get()
+            or selector.css('li.next a::attr(href)').get()
+        )
+        if href:
+            match = re.search(r'[?&]page=(\d+)', href)
+            if match:
+                next_page = int(match.group(1))
+                if next_page > current_page:
+                    return next_page
+        return None
+
+    def build_api_url(self, categoria_id, page):
+        params = {
+            "page": page,
+            "categoria": categoria_id,
+            "ordenar_por": 3,
+            "marcas": "",
+            "categorias": "",
+            "categorias_top": "",
+        }
+        return f"https://www.tiendagonzalito.com.py/get-productos?{urlencode(params)}"
+
+    def get_xsrf_token(self, response):
+        cookies = response.headers.getlist("Set-Cookie") or []
+        for cookie in cookies:
+            text = cookie.decode("latin1", errors="ignore")
+            match = re.search(r'XSRF-TOKEN=([^;]+)', text)
+            if match:
+                return match.group(1)
+
+        cookie_header = response.request.headers.get("Cookie")
+        if cookie_header:
+            text = cookie_header.decode("latin1", errors="ignore")
+            match = re.search(r'XSRF-TOKEN=([^;]+)', text)
+            if match:
+                return match.group(1)
+        return None
+
+    def extract_category_id(self, url):
+        match = re.search(r'/categoria/(\d+)', url)
+        return match.group(1) if match else None
 
     def parse_producto(self, response):
         nombre = self.clean_text(
@@ -83,7 +315,7 @@ class GonzalitoProductosSpider(scrapy.Spider):
         item = ProductoItem()
         item["nombre"] = nombre
         item["precio"] = precio
-        item["url"] = response.url.split("?")[0].rstrip("/")
+        item["url"] = self.normalize_url(response.url)
         item["categoria"] = categoria
         item["tienda"] = self.store_name
         item["stock"] = stock
@@ -91,26 +323,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         item["marca"] = marca
         item["descripcion"] = descripcion
         yield item
-
-    def find_next_page(self, response):
-        # Rel next o paginación explícita
-        next_page = (
-            response.css('a[rel="next"]::attr(href)').get()
-            or response.css("a.next::attr(href)").get()
-            or response.css("li.next a::attr(href)").get()
-        )
-        if next_page:
-            return next_page
-
-        # Buscar anclas con texto de siguiente
-        for a in response.css("a"):
-            text = self.clean_text(" ".join(a.css("::text").getall())).lower()
-            href = (a.attrib.get("href") or "").strip()
-            if not href:
-                continue
-            if any(x in text for x in ["siguiente", "next", "›", ">"]):
-                return href
-        return None
 
     def parse_precio(self, response, body_text):
         # 1) JSON-LD / scripts
@@ -120,10 +332,11 @@ class GonzalitoProductosSpider(scrapy.Spider):
                 if value:
                     return value
 
-        # 2) Metas/atributos comunes
+        # 2) Metas/atributos comunes del producto principal
         candidates = response.css(
             '[itemprop="price"]::attr(content), '
             'meta[property="product:price:amount"]::attr(content), '
+            'meta[property="og:price:amount"]::attr(content), '
             'meta[name="price"]::attr(content), '
             '[data-price]::attr(data-price)'
         ).getall()
@@ -132,23 +345,50 @@ class GonzalitoProductosSpider(scrapy.Spider):
             if value:
                 return value
 
-        # 3) Texto visible: preferir contado / ahora / oferta
+        # 3) Texto visible, pero SOLO antes de "Productos que te pueden interesar"
+        visible_main = self.cut_main_product_text(body_text)
+
         patrones = [
-            r"(?:al contado ahora|al contado|oferta)\s*gs\.\s*([\d\.]+)",
-            r"gs\.\s*([\d\.]+)",
+            r"(?:al contado ahora|al contado|oferta)\s*gs\.?\s*([\d\.]+)",
+            r"(?:precio(?:\s+especial)?|ahora)\s*[:\-]?\s*gs\.?\s*([\d\.]+)",
+            r"gs\.?\s*([\d\.]+)",
         ]
         for patron in patrones:
-            m = re.search(patron, body_text, re.I)
+            m = re.search(patron, visible_main, re.I)
             if m:
                 value = self.to_int(m.group(1))
                 if value:
                     return value
+
         return None
+
+    def cut_main_product_text(self, text):
+        text = self.clean_text(text)
+        if not text:
+            return ""
+
+        lower = text.lower()
+        cortes = [
+            "productos que te pueden interesar",
+            "información",
+            "informacion",
+            "métodos de pago",
+            "metodos de pago",
+            "también te puede interesar",
+            "tambien te puede interesar",
+            "productos relacionados",
+        ]
+        cut_at = len(text)
+        for marker in cortes:
+            pos = lower.find(marker)
+            if pos != -1:
+                cut_at = min(cut_at, pos)
+
+        return text[:cut_at].strip()
 
     def extraer_categoria(self, response, nombre, categoria_origen=""):
         candidatos = []
 
-        # Breadcrumb: en snippets se observa Inicio > Categoría > Producto
         breadcrumbs = [
             self.clean_text(t)
             for t in response.css(
@@ -158,7 +398,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         ]
         candidatos.extend(breadcrumbs)
 
-        # JSON-LD
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
@@ -192,7 +431,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         return "Otros"
 
     def extraer_marca(self, response, nombre, body_text):
-        # JSON-LD marca
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
@@ -203,14 +441,9 @@ class GonzalitoProductosSpider(scrapy.Spider):
                 if brand:
                     return brand
 
-        # Metas visibles
-        metas = response.css(
-            'meta[property="og:title"]::attr(content), meta[name="keywords"]::attr(content)'
-        ).getall()
-        for txt in metas:
-            brand = self.clean_text(extract_brand(txt))
-            if brand:
-                return brand
+        brand = self.clean_text(response.css("meta[property='product:brand']::attr(content)").get())
+        if brand:
+            return brand
 
         brand = self.clean_text(extract_brand(nombre))
         if brand:
@@ -265,7 +498,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         return ""
 
     def extraer_descripcion(self, response, nombre):
-        # 1) JSON-LD description
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
@@ -278,7 +510,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
                     if cleaned:
                         return cleaned[:1200]
 
-        # 2) Bloque entre "Descripción" y "Productos que te pueden interesar"
         textos = [self.clean_text(t) for t in response.css("body ::text").getall()]
         textos = [t for t in textos if t]
 
@@ -305,7 +536,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
             if cleaned:
                 return cleaned[:1200]
 
-        # 3) Fallback por selectores frecuentes
         desc = " ".join(
             t.strip()
             for t in response.css(
@@ -321,7 +551,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         if not text:
             return ""
 
-        # cortar basura del footer o recomendaciones
         cortes = [
             "productos que te pueden interesar",
             "información", "informacion",
@@ -339,13 +568,11 @@ class GonzalitoProductosSpider(scrapy.Spider):
                 cut_at = min(cut_at, pos)
         text = text[:cut_at]
 
-        # sacar repetición inicial del nombre
         if nombre:
             nombre_clean = self.clean_text(nombre)
             if text.lower().startswith(nombre_clean.lower()):
                 text = text[len(nombre_clean):].strip(" -:|\n\t")
 
-        # limpiar cuotas, precios y ruidos comunes
         text = re.sub(r"\b\d+\s*cuotas?\s+de\s+gs\.\s*[\d\.]+", " ", text, flags=re.I)
         text = re.sub(r"\b(?:o\s+al\s+contado|al\s+contado|oferta)\b", " ", text, flags=re.I)
         text = re.sub(r"https?://\S+", " ", text)
@@ -409,7 +636,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
         text = str(value).strip()
         if not text:
             return None
-        # 1.636.000 o 1636000
         m = re.search(r"(\d[\d\.]*)", text)
         if not m:
             return None
@@ -425,3 +651,18 @@ class GonzalitoProductosSpider(scrapy.Spider):
         text = text.replace("\xa0", " ")
         text = re.sub(r"\s+", " ", text)
         return text.strip(" -\n\t\r")
+
+    def normalize_url(self, url):
+        url = (url or "").strip()
+        if not url:
+            return ""
+        url = url.replace("http://", "https://")
+        url = url.split("#")[0].strip()
+        if not url:
+            return ""
+        if not (
+            url.startswith("https://www.tiendagonzalito.com.py")
+            or url.startswith("https://tiendagonzalito.com.py")
+        ):
+            return ""
+        return url.rstrip("/")

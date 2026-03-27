@@ -28,7 +28,6 @@ class ChacomerProductosSpider(scrapy.Spider):
         categoria_origen = self.extraer_categoria_listado(response)
         vistos = set()
 
-        # Productos del listado
         for href in response.css('a[href$=".html"]::attr(href)').getall():
             href = response.urljoin((href or "").strip())
             href = href.split("?")[0]
@@ -120,23 +119,23 @@ class ChacomerProductosSpider(scrapy.Spider):
         return False
 
     def extraer_next_page(self, response):
-        # Magento-like pager
-        for href in response.css('a[title*="Siguiente" i]::attr(href), a[aria-label*="Siguiente" i]::attr(href)').getall():
-            if href:
-                return response.urljoin(href)
-
         for a in response.css("a"):
-            texto = self.limpiar_texto(" ".join(a.css("::text").getall()))
+            texto = self.limpiar_texto(" ".join(a.css("::text").getall())).lower()
+            title = self.limpiar_texto(a.attrib.get("title", "")).lower()
+            aria = self.limpiar_texto(a.attrib.get("aria-label", "")).lower()
             href = (a.attrib.get("href") or "").strip()
             if not href:
                 continue
-            if texto.lower() in {"página siguiente", "pagina siguiente", "siguiente", ">"}:
+
+            if any(v in title for v in ["siguiente", "next"]) or any(v in aria for v in ["siguiente", "next"]):
+                return response.urljoin(href)
+
+            if texto in {"página siguiente", "pagina siguiente", "siguiente", ">", "next"}:
                 return response.urljoin(href)
 
         return None
 
     def extraer_precio(self, response, body_text):
-        # 1) JSON-LD / structured data
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             raw = (raw or "").strip()
             if not raw:
@@ -149,7 +148,6 @@ class ChacomerProductosSpider(scrapy.Spider):
             if precio is not None:
                 return precio
 
-        # 2) Metadatos y atributos comunes
         for sel in [
             'meta[property="product:price:amount"]::attr(content)',
             'meta[itemprop="price"]::attr(content)',
@@ -165,7 +163,6 @@ class ChacomerProductosSpider(scrapy.Spider):
                 if parsed is not None:
                     return parsed
 
-        # 3) Texto del producto: priorizar Precio especial / contado
         patrones = [
             r"precio\s+especial\s*pyg\s*([\d\.]+)",
             r"precio\s+especial\s*₲\s*([\d\.]+)",
@@ -187,7 +184,6 @@ class ChacomerProductosSpider(scrapy.Spider):
                 return max(encontrados)
 
         if encontrados:
-            # Evitar capturar cuotas chicas cuando existe precio principal más alto.
             return max(encontrados)
 
         return None
@@ -251,22 +247,25 @@ class ChacomerProductosSpider(scrapy.Spider):
             'meta[property="og:image"]::attr(content)',
             'meta[name="twitter:image"]::attr(content)',
             '[itemprop="image"]::attr(src)',
-            '.gallery-placeholder img::attr(src)',
-            '.fotorama__active img::attr(src)',
             '.product.media img::attr(src)',
             '.product.media img::attr(data-src)',
             '.product.media img::attr(data-large_image)',
-            '.product.media img::attr(srcset)',
+            '.gallery-placeholder img::attr(src)',
+            '.fotorama__active img::attr(src)',
         ]:
             candidatos.extend(response.css(sel).getall())
 
         for raw in candidatos:
             if not raw:
                 continue
+
             if "," in raw and " " in raw:
                 raw = raw.split(",")[0].split(" ")[0].strip()
+
             url = response.urljoin(raw.strip())
             if not url or url.startswith("data:image"):
+                continue
+            if "placeholder" in url.lower():
                 continue
             if any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".avif"]):
                 return url
@@ -277,46 +276,50 @@ class ChacomerProductosSpider(scrapy.Spider):
         bloques = []
 
         for sel in [
-            '#description *::text',
-            '.product.attribute.description *::text',
-            '.product.attribute.overview *::text',
-            '.product.info.detailed .value *::text',
-            '.product-info-main .product.attribute *::text',
+            '.product.attribute.description .value *::text',
+            '.product.attribute.overview .value *::text',
             '.product.data.items .item.content *::text',
-            '.product-info-main .std *::text',
-            '.product.attribute.details *::text',
-            '.product.attribute.additional *::text',
+            '.product.attribute.details .value *::text',
+            '.product.attribute.additional .value *::text',
         ]:
             txt = self.limpiar_texto(" ".join(response.css(sel).getall()))
-            if txt and len(txt) > 20:
+            if txt and len(txt) > 30:
                 bloques.append(txt)
 
-        # Especificaciones principales / Más información suelen ser lo más útil en Chacomer.
-        if not bloques:
+        descripcion = max(bloques, key=len) if bloques else ""
+
+        if not descripcion:
             m = re.search(
                 r"especificaciones principales\s*(.*?)\s*(?:medios de pago online|detalles|más información|suscríbete al newsletter|estamos para ayudarte)",
                 body_text,
                 re.I,
             )
             if m:
-                bloques.append(self.limpiar_texto(m.group(1)))
+                descripcion = self.limpiar_texto(m.group(1))
 
-        if not bloques:
+        if not descripcion:
             m = re.search(
                 r"detalles\s*(.*?)\s*(?:más información|suscríbete al newsletter|estamos para ayudarte)",
                 body_text,
                 re.I,
             )
             if m:
-                bloques.append(self.limpiar_texto(m.group(1)))
+                descripcion = self.limpiar_texto(m.group(1))
 
-        descripcion = max(bloques, key=len) if bloques else ""
+        descripcion = re.sub(r"#html-body.*", " ", descripcion, flags=re.I)
+        descripcion = re.sub(r"\[data-pb-style.*?\]", " ", descripcion, flags=re.I)
+        descripcion = re.sub(r"\b(js|css)\b.*", " ", descripcion, flags=re.I)
+        descripcion = re.sub(
+            r"(medios de pago online|suscríbete|newsletter|estamos para ayudarte).*",
+            " ",
+            descripcion,
+            flags=re.I,
+        )
         descripcion = re.sub(r"\b(ver más|cancelar|comprar|favoritos|comparar)\b", " ", descripcion, flags=re.I)
         descripcion = self.limpiar_texto(descripcion)
         return descripcion
 
     def extraer_marca(self, response, nombre, descripcion):
-        # 1) JSON-LD
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
@@ -326,21 +329,25 @@ class ChacomerProductosSpider(scrapy.Spider):
             if brand:
                 return brand
 
-        # 2) Campo visible de marca
         marca = self.limpiar_texto(
             response.xpath("//*[contains(translate(normalize-space(.), 'MARCA', 'marca'), 'marca')]/following::*[1]/text()").get()
             or response.css(".product.attribute.brand .value::text").get()
             or response.css('meta[property="product:brand"]::attr(content)').get()
             or ""
         )
+
+        marca = self.limpiar_texto(marca)
         if self.es_marca_valida(marca):
             return marca
 
-        # 3) Heurística por nombre/descripcion
         for texto in [nombre, descripcion]:
             marca = extract_brand(texto)
             if self.es_marca_valida(marca):
                 return marca
+
+        marca = extract_brand(nombre)
+        if self.es_marca_valida(marca):
+            return marca
 
         return "Genérico"
 
@@ -370,7 +377,7 @@ class ChacomerProductosSpider(scrapy.Spider):
         marca = self.limpiar_texto(marca)
         invalidas = {
             "marca", "ver más", "comprar", "favoritos", "comparar", "en stock",
-            "chacomer", "precio especial", "pyg"
+            "chacomer", "precio especial", "pyg", "productos", "producto", "genérico"
         }
         return bool(marca) and marca.lower() not in invalidas and len(marca) <= 60
 
@@ -385,21 +392,25 @@ class ChacomerProductosSpider(scrapy.Spider):
     def extraer_categoria_producto(self, response, nombre):
         crumbs = [
             self.limpiar_texto(x)
-            for x in response.css('.breadcrumbs li a span::text, .breadcrumbs li strong::text, .breadcrumbs a::text').getall()
+            for x in response.css('.breadcrumbs li a span::text, .breadcrumbs li strong::text').getall()
             if self.limpiar_texto(x)
         ]
-        ignorar = {"inicio", "home", self.store_name.lower()}
+
+        ignorar = {"inicio", "home", "chacomer"}
         utiles = [c for c in crumbs if c.lower() not in ignorar]
+
         if len(utiles) >= 2:
             categoria = utiles[-2]
         elif utiles:
             categoria = utiles[-1]
         else:
-            categoria = extract_category(nombre) or response.meta.get("categoria_origen") or "Otros"
+            categoria = extract_category(nombre) or response.meta.get("categoria_origen")
 
         categoria = self.limpiar_texto(categoria)
-        if not categoria or categoria.lower() in {"sin categoría", "uncategorized"}:
+
+        if not categoria or categoria.lower() in {"productos", "sin categoría", "uncategorized"}:
             categoria = extract_category(nombre) or response.meta.get("categoria_origen") or "Otros"
+
         return categoria
 
     def extraer_stock(self, body_text):
