@@ -3,6 +3,7 @@ import re
 import scrapy
 from scraper.items import ProductoItem
 from scraper.utils.brands import extract_brand
+from scraper.utils.categories import extract_category
 
 
 class CHProductosSpider(scrapy.Spider):
@@ -66,7 +67,8 @@ class CHProductosSpider(scrapy.Spider):
                 or response.css("h1::text").get(default="").strip()
             )
 
-            categoria = producto.get("categoria") or categoria_origen or "Sin categoría"
+            categoria_raw = producto.get("categoria") or categoria_origen or ""
+            categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw or "Sin categoría"
             marca_sitio = (producto.get("marca") or "").strip()
             marca = marca_sitio if marca_sitio else extract_brand(nombre)
             precio = data.get("precioMonto")
@@ -105,7 +107,7 @@ class CHProductosSpider(scrapy.Spider):
         precio_texto = " ".join(response.css("body ::text").getall())
         precio = self.parse_precio(precio_texto)
 
-        categoria = categoria_origen or "Sin categoría"
+        categoria = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Sin categoría"
         stock_texto = " ".join(response.css("body ::text").getall()).lower()
         stock = "Sin stock" if "sin stock" in stock_texto or "agotado" in stock_texto else "En stock"
 
@@ -140,7 +142,7 @@ class CHProductosSpider(scrapy.Spider):
 
         categoria = (item.get("categoria") or "").strip()
         if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
-            item["categoria"] = "Otros"
+            item["categoria"] = extract_category(item.get("nombre") or "") or "Otros"
         else:
             item["categoria"] = categoria
 

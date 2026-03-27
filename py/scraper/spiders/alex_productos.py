@@ -177,7 +177,8 @@ class AlexProductosSpider(scrapy.Spider):
 
         imagen = self.normalizar_imagen(prelim.get("imagen"), response) or self.extraer_imagen(response) or ""
         descripcion = self.extraer_descripcion(response, body_text) or prelim.get("descripcion") or ""
-        categoria = self.extraer_categoria_producto(response, nombre) or prelim.get("categoria") or "Otros"
+        categoria_raw = self.extraer_categoria_producto(response, nombre) or prelim.get("categoria") or ""
+        categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw or "Otros"
         marca = self.extraer_marca(response, nombre, descripcion) or prelim.get("marca") or "Genérico"
         stock = self.extraer_stock(response)
         if stock is None:

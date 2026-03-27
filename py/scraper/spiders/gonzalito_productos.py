@@ -407,7 +407,8 @@ class GonzalitoProductosSpider(scrapy.Spider):
                 candidatos.append(self.clean_text(cat))
 
         if categoria_origen:
-            candidatos.append(self.clean_text(categoria_origen))
+            categoria_origen_norm = extract_category(categoria_origen) or self.clean_text(categoria_origen)
+            candidatos.append(self.clean_text(categoria_origen_norm))
 
         cat_nombre = self.clean_text(extract_category(nombre))
         if cat_nombre:
@@ -427,8 +428,8 @@ class GonzalitoProductosSpider(scrapy.Spider):
                 continue
             if len(cat_clean) < 3:
                 continue
-            return cat_clean
-        return "Otros"
+            return extract_category(cat_clean) or extract_category(nombre) or cat_clean
+        return extract_category(nombre) or "Otros"
 
     def extraer_marca(self, response, nombre, body_text):
         for raw in response.css('script[type="application/ld+json"]::text').getall():

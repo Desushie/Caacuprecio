@@ -3,6 +3,7 @@ import re
 import scrapy
 from scraper.items import ProductoItem
 from scraper.utils.brands import extract_brand
+from scraper.utils.categories import extract_category
 
 
 class InverfinProductosSpider(scrapy.Spider):
@@ -98,11 +99,12 @@ class InverfinProductosSpider(scrapy.Spider):
             descripcion_html = product_json.get("description", "") or ""
             descripcion = self.clean_html_text(descripcion_html)
 
-            categoria = (
+            categoria_raw = (
                 product_json.get("type")
                 or categoria_origen
-                or "Sin categoría"
+                or ""
             )
+            categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw or "Sin categoría"
 
             marca = (product_json.get("vendor") or "").strip()
 
@@ -175,7 +177,7 @@ class InverfinProductosSpider(scrapy.Spider):
         item["nombre"] = nombre
         item["precio"] = precio
         item["url"] = response.url.split("?")[0].rstrip("/")
-        item["categoria"] = categoria_origen or "Sin categoría"
+        item["categoria"] = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Sin categoría"
         item["tienda"] = self.store_name
         item["stock"] = stock
         item["imagen"] = imagen
@@ -197,7 +199,7 @@ class InverfinProductosSpider(scrapy.Spider):
 
         categoria = (item.get("categoria") or "").strip()
         if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
-            item["categoria"] = "Otros"
+            item["categoria"] = extract_category(item.get("nombre") or "") or "Otros"
         else:
             item["categoria"] = categoria
 

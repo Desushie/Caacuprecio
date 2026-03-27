@@ -100,7 +100,8 @@ class FullOfficeProductosSpider(scrapy.Spider):
 
         #  MARCA Y CATEGORIA
         marca = extract_brand(nombre)
-        categoria = extract_category(nombre)
+        categoria_origen = response.meta.get("categoria_origen", "")
+        categoria = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Otros"
 
         #  DESCRIPCIÓN
         descripcion = self.extraer_descripcion(response)
@@ -133,7 +134,7 @@ class FullOfficeProductosSpider(scrapy.Spider):
 
         categoria = (item.get("categoria") or "").strip()
         if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
-            item["categoria"] = "Otros"
+            item["categoria"] = extract_category(item.get("nombre") or "") or "Otros"
         else:
             item["categoria"] = categoria
 

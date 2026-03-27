@@ -407,9 +407,10 @@ class ChacomerProductosSpider(scrapy.Spider):
             categoria = extract_category(nombre) or response.meta.get("categoria_origen")
 
         categoria = self.limpiar_texto(categoria)
+        categoria = extract_category(categoria) or extract_category(nombre) or categoria
 
         if not categoria or categoria.lower() in {"productos", "sin categoría", "uncategorized"}:
-            categoria = extract_category(nombre) or response.meta.get("categoria_origen") or "Otros"
+            categoria = extract_category(nombre) or extract_category(response.meta.get("categoria_origen") or "") or response.meta.get("categoria_origen") or "Otros"
 
         return categoria
 

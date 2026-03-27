@@ -63,7 +63,8 @@ class ComputexProductosSpider(scrapy.Spider):
 
         imagen = self.extraer_imagen(response)
         marca = extract_brand(nombre)
-        categoria = self.extraer_categoria(response, nombre)
+        categoria_raw = self.extraer_categoria(response, nombre)
+        categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw
         descripcion = self.extraer_descripcion(response)
 
         item = ProductoItem()

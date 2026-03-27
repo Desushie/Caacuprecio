@@ -3,6 +3,7 @@ import re
 import scrapy
 from scraper.items import ProductoItem
 from scraper.utils.brands import extract_brand
+from scraper.utils.categories import extract_category
 
 
 class BristolProductosSpider(scrapy.Spider):
@@ -73,7 +74,7 @@ class BristolProductosSpider(scrapy.Spider):
 
         precio = self.parse_precio(body_text)
 
-        categoria = categoria_origen or "Sin categoría"
+        categoria = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Sin categoría"
 
         stock_text = body_text.lower()
         if any(x in stock_text for x in ["sin stock", "agotado", "no disponible"]):
