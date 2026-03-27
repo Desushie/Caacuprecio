@@ -7,7 +7,7 @@ BRAND_ALIASES = {
     "Sony": ["sony"],
     "Xiaomi": ["xiaomi", "redmi", "mi"],
     "Apple": ["apple", "iphone"],
-    "Motorola": ["motorola", "moto"],
+    "Motorola": ["motorola"],
     "Honor": ["honor"],
     "Oppo": ["oppo"],
     "Nokia": ["nokia"],
