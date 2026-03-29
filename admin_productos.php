@@ -4,8 +4,29 @@ require_admin();
 
 $pdo = db();
 
+function build_admin_productos_url(array $overrides = []): string {
+    $params = [
+        'q' => $_GET['q'] ?? '',
+        'tienda' => $_GET['tienda'] ?? 0,
+        'categoria' => $_GET['categoria'] ?? 0,
+        'estado' => $_GET['estado'] ?? '',
+        'page' => $_GET['page'] ?? 1,
+    ];
+
+    foreach ($overrides as $key => $value) {
+        $params[$key] = $value;
+    }
+
+    $params = array_filter($params, static function ($value) {
+        return $value !== '' && $value !== null && $value !== 0 && $value !== '0';
+    });
+
+    return 'admin_productos.php' . ($params ? '?' . http_build_query($params) : '');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_product') {
     $id = (int) ($_POST['idproductos'] ?? 0);
+
     $stmt = $pdo->prepare("
         UPDATE productos
         SET
@@ -22,21 +43,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             categorias_idcategorias = :categoria
         WHERE idproductos = :id
     ");
+
     $stmt->execute([
-        ':id' => $id,
-        ':nombre' => trim((string) ($_POST['pro_nombre'] ?? '')),
-        ':descripcion' => trim((string) ($_POST['pro_descripcion'] ?? '')),
-        ':marca' => trim((string) ($_POST['pro_marca'] ?? '')),
-        ':precio' => (float) ($_POST['pro_precio'] ?? 0),
-        ':precio_anterior' => ($_POST['pro_precio_anterior'] ?? '') !== '' ? (float) $_POST['pro_precio_anterior'] : null,
-        ':imagen' => trim((string) ($_POST['pro_imagen'] ?? '')),
-        ':url' => trim((string) ($_POST['pro_url'] ?? '')),
-        ':stock' => (int) ($_POST['pro_en_stock'] ?? 0),
-        ':activo' => (int) ($_POST['pro_activo'] ?? 1),
-        ':tienda' => (int) ($_POST['tiendas_idtiendas'] ?? 0),
-        ':categoria' => ($_POST['categorias_idcategorias'] ?? '') !== '' ? (int) $_POST['categorias_idcategorias'] : null,
+        'id' => $id,
+        'nombre' => trim((string) ($_POST['pro_nombre'] ?? '')),
+        'descripcion' => trim((string) ($_POST['pro_descripcion'] ?? '')),
+        'marca' => trim((string) ($_POST['pro_marca'] ?? '')),
+        'precio' => (float) ($_POST['pro_precio'] ?? 0),
+        'precio_anterior' => ($_POST['pro_precio_anterior'] ?? '') !== ''
+            ? (float) $_POST['pro_precio_anterior']
+            : null,
+        'imagen' => trim((string) ($_POST['pro_imagen'] ?? '')),
+        'url' => trim((string) ($_POST['pro_url'] ?? '')),
+        'stock' => (int) ($_POST['pro_en_stock'] ?? 0),
+        'activo' => (int) ($_POST['pro_activo'] ?? 1),
+        'tienda' => (int) ($_POST['tiendas_idtiendas'] ?? 0),
+        'categoria' => ($_POST['categorias_idcategorias'] ?? '') !== ''
+            ? (int) $_POST['categorias_idcategorias']
+            : null,
     ]);
-    header('Location: admin_productos.php?saved=1');
+
+    $redirectParams = [
+        'q' => $_POST['return_q'] ?? '',
+        'tienda' => $_POST['return_tienda'] ?? 0,
+        'categoria' => $_POST['return_categoria'] ?? 0,
+        'estado' => $_POST['return_estado'] ?? '',
+        'page' => $_POST['return_page'] ?? 1,
+        'saved' => 1,
+    ];
+
+    header('Location: admin_productos.php?' . http_build_query(array_filter($redirectParams, static function ($value) {
+        return $value !== '' && $value !== null;
+    })));
     exit;
 }
 
@@ -45,22 +83,29 @@ $tiendaId = (int) ($_GET['tienda'] ?? 0);
 $categoriaId = (int) ($_GET['categoria'] ?? 0);
 $estado = $_GET['estado'] ?? '';
 
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$perPage = 50;
+$offset = ($page - 1) * $perPage;
+
 $where = ['1=1'];
 $params = [];
 
 if ($q !== '') {
-    $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR p.pro_marca LIKE :q)';
-    $params[':q'] = '%' . $q . '%';
+    $where[] = '(p.pro_nombre LIKE :q_nombre OR p.pro_descripcion LIKE :q_descripcion OR p.pro_marca LIKE :q_marca)';
+    $like = '%' . $q . '%';
+    $params['q_nombre'] = $like;
+    $params['q_descripcion'] = $like;
+    $params['q_marca'] = $like;
 }
 
 if ($tiendaId > 0) {
     $where[] = 'p.tiendas_idtiendas = :tienda';
-    $params[':tienda'] = $tiendaId;
+    $params['tienda'] = $tiendaId;
 }
 
 if ($categoriaId > 0) {
     $where[] = 'p.categorias_idcategorias = :categoria';
-    $params[':categoria'] = $categoriaId;
+    $params['categoria'] = $categoriaId;
 }
 
 if ($estado === 'activos') {
@@ -70,6 +115,21 @@ if ($estado === 'activos') {
 }
 
 $whereSql = implode(' AND ', $where);
+
+$countSql = "
+    SELECT COUNT(*) 
+    FROM productos p
+    WHERE {$whereSql}
+";
+$countStmt = $pdo->prepare($countSql);
+$countStmt->execute($params);
+$totalProducts = (int) $countStmt->fetchColumn();
+
+$totalPages = max(1, (int) ceil($totalProducts / $perPage));
+if ($page > $totalPages) {
+    $page = $totalPages;
+    $offset = ($page - 1) * $perPage;
+}
 
 $sql = "
     SELECT
@@ -81,14 +141,30 @@ $sql = "
     LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
     WHERE {$whereSql}
     ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC
-    LIMIT 120
+    LIMIT :limit OFFSET :offset
 ";
+
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params);
+
+foreach ($params as $key => $value) {
+    if (is_int($value)) {
+        $stmt->bindValue(':' . $key, $value, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
+    }
+}
+
+$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
+
 $products = $stmt->fetchAll();
 
 $stores = $pdo->query('SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_nombre ASC')->fetchAll();
 $categories = $pdo->query('SELECT idcategorias, cat_nombre FROM categorias ORDER BY cat_nombre ASC')->fetchAll();
+
+$fromItem = $totalProducts > 0 ? ($offset + 1) : 0;
+$toItem = min($offset + $perPage, $totalProducts);
 
 render_head('Administrar productos');
 ?>
@@ -114,16 +190,33 @@ render_head('Administrar productos');
           </p>
         </div>
         <div class="col-lg-4 position-relative z-1 text-lg-end">
-          <span class="admin-badge admin-badge-soft"><?= number_format(count($products), 0, ',', '.') ?> resultado(s)</span>
+          <span class="admin-badge admin-badge-soft">
+            <?= number_format($totalProducts, 0, ',', '.') ?> producto(s)
+          </span>
         </div>
       </div>
     </div>
 
+    <?php if (isset($_GET['saved'])): ?>
+      <div class="container mb-3">
+        <div class="alert alert-success rounded-4 shadow-sm border-0">
+          Los cambios del producto se guardaron correctamente.
+        </div>
+      </div>
+    <?php endif; ?>
+
     <div class="admin-panel p-4 mb-4 admin-filter-bar">
       <form class="row g-3" method="get">
         <div class="col-lg-4">
-          <input type="text" name="q" class="form-control" placeholder="Buscar por nombre, descripción o marca" value="<?= e($q) ?>">
+          <input
+            type="text"
+            name="q"
+            class="form-control"
+            placeholder="Buscar por nombre, descripción o marca"
+            value="<?= e($q) ?>"
+          >
         </div>
+
         <div class="col-sm-6 col-lg-3">
           <select name="tienda" class="form-select">
             <option value="0">Todas las tiendas</option>
@@ -134,6 +227,7 @@ render_head('Administrar productos');
             <?php endforeach; ?>
           </select>
         </div>
+
         <div class="col-sm-6 col-lg-3">
           <select name="categoria" class="form-select">
             <option value="0">Todas las categorías</option>
@@ -144,6 +238,7 @@ render_head('Administrar productos');
             <?php endforeach; ?>
           </select>
         </div>
+
         <div class="col-sm-6 col-lg-1">
           <select name="estado" class="form-select">
             <option value="">Todos</option>
@@ -151,10 +246,25 @@ render_head('Administrar productos');
             <option value="inactivos" <?= $estado === 'inactivos' ? 'selected' : '' ?>>Inact.</option>
           </select>
         </div>
+
         <div class="col-sm-6 col-lg-1 d-grid">
-          <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
+          <button class="btn btn-primary" type="submit">
+            <i class="bi bi-search"></i>
+          </button>
         </div>
       </form>
+    </div>
+
+    <div class="admin-panel p-3 p-lg-4 mb-3">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+        <div class="text-body-secondary">
+          Mostrando <?= number_format($fromItem, 0, ',', '.') ?> a <?= number_format($toItem, 0, ',', '.') ?>
+          de <?= number_format($totalProducts, 0, ',', '.') ?> productos
+        </div>
+        <div class="text-body-secondary">
+          Página <?= number_format($page, 0, ',', '.') ?> de <?= number_format($totalPages, 0, ',', '.') ?>
+        </div>
+      </div>
     </div>
 
     <div class="admin-table-card overflow-hidden">
@@ -178,7 +288,11 @@ render_head('Administrar productos');
                 <tr>
                   <td style="min-width:320px;">
                     <div class="d-flex gap-3 align-items-center">
-                      <img class="thumb" src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>">
+                      <img
+                        class="thumb"
+                        src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>"
+                        alt="<?= e($product['pro_nombre']) ?>"
+                      >
                       <div>
                         <div class="title"><?= e($product['pro_nombre']) ?></div>
                         <div class="subtitle"><?= e($product['pro_marca'] ?: 'Sin marca') ?></div>
@@ -198,7 +312,9 @@ render_head('Administrar productos');
                       <?= e(stock_label($product['pro_en_stock'])) ?>
                     </span>
                   </td>
-                  <td><?= e(date('d/m/Y H:i', strtotime((string) $product['pro_fecha_scraping']))) ?></td>
+                  <td>
+                    <?= !empty($product['pro_fecha_scraping']) ? e(date('d/m/Y H:i', strtotime((string) $product['pro_fecha_scraping']))) : '-' ?>
+                  </td>
                   <td class="text-end">
                     <button
                       type="button"
@@ -222,6 +338,40 @@ render_head('Administrar productos');
         </table>
       </div>
     </div>
+
+    <?php if ($totalPages > 1): ?>
+      <?php
+        $startPage = max(1, $page - 2);
+        $endPage = min($totalPages, $page + 2);
+      ?>
+      <nav class="mt-4" aria-label="Paginación de productos">
+        <ul class="pagination justify-content-center flex-wrap gap-2">
+          <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+            <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => 1])) ?>">Primera</a>
+          </li>
+
+          <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+            <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => max(1, $page - 1)])) ?>">Anterior</a>
+          </li>
+
+          <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+            <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+              <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => $i])) ?>">
+                <?= (int) $i ?>
+              </a>
+            </li>
+          <?php endfor; ?>
+
+          <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+            <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => min($totalPages, $page + 1)])) ?>">Siguiente</a>
+          </li>
+
+          <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+            <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => $totalPages])) ?>">Última</a>
+          </li>
+        </ul>
+      </nav>
+    <?php endif; ?>
   </div>
 </section>
 
@@ -233,6 +383,11 @@ render_head('Administrar productos');
           <form method="post">
             <input type="hidden" name="action" value="save_product">
             <input type="hidden" name="idproductos" value="<?= (int) $product['idproductos'] ?>">
+            <input type="hidden" name="return_q" value="<?= e($q) ?>">
+            <input type="hidden" name="return_tienda" value="<?= (int) $tiendaId ?>">
+            <input type="hidden" name="return_categoria" value="<?= (int) $categoriaId ?>">
+            <input type="hidden" name="return_estado" value="<?= e($estado) ?>">
+            <input type="hidden" name="return_page" value="<?= (int) $page ?>">
 
             <div class="modal-header">
               <div>
@@ -250,30 +405,37 @@ render_head('Administrar productos');
                       <label class="form-label">Nombre</label>
                       <input type="text" name="pro_nombre" class="form-control" value="<?= e($product['pro_nombre']) ?>" required>
                     </div>
+
                     <div class="col-md-6">
                       <label class="form-label">Marca</label>
                       <input type="text" name="pro_marca" class="form-control" value="<?= e($product['pro_marca']) ?>">
                     </div>
+
                     <div class="col-md-6">
                       <label class="form-label">Imagen (URL)</label>
                       <input type="text" name="pro_imagen" class="form-control js-image-input" value="<?= e($product['pro_imagen']) ?>">
                     </div>
+
                     <div class="col-12">
                       <label class="form-label">Descripción</label>
                       <textarea name="pro_descripcion" class="form-control" rows="5"><?= e($product['pro_descripcion']) ?></textarea>
                     </div>
+
                     <div class="col-md-4">
                       <label class="form-label">Precio</label>
                       <input type="number" step="0.01" name="pro_precio" class="form-control" value="<?= e((string) $product['pro_precio']) ?>" required>
                     </div>
+
                     <div class="col-md-4">
                       <label class="form-label">Precio anterior</label>
                       <input type="number" step="0.01" name="pro_precio_anterior" class="form-control" value="<?= e((string) $product['pro_precio_anterior']) ?>">
                     </div>
+
                     <div class="col-md-4">
                       <label class="form-label">URL del producto</label>
                       <input type="text" name="pro_url" class="form-control" value="<?= e($product['pro_url']) ?>">
                     </div>
+
                     <div class="col-md-4">
                       <label class="form-label">Tienda</label>
                       <select name="tiendas_idtiendas" class="form-select" required>
@@ -284,6 +446,7 @@ render_head('Administrar productos');
                         <?php endforeach; ?>
                       </select>
                     </div>
+
                     <div class="col-md-4">
                       <label class="form-label">Categoría</label>
                       <select name="categorias_idcategorias" class="form-select">
@@ -295,6 +458,7 @@ render_head('Administrar productos');
                         <?php endforeach; ?>
                       </select>
                     </div>
+
                     <div class="col-md-2">
                       <label class="form-label">Stock</label>
                       <select name="pro_en_stock" class="form-select">
@@ -302,6 +466,7 @@ render_head('Administrar productos');
                         <option value="0" <?= (int) $product['pro_en_stock'] === 0 ? 'selected' : '' ?>>No</option>
                       </select>
                     </div>
+
                     <div class="col-md-2">
                       <label class="form-label">Activo</label>
                       <select name="pro_activo" class="form-select">

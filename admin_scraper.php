@@ -255,10 +255,10 @@ body.theme-light .admin-scraper-card {
     <div class="admin-hero p-4 p-lg-5 mb-4">
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
-          <div class="admin-kicker mb-2">Scraper</div>
-          <h1 class="display-6 fw-bold mb-3">Cola de scrapers</h1>
+          <div class="admin-kicker mb-2">Actualización de datos</div>
+          <h1 class="display-6 fw-bold mb-3">Gestión de actualizaciones</h1>
           <p class="text-body-secondary mb-4">
-            Esta vista no ejecuta scrapers directamente en la request web. Solo crea jobs para que un worker externo los procese en segundo plano.
+            Ejecutá actualizaciones de productos y precios desde distintas tiendas de forma segura y organizada.
           </p>
           <div class="d-flex flex-wrap gap-3">
             <a href="admin.php" class="btn btn-outline-primary rounded-pill px-4">
@@ -275,16 +275,16 @@ body.theme-light .admin-scraper-card {
         <div class="col-lg-4 position-relative z-1">
           <div class="admin-side-list">
             <div class="admin-side-item">
-              <strong>Web libre mientras scrapea</strong>
-              <span class="text-body-secondary small">La página no se cuelga porque el trabajo lo hace un worker aparte.</span>
+              <strong>Actualizaciones sin interrupciones</strong>
+              <span class="text-body-secondary small">El sistema procesa las actualizaciones sin afectar el uso del sitio.</span>
             </div>
             <div class="admin-side-item">
-              <strong>Cola de trabajos</strong>
-              <span class="text-body-secondary small">Podés lanzar uno o varios scrapers y ver su estado.</span>
+              <strong>Control de procesos</strong>
+              <span class="text-body-secondary small">Podés iniciar varias actualizaciones y ver su estado en tiempo real.</span>
             </div>
             <div class="admin-side-item">
-              <strong>Preparado para VPS</strong>
-              <span class="text-body-secondary small">Ideal para ejecutarlo remoto con worker en segundo plano.</span>
+              <strong>Optimizado para rendimiento</strong>
+              <span class="text-body-secondary small">Diseñado para manejar grandes volúmenes de datos de forma eficiente.</span>
             </div>
           </div>
         </div>
@@ -293,7 +293,8 @@ body.theme-light .admin-scraper-card {
 
     <?php if (!$tableExists): ?>
       <div class="alert alert-warning rounded-4 mb-4">
-        No existe la tabla <strong>scraper_jobs</strong>. Creala primero para poder usar esta vista.
+        No se encontró la configuración necesaria para procesar actualizaciones.
+        Contactá al administrador del sistema.
       </div>
     <?php endif; ?>
 
@@ -304,7 +305,7 @@ body.theme-light .admin-scraper-card {
     <div class="row g-4 mb-4">
       <div class="col-sm-6 col-xl-3">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Scrapers</div>
+          <div class="admin-stat-label">Actualizaciones</div>
           <div class="admin-stat-value"><?= number_format($stats['jobs_total'], 0, ',', '.') ?></div>
         </div>
       </div>
@@ -316,13 +317,13 @@ body.theme-light .admin-scraper-card {
       </div>
       <div class="col-sm-6 col-xl-3">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Pendientes</div>
+          <div class="admin-stat-label">En espera</div>
           <div class="admin-stat-value"><?= number_format($stats['pendientes'], 0, ',', '.') ?></div>
         </div>
       </div>
       <div class="col-sm-6 col-xl-3">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Ejecutando</div>
+          <div class="admin-stat-label">En proceso</div>
           <div class="admin-stat-value"><?= number_format($stats['ejecutando'], 0, ',', '.') ?></div>
         </div>
       </div>
@@ -332,9 +333,9 @@ body.theme-light .admin-scraper-card {
       <div class="col-lg-4">
         <div class="admin-panel p-4 p-lg-5 h-100">
           <div class="admin-kicker mb-2">Principal</div>
-          <h2 class="h4 fw-bold mb-2">Scraper completo</h2>
+          <h2 class="h4 fw-bold mb-2">Actualización completa</h2>
           <p class="text-body-secondary mb-4">
-            Encola el archivo <code>\py\run_all.py</code> para que el worker lo procese después.
+            Actualiza todos los productos y precios desde las tiendas disponibles.
           </p>
 
           <div class="admin-side-item mb-4">
@@ -346,7 +347,7 @@ body.theme-light .admin-scraper-card {
             <input type="hidden" name="action" value="queue_scraper">
             <input type="hidden" name="job" value="all">
             <button type="submit" class="btn btn-primary rounded-pill px-4 py-3" <?= $tableExists ? '' : 'disabled' ?>>
-              <i class="bi bi-plus-circle me-2"></i>Encolar scraper completo
+              <i class="bi bi-plus-circle me-2"></i>Iniciar actualización completa
             </button>
           </form>
         </div>
@@ -356,8 +357,8 @@ body.theme-light .admin-scraper-card {
         <div class="admin-panel p-4 p-lg-5 h-100">
           <div class="admin-toolbar mb-4">
             <div>
-              <div class="admin-kicker">Tienda por tienda</div>
-              <h2 class="h4 fw-bold mb-0">Scrapers individuales</h2>
+              <div class="admin-kicker">Por tienda</div>
+              <h2 class="h4 fw-bold mb-0">Actualizaciones individuales</h2>
             </div>
           </div>
 
@@ -377,7 +378,7 @@ body.theme-light .admin-scraper-card {
 
                     <div class="d-grid">
                       <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill px-3" <?= $tableExists ? '' : 'disabled' ?>>
-                        Encolar
+                        Actualizar
                       </button>
                     </div>
                   </div>
@@ -393,7 +394,7 @@ body.theme-light .admin-scraper-card {
       <div class="admin-toolbar mb-4">
         <div>
           <div class="admin-kicker">Historial</div>
-          <h2 class="h4 fw-bold mb-0">Últimos jobs</h2>
+          <h2 class="h4 fw-bold mb-0">Historial de actualizaciones</h2>
         </div>
       </div>
 
@@ -403,11 +404,11 @@ body.theme-light .admin-scraper-card {
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Job</th>
+                <th>Proceso</th>
                 <th>Estado</th>
                 <th>Creado</th>
                 <th>Inicio</th>
-                <th>Fin</th>
+                <th>Finalizado</th>
                 <th>Acción</th>
               </tr>
             </thead>
@@ -432,7 +433,7 @@ body.theme-light .admin-scraper-card {
                       <form method="post" class="m-0">
                         <input type="hidden" name="action" value="cancel_job">
                         <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">
-                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Cancelar</button>
+                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">Detener</button>
                       </form>
                     <?php else: ?>
                       <span class="text-body-secondary small">—</span>
@@ -444,13 +445,13 @@ body.theme-light .admin-scraper-card {
           </table>
         </div>
       <?php elseif ($tableExists): ?>
-        <div class="admin-empty">Todavía no hay jobs en la cola.</div>
+        <div class="admin-empty">Aún no hay actualizaciones registradas.</div>
       <?php endif; ?>
     </div>
 
     <?php if ($tableExists && $lastOutput): ?>
       <div class="admin-panel p-4 p-lg-5 mt-4">
-        <div class="admin-kicker mb-2">Salida</div>
+        <div class="admin-kicker mb-2">Resultado</div>
         <h2 class="h4 fw-bold mb-2"><?= e((string) $lastOutput['job_label']) ?></h2>
         <div class="small text-body-secondary mb-3"><?= e((string) $lastOutput['command_path']) ?></div>
         <pre class="admin-log-output mb-0"><?= e((string) $lastOutput['output']) ?></pre>
