@@ -45,36 +45,36 @@ render_head('Panel administrador');
     <div class="admin-hero p-4 p-lg-5 mb-4">
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
-          <div class="admin-kicker mb-2">Administración</div>
-          <h1 class="display-6 fw-bold mb-3">Panel de control</h1>
+          <div class="admin-kicker mb-2">Panel</div>
+          <h1 class="display-6 fw-bold mb-3">Gestión del Sistema</h1>
           <p class="text-body-secondary mb-4">
-            Gestioná productos y tiendas desde una vista más cómoda, visual y rápida, sin depender de tablas simples o pantallas poco prácticas.
+            Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.
           </p>
           <div class="d-flex flex-wrap gap-3">
             <a href="admin_productos.php" class="btn btn-primary rounded-pill px-4">
-              <i class="bi bi-box-seam me-2"></i>Administrar productos
+              <i class="bi bi-box-seam me-2"></i>Gestionar productos
             </a>
             <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-shop me-2"></i>Administrar tiendas
+              <i class="bi bi-shop me-2"></i>Gestionar tiendas
             </a>
             <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-terminal me-2"></i>Scraper
+              <i class="bi bi-terminal me-2"></i>Importar datos
             </a>
           </div>
         </div>
         <div class="col-lg-4 position-relative z-1">
           <div class="admin-side-list">
             <div class="admin-side-item">
-              <strong>Edición rápida</strong>
-              <span class="text-body-secondary small">Cambios directos en nombre, descripción, precio, imagen y estado.</span>
+              <strong>Gestión rápida</strong>
+              <span class="text-body-secondary small">Editá productos, precios y datos en segundos.</span>
             </div>
             <div class="admin-side-item">
-              <strong>Vista más clara</strong>
-              <span class="text-body-secondary small">Buscador, filtros y modales para editar sin salir de la pantalla.</span>
+              <strong>Interfaz optimizada</strong>
+              <span class="text-body-secondary small">Buscá, filtrá y administrá sin complicaciones.</span>
             </div>
             <div class="admin-side-item">
               <strong>Integrado al sitio</strong>
-              <span class="text-body-secondary small">Mismo diseño visual y mismas tablas que usa tu web pública.</span>
+              <span class="text-body-secondary small">Todo el contenido del sitio en un solo panel.</span>
             </div>
           </div>
         </div>
@@ -113,8 +113,8 @@ render_head('Panel administrador');
         <div class="admin-panel p-4 h-100">
           <div class="admin-toolbar mb-3">
             <div>
-              <div class="admin-kicker">Recientes</div>
-              <h2 class="h4 fw-bold mb-0">Últimos productos actualizados</h2>
+              <div class="admin-kicker">Actividad</div>
+              <h2 class="h4 fw-bold mb-0">Productos actualizados recientemente</h2>
             </div>
             <a href="admin_productos.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todos</a>
           </div>
@@ -141,7 +141,7 @@ render_head('Panel administrador');
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">No hay productos recientes para mostrar.</div>
+            <div class="admin-empty">Aún no hay productos recientes.</div>
           <?php endif; ?>
         </div>
       </div>
@@ -151,7 +151,7 @@ render_head('Panel administrador');
           <div class="admin-toolbar mb-3">
             <div>
               <div class="admin-kicker">Tiendas</div>
-              <h2 class="h4 fw-bold mb-0">Últimas tiendas</h2>
+              <h2 class="h4 fw-bold mb-0">Tiendas agregadas recientemente</h2>
             </div>
             <a href="admin_tiendas.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todas</a>
           </div>
@@ -166,7 +166,7 @@ render_head('Panel administrador');
                   <div class="admin-store-main">
                     <div class="admin-dashboard-title"><?= e($store['tie_nombre']) ?></div>
                     <div class="admin-dashboard-meta">
-                      <span><?= e($store['tie_ubicacion'] ?: 'Sin ubicación') ?></span>
+                      <span><?= e($store['tie_ubicacion'] ?: 'Ubicación no disponible') ?></span>
                     </div>
                     <div class="small text-body-secondary mt-1"><?= number_format((int) $store['total_productos'], 0, ',', '.') ?> productos</div>
                   </div>
@@ -177,7 +177,7 @@ render_head('Panel administrador');
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">No hay tiendas recientes para mostrar.</div>
+            <div class="admin-empty">Aún no hay tiendas registradas.</div>
           <?php endif; ?>
         </div>
       </div>

@@ -574,8 +574,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
     <div class="glass-card p-4 live-search-panel">
       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
         <div>
-          <h2 class="h5 fw-bold mb-1">Resultados al instante</h2>
-          <p class="text-body-secondary mb-0">Mientras escribís, vas viendo coincidencias sin recargar la página.</p>
+          <h2 class="h5 fw-bold mb-1">Resultados en tiempo real</h2>
+          <p class="text-body-secondary mb-0">Escribí lo que buscás y encontrá productos al instante.</p>
         </div>
         <div class="small text-body-secondary" id="home-live-count">0 resultado(s) en vista rápida</div>
       </div>
@@ -598,11 +598,12 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       <div class="col-lg-7">
         <span class="eyebrow-pill mb-3 d-inline-flex align-items-center gap-2">
           <span class="eyebrow-dot"></span>
-          Encontrá mejores precios sin recorrer tienda por tienda
+          Compará precios fácilmente en múltiples tiendas
         </span>
-        <h1 class="display-4 fw-bold mb-3 hero-title">Todo tu catálogo en un solo lugar</h1>
+        <h1 class="display-4 fw-bold mb-3 hero-title">Encontrá el mejor precio en segundos</h1>
         <p class="lead text-body-secondary mb-4 hero-copy">
-          Compará productos, revisá precios actualizados, explorá tiendas y armá tu lista de favoritos para cotizar, imprimir o guardar en PDF cuando quieras.
+          Buscá productos, compará precios actualizados y elegí la mejor opción sin perder tiempo.
+          Guardá tus favoritos y seguí las ofertas en un solo lugar.
         </p>
 
         <div class="d-flex flex-wrap gap-3 mb-4">
@@ -686,7 +687,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
               <div class="mini-log-item">
                 <div>
                   <div class="fw-semibold">Catálogo</div>
-                  <small class="text-body-secondary">Todavía no hay actividad reciente para mostrar.</small>
+                  <small class="text-body-secondary">No hay datos disponibles por el momento.</small>
                 </div>
               </div>
             </div>
@@ -702,9 +703,9 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
     <div class="container">
       <div class="section-header mb-4">
         <div>
-          <div class="section-kicker">Analíticas</div>
-          <h2 class="section-title mb-2">Tu actividad y tendencias</h2>
-          <p class="section-subtitle mb-0">Vistas recientes, productos en tendencia y ranking de interés para destacar lo más relevante del catálogo.</p>
+          <div class="section-kicker">Para vos</div>
+          <h2 class="section-title mb-2">Lo que estuviste viendo</h2>
+          <p class="section-subtitle mb-0">Accedé rápido a los productos que viste recientemente y descubrí tendencias.</p>
         </div>
       </div>
 
@@ -715,11 +716,11 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
               <div>
                 <div class="section-kicker">Recientes</div>
                 <h3 class="h4 fw-bold mb-1">Productos vistos recientemente</h3>
-                <p class="text-body-secondary mb-0">Se actualiza según tu sesión o tu cuenta si ya iniciaste sesión.</p>
+                <p class="text-body-secondary mb-0">Basado en tu actividad reciente.</p>
               </div>
             </div>
             <div class="row g-4">
-              <?php $renderAnalyticsCards($recentlyViewed, 'total_vistas', 'Todavía no hay productos vistos recientemente para mostrar.'); ?>
+              <?php $renderAnalyticsCards($recentlyViewed, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
             </div>
           </div>
         </div>
@@ -730,11 +731,11 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
               <div>
                 <div class="section-kicker">Trending</div>
                 <h3 class="h4 fw-bold mb-1">Ranking por tendencia</h3>
-                <p class="text-body-secondary mb-0">Productos con más vistas acumuladas en los últimos 7 días.</p>
+                <p class="text-body-secondary mb-0">Los productos más populares del momento.</p>
               </div>
             </div>
             <div class="row g-4">
-              <?php $renderAnalyticsCards($trendingProducts, 'total_vistas', 'Todavía no hay suficientes vistas para calcular tendencias.'); ?>
+              <?php $renderAnalyticsCards($trendingProducts, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
             </div>
           </div>
         </div>
@@ -745,11 +746,11 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
               <div>
                 <div class="section-kicker">Ranking</div>
                 <h3 class="h4 fw-bold mb-1">Productos más buscados</h3>
-                <p class="text-body-secondary mb-0">Se basa en clics desde búsquedas. Si todavía no hay datos, usa el ranking de tendencia como respaldo.</p>
+                <p class="text-body-secondary mb-0">Los productos más buscados por los usuarios.</p>
               </div>
             </div>
             <div class="row g-4">
-              <?php $renderAnalyticsCards($mostSearchedProducts, 'total_clicks', 'Todavía no hay suficientes búsquedas con clics para armar este ranking.'); ?>
+              <?php $renderAnalyticsCards($mostSearchedProducts, 'total_clicks', 'No hay datos disponibles por el momento.'); ?>
             </div>
           </div>
         </div>
@@ -763,7 +764,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
         <div>
           <div class="section-kicker">Exploración</div>
           <h2 class="section-title mb-2">Comprá por categoría</h2>
-          <p class="section-subtitle mb-0">Elegí una categoría y filtrá rápidamente el catálogo para encontrar lo que necesitás.</p>
+          <p class="section-subtitle mb-0">Explorá por categorías y encontrá lo que necesitás más rápido.</p>
         </div>
       </div>
       <div class="row g-3">
@@ -788,8 +789,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       <div class="section-header mb-4 d-flex justify-content-between align-items-end gap-3 flex-wrap">
         <div>
           <div class="section-kicker">Catálogo</div>
-          <h2 class="section-title mb-2">Productos destacados del catálogo</h2>
-          <p class="section-subtitle mb-0">Compará precios, stock, tienda y movimientos de cada producto desde una sola vista.</p>
+          <h2 class="section-title mb-2">Productos disponibles</h2>
+          <p class="section-subtitle mb-0">Compará precios entre tiendas y elegí la mejor opción.</p>
         </div>
         <div class="small text-body-secondary"><?= number_format($totalProducts, 0, ',', '.') ?> resultado(s)</div>
       </div>
@@ -937,8 +938,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       <div class="section-header mb-4">
         <div>
           <div class="section-kicker">Tiendas</div>
-          <h2 class="section-title mb-2">Comprá según tu tienda preferida</h2>
-          <p class="section-subtitle mb-0">Entrá a cada tienda para ver su catálogo, últimas actualizaciones y mejores precios disponibles.</p>
+          <h2 class="section-title mb-2">Explorá por tienda</h2>
+          <p class="section-subtitle mb-0">Accedé al catálogo de cada tienda y compará sus precios.</p>
         </div>
       </div>
       <div class="row g-4">

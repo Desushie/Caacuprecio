@@ -74,7 +74,7 @@ render_head('Administrar tiendas');
           <div class="admin-kicker mb-2">Tiendas</div>
           <h1 class="display-6 fw-bold mb-3">Gestión visual de tiendas</h1>
           <p class="text-body-secondary mb-0">
-            Editá la información visible de cada tienda desde modales claros, con preview de logo y datos principales en una sola pantalla.
+            Editá la información visible de cada tienda desde esta sección.
           </p>
         </div>
         <div class="col-lg-4 position-relative z-1 text-lg-end">

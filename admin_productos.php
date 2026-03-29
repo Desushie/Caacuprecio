@@ -110,7 +110,7 @@ render_head('Administrar productos');
           <div class="admin-kicker mb-2">Productos</div>
           <h1 class="display-6 fw-bold mb-3">Gestión visual de productos</h1>
           <p class="text-body-secondary mb-0">
-            Buscá, filtrá y editá productos en modales cómodos, con preview de imagen y campos ordenados.
+            Buscá, filtrá y editá productos desde esta sección.
           </p>
         </div>
         <div class="col-lg-4 position-relative z-1 text-lg-end">
