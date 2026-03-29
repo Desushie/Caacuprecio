@@ -8,6 +8,47 @@ if ($id <= 0) {
 }
 
 $pdo = db();
+// ================================
+// TRACKING AUTOMÁTICO DE VISTA
+// ================================
+$userId = function_exists('current_user_id') ? current_user_id() : null;
+$sessionId = session_id();
+
+// Guardar vista del producto
+try {
+    $stmtTrack = $pdo->prepare("
+        INSERT INTO productos_vistos (usuario_idusuario, session_id, productos_idproductos)
+        VALUES (:uid, :sid, :pid)
+    ");
+
+    $stmtTrack->bindValue(':uid', $userId ?: null, $userId ? PDO::PARAM_INT : PDO::PARAM_NULL);
+    $stmtTrack->bindValue(':sid', $sessionId);
+    $stmtTrack->bindValue(':pid', $id, PDO::PARAM_INT);
+
+    $stmtTrack->execute();
+} catch (Throwable $e) {
+    // opcional: log error
+}
+
+$searchTerm = trim($_GET['q'] ?? '');
+
+if ($searchTerm !== '') {
+    try {
+        $stmtClick = $pdo->prepare("
+            INSERT INTO busqueda_click_producto (termino, productos_idproductos, usuario_idusuario, session_id)
+            VALUES (:term, :pid, :uid, :sid)
+        ");
+
+        $stmtClick->bindValue(':term', $searchTerm);
+        $stmtClick->bindValue(':pid', $id, PDO::PARAM_INT);
+        $stmtClick->bindValue(':uid', $userId ?: null, $userId ? PDO::PARAM_INT : PDO::PARAM_NULL);
+        $stmtClick->bindValue(':sid', $sessionId);
+
+        $stmtClick->execute();
+    } catch (Throwable $e) {
+        // opcional
+    }
+}
 
 $stmt = $pdo->prepare("
     SELECT

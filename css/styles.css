@@ -564,13 +564,6 @@ body.theme-light .custom-badge {
   width: auto;
 }
 
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .btn-primary {
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
   border: none;
@@ -688,4 +681,209 @@ code {
     width: 100%;
     height: 180px;
   }
+}
+
+.search-sticky-bar {
+  position: fixed;
+  top: 78px;
+  left: 0;
+  width: 100%;
+  z-index: 1015;
+  padding: 12px 0 10px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.search-sticky-bar .search-bar {
+  margin: 0 auto;
+}
+
+@media (max-width: 991.98px) {
+  .search-sticky-bar {
+    top: 70px;
+    padding: 10px 0 8px;
+  }
+}
+
+.page-search-results {
+  padding-top: 190px !important;
+}
+
+.search-filters-sidebar {
+  position: sticky;
+  top: 170px;
+}
+
+@media (max-width: 991.98px) {
+  .page-search-results {
+    padding-top: 230px !important;
+  }
+
+  .search-filters-sidebar {
+    position: static;
+  }
+}
+.search-autocomplete-wrap {
+  position: relative;
+}
+
+.search-suggest-dropdown {
+  position: absolute;
+  top: calc(100% + .75rem);
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  display: none;
+  padding: .75rem;
+  border-radius: 1.1rem;
+  background: var(--bg-card-strong);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+  max-height: 430px;
+  overflow-y: auto;
+}
+
+.search-suggest-dropdown.is-open {
+  display: block;
+}
+
+.search-suggest-section {
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--brand-2);
+  padding: .5rem .6rem .35rem;
+}
+
+.search-suggest-item,
+.search-suggest-submit {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  text-align: left;
+  padding: .8rem .9rem;
+  border-radius: .95rem;
+  transition: background-color .2s ease, transform .2s ease;
+}
+
+.search-suggest-item:hover,
+.search-suggest-submit:hover {
+  background: rgba(255,255,255,.06);
+  transform: translateY(-1px);
+}
+
+.search-suggest-icon {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: .8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(124, 58, 237, .14);
+  color: var(--brand-2);
+  flex-shrink: 0;
+}
+
+.search-suggest-text {
+  min-width: 0;
+  display: grid;
+}
+
+.search-suggest-label {
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.search-suggest-meta {
+  font-size: .85rem;
+  color: var(--text-soft);
+  line-height: 1.2;
+}
+
+.search-suggest-empty {
+  padding: 1rem;
+  color: var(--text-soft);
+}
+
+.live-search-panel {
+  margin-top: 1.25rem;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* ===== Bajar más la búsqueda en vivo en index ===== */
+#home-live-section,
+#home-live-results,
+.home-live-results-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+#home-live-section {
+  margin-top: 7.5rem;
+  scroll-margin-top: 8rem;
+}
+
+/* Si el bloque real es el grid de resultados */
+#home-live-results {
+  margin-top: 1rem;
+}
+
+/* La barra sticky debe quedar arriba, pero sin tapar el contenido */
+.search-sticky-bar {
+  position: sticky;
+  top: 72px;
+  z-index: 30;
+}
+
+/* En pantallas chicas conviene bajar un poco menos */
+@media (max-width: 991.98px) {
+  #home-live-section {
+    margin-top: 6rem;
+  }
+
+  .search-sticky-bar {
+    top: 64px;
+  }
+}
+
+.search-chip-clear-danger{
+  color: #ff6262 !important;
+  font-weight: 700;
+}
+.search-chip-clear-danger:hover{
+  color: #b00000 !important;
+}
+
+
+.search-chip-hot:hover {  
+  border-color: rgba(248, 140, 62, 0.65);
+}
+
+.search-chip-hot-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  margin-left: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #ff7a00;
+  color: #ffffff !important;
+  font-weight: 800;
+  font-size: 0.78rem;
+  line-height: 1;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 6px 16px rgba(255,122,0,0.28);
 }

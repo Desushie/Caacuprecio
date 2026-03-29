@@ -1,0 +1,139 @@
+
+/* ===== Favoritos / impresión ===== */
+.fav-table td,
+.fav-table th {
+  vertical-align: middle;
+}
+
+.print-summary .info-box {
+  height: 100%;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .topbar,
+  .navbar,
+  .footer,
+  .breadcrumb,
+  .no-print,
+  #themeToggle,
+  #themeToggleMobile {
+    display: none !important;
+  }
+
+  .page-section {
+    padding: 0 !important;
+  }
+
+  .container {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .detail-card,
+  .stats-card,
+  .info-box,
+  .custom-table,
+  .custom-table th,
+  .custom-table td {
+    background: #fff !important;
+    color: #111 !important;
+    box-shadow: none !important;
+    border-color: #d9d9d9 !important;
+  }
+
+  a,
+  a:visited {
+    color: #111 !important;
+    text-decoration: none !important;
+  }
+
+  .related-thumb,
+  .related-thumb-lg {
+    border: 1px solid #ddd !important;
+    background: #fff !important;
+  }
+
+  .print-summary {
+    break-inside: avoid;
+    margin-top: 1rem !important;
+  }
+
+  .custom-table {
+    font-size: 12px;
+  }
+}
+
+
+/* ===== Corrección de impresión de favoritos ===== */
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .site-bg,
+  .bg-orb,
+  .bg-grid,
+  .auth-orb,
+  .auth-grid {
+    display: none !important;
+  }
+
+  .detail-card,
+  .print-table-card,
+  .print-table-wrap,
+  .table-responsive {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .print-table-wrap {
+    display: block !important;
+  }
+
+  .fav-table,
+  .fav-table thead,
+  .fav-table tbody,
+  .fav-table tfoot,
+  .fav-table tr,
+  .fav-table td,
+  .fav-table th {
+    visibility: visible !important;
+  }
+
+  .fav-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  .fav-table th,
+  .fav-table td {
+    white-space: normal !important;
+    overflow: visible !important;
+  }
+
+  .fav-table img {
+    max-width: 56px !important;
+    height: auto !important;
+  }
+
+  .custom-table thead {
+    display: table-header-group !important;
+  }
+
+  .custom-table tfoot {
+    display: table-row-group !important;
+  }
+
+  tr, img {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

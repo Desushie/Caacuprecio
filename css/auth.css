@@ -1,0 +1,159 @@
+.auth-shell {
+  min-height: calc(100vh - 140px);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(96,165,250,.12), transparent 0 28%),
+    radial-gradient(circle at 85% 15%, rgba(249,115,22,.10), transparent 0 22%),
+    linear-gradient(180deg, rgba(15,23,42,.1), transparent 70%);
+}
+
+.auth-content {
+  position: relative;
+  z-index: 2;
+}
+
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.06) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.75), transparent 90%);
+  pointer-events: none;
+}
+
+.auth-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(14px);
+  opacity: .65;
+  animation: floatOrb 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.orb-1 {
+  width: 280px;
+  height: 280px;
+  top: 60px;
+  left: -90px;
+  background: radial-gradient(circle, rgba(96,165,250,.36), transparent 68%);
+}
+
+.orb-2 {
+  width: 320px;
+  height: 320px;
+  right: -80px;
+  bottom: 40px;
+  background: radial-gradient(circle, rgba(79,70,229,.24), transparent 68%);
+  animation-delay: -3s;
+}
+
+.auth-card {
+  backdrop-filter: blur(10px);
+}
+
+.auth-showcase code,
+.auth-card code {
+  color: #93c5fd;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text-soft);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  background: var(--border-soft);
+  flex: 1;
+}
+
+.auth-divider span {
+  font-size: .9rem;
+}
+
+.auth-input-group .btn {
+  min-width: 58px;
+}
+
+.alert.rounded-4,
+.info-box {
+  border-radius: 1rem !important;
+}
+
+@keyframes floatOrb {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  50% { transform: translateY(-14px) translateX(10px); }
+}
+
+@media (max-width: 991.98px) {
+  .auth-shell {
+    min-height: auto;
+  }
+
+  .orb-1,
+  .orb-2 {
+    opacity: .45;
+  }
+}
+
+
+/* ===== Correcciones para modo claro ===== */
+html[data-bs-theme="light"] .auth-showcase,
+body.theme-light .auth-showcase {
+  color: #0f172a;
+}
+
+html[data-bs-theme="light"] .auth-showcase .text-white-50,
+body.theme-light .auth-showcase .text-white-50 {
+  color: #334155 !important;
+}
+
+html[data-bs-theme="light"] .auth-showcase .custom-badge,
+body.theme-light .auth-showcase .custom-badge {
+  background: rgba(59, 130, 246, 0.12) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+}
+
+html[data-bs-theme="light"] .auth-showcase .mini-stat,
+body.theme-light .auth-showcase .mini-stat {
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(148,163,184,.22);
+  color: #0f172a;
+}
+
+html[data-bs-theme="light"] .auth-showcase .mini-stat strong,
+body.theme-light .auth-showcase .mini-stat strong {
+  color: #0f172a !important;
+}
+
+html[data-bs-theme="light"] .auth-showcase .mini-stat span,
+body.theme-light .auth-showcase .mini-stat span,
+html[data-bs-theme="light"] .auth-showcase .mini-stat .text-white-50,
+body.theme-light .auth-showcase .mini-stat .text-white-50 {
+  color: #475569 !important;
+}
+
+html[data-bs-theme="light"] .auth-showcase h1,
+html[data-bs-theme="light"] .auth-showcase h2,
+html[data-bs-theme="light"] .auth-showcase h3,
+html[data-bs-theme="light"] .auth-showcase p,
+body.theme-light .auth-showcase h1,
+body.theme-light .auth-showcase h2,
+body.theme-light .auth-showcase h3,
+body.theme-light .auth-showcase p {
+  color: #0f172a;
+}
+
+html[data-bs-theme="light"] .auth-showcase code,
+body.theme-light .auth-showcase code {
+  color: #1d4ed8;
+  background: rgba(59,130,246,.08);
+  padding: .1rem .35rem;
+  border-radius: .4rem;
+}

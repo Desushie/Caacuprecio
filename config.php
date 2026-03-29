@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
 const DB_HOST = 'localhost';
 const DB_NAME = 'Caacuprecio';
 const DB_USER = 'root';
@@ -38,6 +42,20 @@ function gs(null|float|int|string $value): string
     }
 
     return 'Gs. ' . number_format((float) $value, 0, ',', '.');
+}
+
+function is_admin(): bool
+{
+    $user = current_user();
+    return isset($user['usu_tipo']) && (int)$user['usu_tipo'] === 1;
+}
+
+function require_admin(): void
+{
+    if (!is_admin()) {
+        header('Location: index.php');
+        exit;
+    }
 }
 
 function image_url(?string $url, string $name = 'Producto'): string
@@ -86,6 +104,204 @@ function sort_sql(string $sort): string
     };
 }
 
+function current_user(): ?array
+{
+    $user = $_SESSION['user'] ?? null;
+    return is_array($user) ? $user : null;
+}
+
+function is_logged_in(): bool
+{
+    return current_user() !== null;
+}
+
+function require_login(): void
+{
+    if (!is_logged_in()) {
+        $next = $_SERVER['REQUEST_URI'] ?? 'favoritos.php';
+        header('Location: login.php?next=' . rawurlencode($next));
+        exit;
+    }
+}
+
+function current_user_id(): int
+{
+    $user = current_user();
+    return (int) ($user['idusuario'] ?? 0);
+}
+
+function normalize_search_term(string $term): string
+{
+    $term = trim(mb_strtolower($term, 'UTF-8'));
+    $term = preg_replace('/\s+/', ' ', $term);
+    return $term ?? '';
+}
+
+function save_search_term(string $term, ?int $userId = null): void
+{
+    $term = trim($term);
+    if ($term === '' || mb_strlen($term) < 2) {
+        return;
+    }
+
+    $normalized = normalize_search_term($term);
+    if ($normalized === '') {
+        return;
+    }
+
+    $pdo = db();
+
+    if ($userId !== null && $userId > 0) {
+        $select = $pdo->prepare('
+            SELECT idbusqueda
+            FROM busquedas
+            WHERE bus_normalizado = :normalizado
+              AND bus_usuario_id = :usuario
+            LIMIT 1
+        ');
+        $select->execute([
+            ':normalizado' => $normalized,
+            ':usuario' => $userId,
+        ]);
+
+        $existingId = $select->fetchColumn();
+
+        if ($existingId) {
+            $update = $pdo->prepare('
+                UPDATE busquedas
+                SET bus_total = bus_total + 1,
+                    bus_termino = :termino,
+                    bus_ultima_fecha = NOW()
+                WHERE idbusqueda = :id
+            ');
+            $update->execute([
+                ':termino' => $term,
+                ':id' => $existingId,
+            ]);
+            return;
+        }
+
+        $insert = $pdo->prepare('
+            INSERT INTO busquedas (bus_termino, bus_normalizado, bus_total, bus_usuario_id, bus_ultima_fecha)
+            VALUES (:termino, :normalizado, 1, :usuario, NOW())
+        ');
+        $insert->execute([
+            ':termino' => $term,
+            ':normalizado' => $normalized,
+            ':usuario' => $userId,
+        ]);
+        return;
+    }
+
+    $select = $pdo->prepare('
+        SELECT idbusqueda
+        FROM busquedas
+        WHERE bus_normalizado = :normalizado
+          AND bus_usuario_id IS NULL
+        LIMIT 1
+    ');
+    $select->execute([
+        ':normalizado' => $normalized,
+    ]);
+
+    $existingId = $select->fetchColumn();
+
+    if ($existingId) {
+        $update = $pdo->prepare('
+            UPDATE busquedas
+            SET bus_total = bus_total + 1,
+                bus_termino = :termino,
+                bus_ultima_fecha = NOW()
+            WHERE idbusqueda = :id
+        ');
+        $update->execute([
+            ':termino' => $term,
+            ':id' => $existingId,
+        ]);
+        return;
+    }
+
+    $insert = $pdo->prepare('
+        INSERT INTO busquedas (bus_termino, bus_normalizado, bus_total, bus_usuario_id, bus_ultima_fecha)
+        VALUES (:termino, :normalizado, 1, NULL, NOW())
+    ');
+    $insert->execute([
+        ':termino' => $term,
+        ':normalizado' => $normalized,
+    ]);
+}
+
+function get_trending_searches(int $limit = 8): array
+{
+    $stmt = db()->prepare('
+        SELECT bus_termino, SUM(bus_total) AS total
+        FROM busquedas
+        GROUP BY bus_normalizado, bus_termino
+        ORDER BY total DESC, MAX(bus_ultima_fecha) DESC
+        LIMIT :limit
+    ');
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+function get_user_search_history(int $userId, int $limit = 6): array
+{
+    if ($userId <= 0) {
+        return [];
+    }
+
+    $stmt = db()->prepare('
+        SELECT bus_termino, bus_ultima_fecha, bus_total
+        FROM busquedas
+        WHERE bus_usuario_id = :usuario
+        ORDER BY bus_ultima_fecha DESC
+        LIMIT :limit
+    ');
+    $stmt->bindValue(':usuario', $userId, PDO::PARAM_INT);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+function is_favorite_product(int $productId, ?int $userId = null): bool
+{
+    $uid = $userId ?: current_user_id();
+    if ($uid <= 0 || $productId <= 0) {
+        return false;
+    }
+
+    $stmt = db()->prepare('SELECT 1 FROM favoritos WHERE usuario_idusuario = :u AND productos_idproductos = :p LIMIT 1');
+    $stmt->execute([
+        ':u' => $uid,
+        ':p' => $productId,
+    ]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function favorite_count(?int $userId = null): int
+{
+    $uid = $userId ?: current_user_id();
+    if ($uid <= 0) {
+        return 0;
+    }
+
+    $stmt = db()->prepare('SELECT COUNT(*) FROM favoritos WHERE usuario_idusuario = :u');
+    $stmt->execute([':u' => $uid]);
+    return (int) $stmt->fetchColumn();
+}
+
+function favorite_toggle_url(int $productId, string $redirect = ''): string
+{
+    $query = ['product_id' => $productId];
+    if ($redirect !== '') {
+        $query['redirect'] = $redirect;
+    }
+
+    return 'favorito_toggle.php?' . http_build_query($query);
+}
+
 function render_head(string $title = ''): void
 {
     echo '<!DOCTYPE html>';
@@ -96,7 +312,32 @@ function render_head(string $title = ''): void
     echo '<title>' . e(page_title($title)) . '</title>';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">';
-    echo '<link rel="stylesheet" href="styles.css">';
+    echo '<link rel="stylesheet" href="./css/styles.css">';
+    echo '<link rel="stylesheet" href="./css/auth.css">';
+    echo '<link rel="stylesheet" href="./css/favoritos_extra.css">';
+
+    echo '<style>';
+    echo '.navbar-apple{background:rgba(15,23,42,.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(148,163,184,.16);box-shadow:0 10px 30px rgba(2,6,23,.18);}';
+    echo '.navbar-apple .navbar-brand{letter-spacing:-.02em;}';
+    echo '.navbar-apple .navbar-nav .nav-link{position:relative;padding:.6rem .9rem;border-radius:999px;color:rgba(226,232,240,.86);transition:all .22s ease;}';
+    echo '.navbar-apple .navbar-nav .nav-link:hover{color:#fff;background:rgba(255,255,255,.08);}';
+    echo '.navbar-apple .navbar-nav .nav-link.active{color:#fff;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}';
+    echo '.navbar-apple .navbar-nav .nav-link.disabled{color:rgba(226,232,240,.7)!important;opacity:1;}';
+    echo '.navbar-apple .navbar-toggler{border-radius:999px;padding:.55rem .8rem;background:rgba(255,255,255,.06);}';
+    echo '.navbar-apple .btn-outline-primary{border-color:rgba(148,163,184,.35);background:rgba(255,255,255,.04);color:#e5eefc;}';
+    echo '.navbar-apple .btn-outline-primary:hover{background:rgba(255,255,255,.12);border-color:rgba(191,219,254,.45);color:#fff;}';
+    echo '.navbar-apple .badge.text-bg-primary{background:linear-gradient(135deg,#60a5fa,#3b82f6)!important;color:#fff;}';
+    echo '@media (max-width:991.98px){.navbar-apple .navbar-collapse{margin-top:.9rem;padding:1rem;border-radius:1.25rem;background:rgba(15,23,42,.92);border:1px solid rgba(148,163,184,.14);box-shadow:0 18px 40px rgba(2,6,23,.28);} .navbar-apple .navbar-nav{gap:.4rem!important;} .navbar-apple .nav-link,.navbar-apple .btn{width:100%;justify-content:flex-start;}}';
+    echo 'html[data-bs-theme="light"] .navbar-apple,body.theme-light .navbar-apple{background:rgba(255,255,255,.72);border-bottom:1px solid rgba(148,163,184,.22);box-shadow:0 10px 30px rgba(15,23,42,.08);}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link,body.theme-light .navbar-apple .navbar-nav .nav-link{color:#334155;}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link:hover,body.theme-light .navbar-apple .navbar-nav .nav-link:hover{color:#0f172a;background:rgba(15,23,42,.05);}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link.active,body.theme-light .navbar-apple .navbar-nav .nav-link.active{color:#0f172a;background:rgba(15,23,42,.07);box-shadow:inset 0 0 0 1px rgba(15,23,42,.06);}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link.disabled,body.theme-light .navbar-apple .navbar-nav .nav-link.disabled{color:#475569!important;}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-brand .text-body-secondary,body.theme-light .navbar-apple .navbar-brand .text-body-secondary{color:#475569!important;}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .btn-outline-primary,body.theme-light .navbar-apple .btn-outline-primary{border-color:rgba(148,163,184,.4);background:rgba(255,255,255,.65);color:#0f172a;}';
+    echo 'html[data-bs-theme="light"] .navbar-apple .btn-outline-primary:hover,body.theme-light .navbar-apple .btn-outline-primary:hover{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:#0f172a;}';
+    echo '@media (max-width:991.98px){html[data-bs-theme="light"] .navbar-apple .navbar-collapse,body.theme-light .navbar-apple .navbar-collapse{background:rgba(255,255,255,.94);border:1px solid rgba(148,163,184,.18);box-shadow:0 18px 40px rgba(15,23,42,.12);}}';
+    echo '</style>';
     echo '</head>';
     echo '<body class="theme-dark">';
 }
@@ -106,31 +347,21 @@ function render_navbar(string $current = 'home'): void
     $homeActive = $current === 'home' ? 'active' : '';
     $storesActive = $current === 'tienda' ? 'active' : '';
     $productActive = $current === 'producto' ? 'active' : '';
+    $favActive = $current === 'favoritos' ? 'active' : '';
+    $user = current_user();
+    $favCount = favorite_count();
 
-    echo '<div class="topbar py-2 d-none d-lg-block">';
-    echo '  <div class="container d-flex justify-content-between align-items-center">';
-    echo '    <div class="d-flex gap-3 flex-wrap">';
-    echo '      <span><i class="bi bi-lightning-charge-fill me-1"></i>Compará precios entre tiendas</span>';
-    echo '      <span><i class="bi bi-moon-stars-fill me-1"></i>Modo oscuro por defecto</span>';
-    echo '    </div>';
-    echo '    <div class="d-flex gap-3 align-items-center">';
-    echo '      <a href="index.php#categorias">Categorías</a>';
-    echo '      <a href="index.php#productos">Productos</a>';
-    echo '      <a href="index.php#tiendas">Tiendas</a>';
-    echo '      <button id="themeToggle" class="btn btn-sm btn-outline-light rounded-pill px-3" type="button">';
-    echo '        <i class="bi bi-sun-fill me-2"></i><span>Modo claro</span>';
-    echo '      </button>';
-    echo '    </div>';
-    echo '  </div>';
-    echo '</div>';
-
-    echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell">';
+    echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
     echo '    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="index.php">';
     echo '      <span class="brand-badge">CP</span>';
     echo '      <span><span class="d-block lh-1">Caacuprecio</span><small class="text-body-secondary fw-semibold">Comparador de precios</small></span>';
     echo '    </a>';
+
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
+    echo '      <button id="themeToggle" class="btn btn-outline-primary rounded-pill px-3 d-none d-lg-inline-flex align-items-center" type="button">';
+    echo '        <i class="bi bi-sun-fill me-2"></i><span class="d-none d-xl-inline">Modo claro</span>';
+    echo '      </button>';
     echo '      <button id="themeToggleMobile" class="btn btn-outline-primary rounded-pill d-lg-none" type="button" aria-label="Cambiar tema">';
     echo '        <i class="bi bi-circle-half"></i>';
     echo '      </button>';
@@ -138,12 +369,28 @@ function render_navbar(string $current = 'home'): void
     echo '        <span class="navbar-toggler-icon"></span>';
     echo '      </button>';
     echo '    </div>';
+
     echo '    <div class="collapse navbar-collapse" id="mainNav">';
     echo '      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">';
     echo '        <li class="nav-item"><a class="nav-link ' . $homeActive . '" href="index.php">Inicio</a></li>';
     echo '        <li class="nav-item"><a class="nav-link" href="index.php#categorias">Categorías</a></li>';
     echo '        <li class="nav-item"><a class="nav-link ' . $productActive . '" href="index.php#productos">Productos</a></li>';
     echo '        <li class="nav-item"><a class="nav-link ' . $storesActive . '" href="index.php#tiendas">Tiendas</a></li>';
+    echo '        <li class="nav-item"><a class="nav-link ' . $favActive . '" href="favoritos.php">Favoritos';
+    if ($user) {
+        echo ' <span class="badge rounded-pill text-bg-primary ms-1">' . $favCount . '</span>';
+    }
+    echo '</a></li>';
+    if ($user && is_admin()) {
+        echo '        <li class="nav-item"><a class="nav-link ' . ($current === 'admin' ? 'active' : '') . '" href="./admin.php"><i class="bi bi-gear me-1"></i>Admin</a></li>';
+    }
+    if ($user) {
+        echo '        <li class="nav-item"><span class="nav-link disabled"><i class="bi bi-person-circle me-1"></i>' . e((string) ($user['usu_nombre'] ?? $user['nombre'] ?? 'Mi cuenta')) . '</span></li>';
+        echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="logout.php">Salir</a></li>';
+    } else {
+        echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="login.php">Ingresar</a></li>';
+    }
+
     echo '      </ul>';
     echo '    </div>';
     echo '  </div>';
@@ -157,7 +404,7 @@ function render_footer(): void
     echo '    <div class="row g-4 pb-4">';
     echo '      <div class="col-lg-5">';
     echo '        <div class="d-flex align-items-center gap-2 fw-bold text-white mb-3"><span class="brand-badge">CP</span><span>Caacuprecio</span></div>';
-    echo '        <p class="mb-0">Proyecto base en PHP + MySQL + Bootstrap, adaptado a tu esquema actual con tiendas, categorías, productos e historial de precios.</p>';
+    echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
     echo '      <div class="col-6 col-lg-3">';
     echo '        <h6 class="text-white">Explorar</h6>';
@@ -165,17 +412,18 @@ function render_footer(): void
     echo '          <li><a href="index.php#productos">Productos</a></li>';
     echo '          <li><a href="index.php#tiendas">Tiendas</a></li>';
     echo '          <li><a href="index.php#categorias">Categorías</a></li>';
+    echo '          <li><a href="favoritos.php">Favoritos</a></li>';
     echo '        </ul>';
     echo '      </div>';
     echo '      <div class="col-lg-4">';
     echo '        <div class="footer-note">';
-    echo '          <strong>Archivos incluidos:</strong> <code>index.php</code>, <code>config.php</code>, <code>producto.php</code>, <code>tienda.php</code> y <code>styles.css</code>.';
+    echo '          <strong>Caacuprecio</strong><br>';
+    echo '          Seguimiento de productos, precios y favoritos.';
     echo '        </div>';
     echo '      </div>';
     echo '    </div>';
     echo '    <div class="border-top border-secondary-subtle pt-3 d-flex flex-column flex-md-row justify-content-between gap-2">';
     echo '      <small>© 2026 Caacuprecio</small>';
-    echo '      <small>Modo oscuro por defecto</small>';
     echo '    </div>';
     echo '  </div>';
     echo '</footer>';

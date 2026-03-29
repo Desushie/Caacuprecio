@@ -16,7 +16,6 @@ $storeStmt = $pdo->prepare("
     SELECT
         t.*,
         COUNT(p.idproductos) AS total_productos,
-        MIN(p.pro_precio) AS precio_minimo,
         MAX(p.pro_fecha_scraping) AS ultima_actualizacion,
         (
             SELECT COUNT(*)
@@ -37,12 +36,49 @@ if (!$store) {
     die('Tienda no encontrada.');
 }
 
+$mapEmbedUrl = '';
+$mapOpenUrl = '';
+
+$mapEmbedUrl = '';
+$mapOpenUrl = '';
+
+if (!empty($store['tie_ubicacion'])) {
+    $rawLocation = trim((string) $store['tie_ubicacion']);
+
+    $isUrl = preg_match('~^https?://~i', $rawLocation) === 1;
+    $isCoords = preg_match('~^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$~', $rawLocation) === 1;
+
+    if ($isUrl) {
+        $mapOpenUrl = $rawLocation;
+    } else {
+        $mapOpenUrl = 'https://www.google.com/maps?q=' . rawurlencode($rawLocation);
+    }
+
+    if ($isCoords) {
+        $mapEmbedUrl = 'https://www.google.com/maps?q=' . rawurlencode($rawLocation) . '&output=embed';
+    } else {
+        $mapQueryParts = array_filter([
+            trim((string) ($store['tie_nombre'] ?? '')),
+            trim((string) ($store['tie_descripcion'] ?? '')),
+        ]);
+
+        $mapQuery = trim(implode(' ', $mapQueryParts));
+        if ($mapQuery === '') {
+            $mapQuery = $rawLocation;
+        }
+
+        $mapEmbedUrl = 'https://www.google.com/maps?q=' . rawurlencode($mapQuery) . '&output=embed';
+    }
+}
+
 $where = ['p.tiendas_idtiendas = :id', 'p.pro_activo = 1'];
 $params = [':id' => $id];
+
 if ($q !== '') {
     $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR p.pro_marca LIKE :q)';
     $params[':q'] = '%' . $q . '%';
 }
+
 $whereSql = implode(' AND ', $where);
 
 $productStmt = $pdo->prepare("
@@ -119,18 +155,38 @@ render_navbar('tienda');
                 <span class="fw-bold fs-2"><?= e(mb_strtoupper(mb_substr($store['tie_nombre'], 0, 2))) ?></span>
               <?php endif; ?>
             </div>
+
             <div>
               <span class="badge soft-badge mb-2">Tienda</span>
-              <h1 class="display-6 fw-bold mb-1"><?= e($store['tie_nombre']) ?></h1>
-              <p class="text-body-secondary mb-0"><?= e($store['tie_ubicacion'] ?: ($store['tie_descripcion'] ?: 'Sin información adicional.')) ?></p>
+              <h1 class="display-6 fw-bold mb-2"><?= e($store['tie_nombre']) ?></h1>
+              <p class="text-body-secondary mb-2">
+                <?= e($store['tie_descripcion'] ?: 'Catálogo disponible y actualizado dentro de la plataforma.') ?>
+              </p>
+
+              <?php if (!empty($store['tie_url'])): ?>
+                <div class="small">
+                  <a href="<?= e($store['tie_url']) ?>" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                    <i class="bi bi-globe2 me-1"></i>Visitar sitio web
+                  </a>
+                </div>
+              <?php endif; ?>
             </div>
           </div>
 
           <div class="d-flex flex-wrap gap-2">
-            <?php if (!empty($store['tie_url'])): ?>
-              <a href="<?= e($store['tie_url']) ?>" target="_blank" rel="noopener" class="btn btn-primary rounded-pill px-4">Visitar sitio</a>
+            <?php if ($mapOpenUrl !== ''): ?>
+              <a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary rounded-pill px-4">
+                <i class="bi bi-geo-alt-fill me-2"></i>Ver ubicación
+              </a>
             <?php endif; ?>
-            <a href="index.php#tiendas" class="btn btn-outline-primary rounded-pill px-4">Volver al directorio</a>
+
+            <?php if (!empty($store['tie_url'])): ?>
+              <a href="<?= e($store['tie_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-globe2 me-2"></i>Ir al sitio
+              </a>
+            <?php endif; ?>
+
+            <a href="index.php#tiendas" class="btn btn-outline-secondary rounded-pill px-4">Volver</a>
           </div>
         </div>
 
@@ -142,22 +198,20 @@ render_navbar('tienda');
                 <div class="fw-bold fs-4"><?= number_format((int) $store['total_productos'], 0, ',', '.') ?></div>
               </div>
             </div>
-            <div class="col-6 col-lg-12 col-xl-6">
-              <div class="stats-card p-3 h-100">
-                <div class="small text-body-secondary mb-1">Desde</div>
-                <div class="fw-bold fs-4"><?= $store['precio_minimo'] !== null ? gs($store['precio_minimo']) : 'Sin precio' ?></div>
-              </div>
-            </div>
+
             <div class="col-6 col-lg-12 col-xl-6">
               <div class="stats-card p-3 h-100">
                 <div class="small text-body-secondary mb-1">Scrapes</div>
                 <div class="fw-bold fs-4"><?= number_format((int) $store['total_scrapes'], 0, ',', '.') ?></div>
               </div>
             </div>
-            <div class="col-6 col-lg-12 col-xl-6">
+
+            <div class="col-12">
               <div class="stats-card p-3 h-100">
                 <div class="small text-body-secondary mb-1">Última actualización</div>
-                <div class="fw-bold small"><?= $store['ultima_actualizacion'] ? e(date('d/m/Y H:i', strtotime((string) $store['ultima_actualizacion']))) : 'Sin datos' ?></div>
+                <div class="fw-bold small">
+                  <?= $store['ultima_actualizacion'] ? e(date('d/m/Y H:i', strtotime((string) $store['ultima_actualizacion']))) : 'Sin datos' ?>
+                </div>
               </div>
             </div>
           </div>
@@ -180,6 +234,27 @@ render_navbar('tienda');
             <button type="submit" class="btn btn-primary rounded-pill">Aplicar</button>
           </form>
         </div>
+
+        <?php if ($mapEmbedUrl !== ''): ?>
+          <div class="detail-card glass-card p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h2 class="h5 fw-bold mb-0">Ubicación</h2>
+              <a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary rounded-pill">
+                <i class="bi bi-geo-alt-fill me-1"></i>Abrir
+              </a>
+            </div>
+
+            <div class="ratio ratio-4x3 rounded-4 overflow-hidden border">
+              <iframe
+                src="<?= e($mapEmbedUrl) ?>"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                style="border:0;"
+                allowfullscreen>
+              </iframe>
+            </div>
+          </div>
+        <?php endif; ?>
 
         <div class="detail-card glass-card p-4 mb-4">
           <h2 class="h5 fw-bold mb-3">Categorías frecuentes</h2>
@@ -204,8 +279,12 @@ render_navbar('tienda');
               <?php foreach ($lastScrapes as $scrape): ?>
                 <div class="mini-row glass-soft">
                   <div class="fw-semibold mb-1"><?= e($scrape['scrape_estado']) ?></div>
-                  <div class="small text-body-secondary">Encontrados: <?= (int) $scrape['scrape_productos_encontrados'] ?> · Actualizados: <?= (int) $scrape['scrape_productos_actualizados'] ?></div>
-                  <div class="small text-body-secondary mt-1"><?= !empty($scrape['scrape_fin']) ? e(date('d/m/Y H:i', strtotime((string) $scrape['scrape_fin']))) : 'En curso' ?></div>
+                  <div class="small text-body-secondary">
+                    Encontrados: <?= (int) $scrape['scrape_productos_encontrados'] ?> · Actualizados: <?= (int) $scrape['scrape_productos_actualizados'] ?>
+                  </div>
+                  <div class="small text-body-secondary mt-1">
+                    <?= !empty($scrape['scrape_fin']) ? e(date('d/m/Y H:i', strtotime((string) $scrape['scrape_fin']))) : 'En curso' ?>
+                  </div>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
@@ -220,7 +299,7 @@ render_navbar('tienda');
           <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
             <div>
               <h2 class="h4 fw-bold mb-1">Productos de <?= e($store['tie_nombre']) ?></h2>
-              <p class="text-body-secondary mb-0">Listado filtrado desde <code>productos</code> por <code>tiendas_idtiendas</code>.</p>
+              <p class="text-body-secondary mb-0">Explorá el catálogo disponible de esta tienda.</p>
             </div>
             <div class="small text-body-secondary"><?= number_format(count($products), 0, ',', '.') ?> resultado(s)</div>
           </div>
@@ -231,29 +310,45 @@ render_navbar('tienda');
                 <div class="col-md-6">
                   <article class="related-card related-card-lg fancy-hover h-100">
                     <img src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
+
                     <div class="flex-grow-1">
                       <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                         <span class="badge soft-badge"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
-                        <span class="mini-badge <?= e(stock_badge_class($product['pro_en_stock'])) ?>"><?= e(stock_label($product['pro_en_stock'])) ?></span>
+                        <span class="mini-badge <?= e(stock_badge_class($product['pro_en_stock'])) ?>">
+                          <?= e(stock_label($product['pro_en_stock'])) ?>
+                        </span>
                       </div>
+
                       <h3 class="h6 fw-bold mb-2 line-clamp-2"><?= e($product['pro_nombre']) ?></h3>
-                      <p class="text-body-secondary small mb-2 line-clamp-2"><?= e($product['pro_descripcion'] ?: 'Sin descripción.') ?></p>
+
+                      <p class="text-body-secondary small mb-2 line-clamp-2">
+                        <?= e($product['pro_descripcion'] ?: 'Sin descripción.') ?>
+                      </p>
+
                       <?php if (!empty($product['pro_marca'])): ?>
                         <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['pro_marca']) ?></strong></div>
                       <?php endif; ?>
+
                       <div class="d-flex justify-content-between align-items-end gap-2 flex-wrap">
                         <div>
                           <div class="price-now"><?= gs($product['pro_precio']) ?></div>
-                          <?php if ($product['pro_precio_anterior'] !== null): ?><div class="price-old"><?= gs($product['pro_precio_anterior']) ?></div><?php endif; ?>
+                          <?php if ($product['pro_precio_anterior'] !== null): ?>
+                            <div class="price-old"><?= gs($product['pro_precio_anterior']) ?></div>
+                          <?php endif; ?>
                         </div>
-                        <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="btn btn-sm btn-primary rounded-pill px-3">Ver detalle</a>
+
+                        <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="btn btn-sm btn-primary rounded-pill px-3">
+                          Ver detalle
+                        </a>
                       </div>
                     </div>
                   </article>
                 </div>
               <?php endforeach; ?>
             <?php else: ?>
-              <div class="col-12"><div class="empty-state">No se encontraron productos para esta tienda con esos filtros.</div></div>
+              <div class="col-12">
+                <div class="empty-state">No se encontraron productos para esta tienda con esos filtros.</div>
+              </div>
             <?php endif; ?>
           </div>
         </div>

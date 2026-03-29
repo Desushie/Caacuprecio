@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 27, 2026 at 02:04 AM
+-- Generation Time: Mar 29, 2026 at 08:36 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -26,10 +26,39 @@ USE `caacuprecio`;
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `busquedas`
+--
+
+CREATE TABLE `busquedas` (
+  `idbusqueda` int(11) NOT NULL,
+  `bus_termino` varchar(255) NOT NULL,
+  `bus_normalizado` varchar(255) NOT NULL,
+  `bus_total` int(11) NOT NULL DEFAULT 1,
+  `bus_usuario_id` int(11) DEFAULT NULL,
+  `bus_ultima_fecha` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `busqueda_click_producto`
+--
+
+CREATE TABLE `busqueda_click_producto` (
+  `id` int(11) NOT NULL,
+  `termino` varchar(255) NOT NULL,
+  `productos_idproductos` int(11) NOT NULL,
+  `usuario_idusuario` int(11) DEFAULT NULL,
+  `session_id` varchar(128) DEFAULT NULL,
+  `creado_en` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `categorias`
 --
 
-DROP TABLE IF EXISTS `categorias`;
 CREATE TABLE `categorias` (
   `idcategorias` int(11) NOT NULL,
   `cat_nombre` varchar(100) NOT NULL,
@@ -42,7 +71,6 @@ CREATE TABLE `categorias` (
 -- Table structure for table `favoritos`
 --
 
-DROP TABLE IF EXISTS `favoritos`;
 CREATE TABLE `favoritos` (
   `usuario_idusuario` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -55,7 +83,6 @@ CREATE TABLE `favoritos` (
 -- Table structure for table `historial_precios`
 --
 
-DROP TABLE IF EXISTS `historial_precios`;
 CREATE TABLE `historial_precios` (
   `idhistorial` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -70,7 +97,6 @@ CREATE TABLE `historial_precios` (
 -- Table structure for table `productos`
 --
 
-DROP TABLE IF EXISTS `productos`;
 CREATE TABLE `productos` (
   `idproductos` int(11) NOT NULL,
   `pro_nombre` varchar(200) NOT NULL,
@@ -93,7 +119,6 @@ CREATE TABLE `productos` (
 -- Table structure for table `productos_precios`
 --
 
-DROP TABLE IF EXISTS `productos_precios`;
 CREATE TABLE `productos_precios` (
   `proprecio_id` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -110,10 +135,41 @@ CREATE TABLE `productos_precios` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `productos_vistos`
+--
+
+CREATE TABLE `productos_vistos` (
+  `id` int(11) NOT NULL,
+  `usuario_idusuario` int(11) DEFAULT NULL,
+  `session_id` varchar(128) DEFAULT NULL,
+  `productos_idproductos` int(11) NOT NULL,
+  `visto_en` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `scraper_jobs`
+--
+
+CREATE TABLE `scraper_jobs` (
+  `id` int(11) NOT NULL,
+  `job_key` varchar(100) NOT NULL,
+  `job_label` varchar(150) NOT NULL,
+  `status` enum('pending','running','done','error','cancelled') NOT NULL DEFAULT 'pending',
+  `command_path` varchar(255) NOT NULL,
+  `output` longtext DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `scrape_logs`
 --
 
-DROP TABLE IF EXISTS `scrape_logs`;
 CREATE TABLE `scrape_logs` (
   `idscrape` int(11) NOT NULL,
   `tiendas_idtiendas` int(11) NOT NULL,
@@ -131,7 +187,6 @@ CREATE TABLE `scrape_logs` (
 -- Table structure for table `tiendas`
 --
 
-DROP TABLE IF EXISTS `tiendas`;
 CREATE TABLE `tiendas` (
   `idtiendas` int(11) NOT NULL,
   `tie_nombre` varchar(100) NOT NULL,
@@ -147,7 +202,6 @@ CREATE TABLE `tiendas` (
 -- Table structure for table `usuario`
 --
 
-DROP TABLE IF EXISTS `usuario`;
 CREATE TABLE `usuario` (
   `idusuario` int(11) NOT NULL,
   `usu_nombre` varchar(45) NOT NULL,
@@ -159,6 +213,24 @@ CREATE TABLE `usuario` (
 --
 -- Indexes for dumped tables
 --
+
+--
+-- Indexes for table `busquedas`
+--
+ALTER TABLE `busquedas`
+  ADD PRIMARY KEY (`idbusqueda`),
+  ADD KEY `idx_bus_normalizado` (`bus_normalizado`),
+  ADD KEY `idx_bus_total` (`bus_total`),
+  ADD KEY `idx_bus_usuario` (`bus_usuario_id`);
+
+--
+-- Indexes for table `busqueda_click_producto`
+--
+ALTER TABLE `busqueda_click_producto`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_term` (`termino`),
+  ADD KEY `idx_producto` (`productos_idproductos`),
+  ADD KEY `idx_fecha` (`creado_en`);
 
 --
 -- Indexes for table `categorias`
@@ -201,6 +273,21 @@ ALTER TABLE `productos_precios`
   ADD KEY `idx_producto_tienda` (`productos_idproductos`,`tiendas_idtiendas`);
 
 --
+-- Indexes for table `productos_vistos`
+--
+ALTER TABLE `productos_vistos`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_vistos_usuario` (`usuario_idusuario`,`visto_en`),
+  ADD KEY `idx_vistos_session` (`session_id`,`visto_en`),
+  ADD KEY `idx_vistos_producto` (`productos_idproductos`,`visto_en`);
+
+--
+-- Indexes for table `scraper_jobs`
+--
+ALTER TABLE `scraper_jobs`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `scrape_logs`
 --
 ALTER TABLE `scrape_logs`
@@ -223,6 +310,18 @@ ALTER TABLE `usuario`
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `busquedas`
+--
+ALTER TABLE `busquedas`
+  MODIFY `idbusqueda` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `busqueda_click_producto`
+--
+ALTER TABLE `busqueda_click_producto`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `categorias`
@@ -249,6 +348,18 @@ ALTER TABLE `productos_precios`
   MODIFY `proprecio_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `productos_vistos`
+--
+ALTER TABLE `productos_vistos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `scraper_jobs`
+--
+ALTER TABLE `scraper_jobs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `scrape_logs`
 --
 ALTER TABLE `scrape_logs`
@@ -269,6 +380,12 @@ ALTER TABLE `usuario`
 --
 -- Constraints for dumped tables
 --
+
+--
+-- Constraints for table `busquedas`
+--
+ALTER TABLE `busquedas`
+  ADD CONSTRAINT `fk_busquedas_usuario` FOREIGN KEY (`bus_usuario_id`) REFERENCES `usuario` (`idusuario`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `favoritos`
