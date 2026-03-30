@@ -22,12 +22,24 @@ class CHProductosSpider(scrapy.Spider):
         "https://www.ch.com.py/motos-y-accesorios",
     ]
 
+    CATEGORIAS_GENERICAS = {
+        "",
+        "producto",
+        "productos",
+        "catalogo",
+        "catálogo",
+        "item",
+        "items",
+        "sin categoría",
+        "sin categoria",
+    }
+
     def parse(self, response):
         categoria_origen = response.css("h1::text").get(default="").strip()
 
         vistos = set()
         for href in response.css('a[href*="/catalogo/"]::attr(href)').getall():
-            href = response.urljoin(href.strip())
+            href = response.urljoin((href or "").strip())
             href = href.split("?")[0].rstrip("/")
 
             if not href or href in vistos:
@@ -66,14 +78,24 @@ class CHProductosSpider(scrapy.Spider):
                 or producto.get("nombre")
                 or response.css("h1::text").get(default="").strip()
             )
+            nombre = self.limpiar_texto(nombre)
 
-            categoria_raw = producto.get("categoria") or categoria_origen or ""
-            categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw or "Sin categoría"
-            marca_sitio = (producto.get("marca") or "").strip()
+            categoria_sitio = self.limpiar_categoria(producto.get("categoria"))
+            categoria_origen_limpia = self.limpiar_categoria(categoria_origen)
+
+            categoria = (
+                categoria_origen_limpia
+                or categoria_sitio
+                or extract_category(nombre)
+                or "Otros"
+            )
+
+            marca_sitio = self.limpiar_texto(producto.get("marca") or "")
             marca = marca_sitio if marca_sitio else extract_brand(nombre)
+
             precio = data.get("precioMonto")
             stock = "En stock" if variante.get("tieneStock") else "Sin stock"
-            descripcion = self.extraer_descripcion(response, data)
+            descripcion = self.extraer_descripcion(response, data, nombre)
 
             imagen = None
             img_obj = variante.get("img", {})
@@ -87,10 +109,10 @@ class CHProductosSpider(scrapy.Spider):
 
             url = (variante.get("url") or response.url).split("?")[0].rstrip("/")
 
-            item["nombre"] = (nombre or "").strip()
+            item["nombre"] = nombre
             item["precio"] = self.to_int(precio)
             item["url"] = url
-            item["categoria"] = categoria.strip()
+            item["categoria"] = categoria
             item["tienda"] = self.store_name
             item["stock"] = stock
             item["imagen"] = imagen or ""
@@ -103,11 +125,16 @@ class CHProductosSpider(scrapy.Spider):
                 yield item
             return
 
-        nombre = response.css("h1::text").get(default="").strip()
+        nombre = self.limpiar_texto(response.css("h1::text").get(default="").strip())
         precio_texto = " ".join(response.css("body ::text").getall())
         precio = self.parse_precio(precio_texto)
 
-        categoria = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Sin categoría"
+        categoria = (
+            self.limpiar_categoria(categoria_origen)
+            or extract_category(nombre)
+            or "Otros"
+        )
+
         stock_texto = " ".join(response.css("body ::text").getall()).lower()
         stock = "Sin stock" if "sin stock" in stock_texto or "agotado" in stock_texto else "En stock"
 
@@ -115,7 +142,7 @@ class CHProductosSpider(scrapy.Spider):
         if imagen:
             imagen = response.urljoin(imagen)
 
-        descripcion = self.extraer_descripcion(response, None)
+        descripcion = self.extraer_descripcion(response, None, nombre)
 
         item["nombre"] = nombre
         item["precio"] = precio
@@ -132,24 +159,49 @@ class CHProductosSpider(scrapy.Spider):
         if item["nombre"]:
             yield item
 
-
     def normalizar_item(self, item):
-        marca = (item.get("marca") or "").strip()
+        marca = self.limpiar_texto(item.get("marca") or "")
         if not marca or marca.lower() in {"sin marca", "no brand", "n/a", "na"}:
-            item["marca"] = "Genérico"
+            item["marca"] = extract_brand(item.get("nombre") or "") or "Genérico"
         else:
             item["marca"] = marca
 
-        categoria = (item.get("categoria") or "").strip()
-        if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
+        categoria = self.limpiar_categoria(item.get("categoria") or "")
+        if not categoria:
             item["categoria"] = extract_category(item.get("nombre") or "") or "Otros"
         else:
             item["categoria"] = categoria
 
+        item["descripcion"] = self.limpiar_descripcion(item.get("descripcion") or "", item.get("nombre") or "")
         return item
 
-    def extraer_descripcion(self, response, data=None):
-        # 1. JSON
+    def limpiar_categoria(self, categoria):
+        categoria = self.limpiar_texto(categoria or "")
+        if not categoria:
+            return ""
+
+        cat_lower = categoria.lower()
+        if cat_lower in self.CATEGORIAS_GENERICAS:
+            return ""
+
+        mapeo = {
+            "climatizacion": "Climatización",
+            "tecnologia": "Tecnología",
+            "electrodomesticos": "Electrodomésticos",
+            "muebles y accesorios": "Muebles y Accesorios",
+            "salud y belleza": "Salud y Belleza",
+            "deporte y aire libre": "Deporte y Aire Libre",
+            "herramientas maquinas y equipos": "Herramientas",
+            "bebes y juguetes": "Bebés y Juguetes",
+            "motos y accesorios": "Motos y Accesorios",
+        }
+
+        normalizada = self.normalizar_texto_simple(categoria)
+        return mapeo.get(normalizada, categoria)
+
+    def extraer_descripcion(self, response, data=None, nombre=""):
+        candidatos = []
+
         if data:
             carac = data.get("carac")
             if isinstance(carac, list) and carac:
@@ -162,15 +214,14 @@ class CHProductosSpider(scrapy.Spider):
                             if isinstance(v, str) and v.strip():
                                 partes.append(v.strip())
                 if partes:
-                    return " | ".join(partes)[:1000]
+                    candidatos.append(" | ".join(partes))
 
             for key in ["descripcion", "description", "desc"]:
                 value = data.get(key)
                 if isinstance(value, str) and value.strip():
-                    return value.strip()[:1000]
+                    candidatos.append(value.strip())
 
-        # 2. Selectores HTML más específicos
-        descripcion = " ".join(
+        descripcion_html = " ".join(
             t.strip()
             for t in response.css(
                 ".product-description *::text, "
@@ -180,10 +231,9 @@ class CHProductosSpider(scrapy.Spider):
             ).getall()
             if t.strip()
         )
-        if descripcion:
-            return descripcion[:1000]
+        if descripcion_html:
+            candidatos.append(descripcion_html)
 
-        # 3. Fallback desde "Características"
         textos = response.css("body ::text").getall()
         textos = [t.strip() for t in textos if t.strip()]
 
@@ -192,7 +242,7 @@ class CHProductosSpider(scrapy.Spider):
 
         for i, t in enumerate(textos):
             t_lower = t.lower()
-            if t_lower == "características" or t_lower == "caracteristicas":
+            if t_lower in {"características", "caracteristicas"}:
                 inicio = i + 1
                 continue
 
@@ -208,9 +258,55 @@ class CHProductosSpider(scrapy.Spider):
         if inicio is not None:
             bloque = textos[inicio:fin] if fin is not None else textos[inicio:inicio + 25]
             bloque = [t for t in bloque if len(t) > 1]
-            return " ".join(bloque)[:1000]
+            if bloque:
+                candidatos.append(" ".join(bloque))
+
+        for texto in candidatos:
+            limpio = self.limpiar_descripcion(texto, nombre)
+            if limpio and len(limpio) >= 20:
+                return limpio[:1000]
 
         return ""
+
+    def limpiar_descripcion(self, texto, nombre=""):
+        if not texto:
+            return ""
+
+        texto = re.sub(r"\s+", " ", texto).strip()
+
+        # quitar solo "Descripción" al inicio
+        texto = re.sub(r"^\s*descripción\s*[:\-]?\s*", "", texto, flags=re.I)
+
+        # quitar casos tipo "Capacidad 9 a 10 Kg Descripción ..."
+        texto = re.sub(
+            r"^\s*[A-ZÁÉÍÓÚÑa-záéíóúñ0-9\.,/%°()\- ]{0,80}?\bdescripción\b\s*[:\-]?\s*",
+            "",
+            texto,
+            flags=re.I
+        )
+
+        # quitar nombre repetido al inicio solo si aparece exacto
+        if nombre:
+            nombre_esc = re.escape(nombre.strip())
+            texto = re.sub(rf"^\s*{nombre_esc}\s*", "", texto, flags=re.I)
+
+        # quitar aviso muy común del final
+        texto = re.sub(
+            r"\(las imágenes son ilustrativas.*?\)",
+            "",
+            texto,
+            flags=re.I
+        )
+        texto = re.sub(
+            r"\(las imagenes son ilustrativas.*?\)",
+            "",
+            texto,
+            flags=re.I
+        )
+
+        texto = re.sub(r"\s{2,}", " ", texto).strip(" .-|")
+
+        return texto[:1000]
 
     def extract_product_json(self, response):
         scripts = response.css("script::text").getall()
@@ -251,3 +347,23 @@ class CHProductosSpider(scrapy.Spider):
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    def limpiar_texto(self, texto):
+        if texto is None:
+            return ""
+        texto = re.sub(r"\s+", " ", str(texto)).strip()
+        return texto
+
+    def normalizar_texto_simple(self, texto):
+        texto = self.limpiar_texto(texto).lower()
+        reemplazos = str.maketrans({
+            "á": "a",
+            "é": "e",
+            "í": "i",
+            "ó": "o",
+            "ú": "u",
+            "ü": "u",
+            "ñ": "n",
+        })
+        texto = texto.translate(reemplazos)
+        return texto

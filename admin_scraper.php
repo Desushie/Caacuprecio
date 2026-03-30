@@ -20,37 +20,37 @@ $scraperJobs = [
     ],
     'alex' => [
         'label' => 'Alex',
-        'path'  => __DIR__ . '/py/placeholder_alex.py',
+        'path'  => __DIR__ . '/py/run_alex.py',
         'type'  => 'tienda',
     ],
     'bristol' => [
         'label' => 'Bristol',
-        'path'  => __DIR__ . '/py/placeholder_bristol.py',
+        'path'  => __DIR__ . '/py/run_bristol.py',
         'type'  => 'tienda',
     ],
     'chacomer' => [
         'label' => 'Chacomer',
-        'path'  => __DIR__ . '/py/placeholder_chacomer.py',
+        'path'  => __DIR__ . '/py/run_chacomer.py',
         'type'  => 'tienda',
     ],
     'comfort_house' => [
         'label' => 'Comfort House',
-        'path'  => __DIR__ . '/py/placeholder_comfort_house.py',
+        'path'  => __DIR__ . '/py/run_comfort_house.py',
         'type'  => 'tienda',
     ],
     'computex' => [
         'label' => 'Computex',
-        'path'  => __DIR__ . '/py/placeholder_computex.py',
+        'path'  => __DIR__ . '/py/run_computex.py',
         'type'  => 'tienda',
     ],
     'gonzalito' => [
         'label' => 'Tienda Gonzalito',
-        'path'  => __DIR__ . '/py/placeholder_gonzalito.py',
+        'path'  => __DIR__ . '/py/run_gonzalito.py',
         'type'  => 'tienda',
     ],
     'inverfin' => [
         'label' => 'Inverfin',
-        'path'  => __DIR__ . '/py/placeholder_inverfin.py',
+        'path'  => __DIR__ . '/py/run_inverfin.py',
         'type'  => 'tienda',
     ],
 ];

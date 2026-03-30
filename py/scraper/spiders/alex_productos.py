@@ -12,6 +12,7 @@ class AlexProductosSpider(scrapy.Spider):
     name = "alex_productos"
     store_name = "Alex"
     allowed_domains = ["alex.com.py", "www.alex.com.py"]
+
     start_urls = [
         "https://www.alex.com.py/categoria/97/motocicletas?marcas=&categorias=&categorias_top=",
         "https://www.alex.com.py/categoria/1/celulares-y-accesorios?marcas=&categorias=&categorias_top=",
@@ -31,9 +32,14 @@ class AlexProductosSpider(scrapy.Spider):
 
     custom_settings = {
         "DOWNLOAD_DELAY": 0.25,
+        "DUPEFILTER_DEBUG": False,
     }
 
     api_url = "https://www.alex.com.py/catalogo/get-productos"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.vistos_urls = set()
 
     async def start(self):
         for url in self.start_urls:
@@ -44,8 +50,9 @@ class AlexProductosSpider(scrapy.Spider):
             yield scrapy.Request(url, callback=self.parse, headers=self.default_headers())
 
     def parse(self, response):
-        categoria_origen = self.extraer_categoria_id(response)
         categoria_id = self.extraer_categoria_id(response)
+        categoria_origen = self.extraer_categoria_origen(response)
+
         parsed = urlparse(response.url)
         q = parse_qs(parsed.query)
 
@@ -53,44 +60,40 @@ class AlexProductosSpider(scrapy.Spider):
         categorias = (q.get("categorias", [""])[0] or "").strip()
         categorias_top = (q.get("categorias_top", [""])[0] or "").strip()
 
-        vistos = set()
-        for href in response.css('a[href*="/producto/"]::attr(href)').getall():
-            href = response.urljoin((href or "").strip())
-            href = href.split("?")[0].rstrip("/")
-            if not href or href in vistos:
-                continue
-            vistos.add(href)
-            yield response.follow(
-                href,
-                callback=self.parse_producto,
-                meta={"categoria_origen": categoria_origen},
-                headers=self.default_headers(),
-            )
-
         if not categoria_id:
             self.logger.warning("No se pudo detectar categoria_id para %s", response.url)
             return
 
-        attempts = self.build_api_attempts(categoria_id, marcas, categorias, categorias_top, page=1)
-        if attempts:
-            params = attempts[0]
-            url = f"{self.api_url}?{urlencode(params, doseq=True)}"
-            yield scrapy.Request(
-                url,
-                callback=self.parse_api,
-                headers=self.api_headers(response),
-                meta={
-                    "categoria_origen": categoria_origen,
-                    "categoria_id": categoria_id,
-                    "marcas": marcas,
-                    "categorias": categorias,
-                    "categorias_top": categorias_top,
-                    "api_attempt_idx": 0,
-                    "api_attempts": attempts,
-                    "page": 1,
-                },
-                dont_filter=True,
-            )
+        attempts = self.build_api_attempts(
+            categoria_id=categoria_id,
+            marcas=marcas,
+            categorias=categorias,
+            categorias_top=categorias_top,
+            page=1,
+        )
+
+        if not attempts:
+            return
+
+        params = attempts[0]
+        url = f"{self.api_url}?{urlencode(params, doseq=True)}"
+
+        yield scrapy.Request(
+            url,
+            callback=self.parse_api,
+            headers=self.api_headers(response),
+            meta={
+                "categoria_id": categoria_id,
+                "categoria_origen": categoria_origen,
+                "marcas": marcas,
+                "categorias": categorias,
+                "categorias_top": categorias_top,
+                "api_attempts": attempts,
+                "api_attempt_idx": 0,
+                "page": 1,
+            },
+            dont_filter=True,
+        )
 
     def parse_api(self, response):
         categoria_origen = response.meta.get("categoria_origen", "")
@@ -113,30 +116,58 @@ class AlexProductosSpider(scrapy.Spider):
                     meta={**response.meta, "api_attempt_idx": idx + 1},
                     dont_filter=True,
                 )
+            else:
+                self.logger.debug(
+                    "Sin items en categoria=%s page=%s intento=%s",
+                    response.meta.get("categoria_id"),
+                    current_page,
+                    idx,
+                )
             return
+
+        self.logger.info(
+            "Alex categoria=%s page=%s items_api=%s",
+            response.meta.get("categoria_id"),
+            current_page,
+            len(items),
+        )
 
         for item in items:
             href = self.get_first(item, ["url_ver", "url", "link", "permalink"])
             if not href:
                 continue
+
             href = response.urljoin(str(href).split("?")[0].rstrip("/"))
             if "/producto/" not in href:
                 continue
 
+            if href in self.vistos_urls:
+                continue
+            self.vistos_urls.add(href)
+
             prelim = {
                 "nombre": self.limpiar_texto(self.get_first(item, ["nombre", "name", "titulo"])),
-                "precio": self.parse_num(self.get_first(item, ["getPrecio", "precio", "price", "precio_contado"])),
-                "imagen": self.get_first(item, ["primera_imagen_thumb", "imagen", "image", "foto", "foto_principal"]),
+                "precio": self.parse_num(
+                    self.get_first(item, ["getPrecio", "precio", "price", "precio_contado"])
+                ),
+                "imagen": self.get_first(
+                    item,
+                    ["primera_imagen_thumb", "imagen", "image", "foto", "foto_principal"]
+                ),
                 "marca": self.extract_brand_api(item),
                 "categoria": categoria_origen,
                 "stock": self.extract_stock_api(item),
-                "descripcion": self.limpiar_texto(self.get_first(item, ["descripcion_corta", "descripcion"])),
+                "descripcion": self.limpiar_texto(
+                    self.get_first(item, ["descripcion_corta", "descripcion"])
+                ),
             }
-
             yield response.follow(
                 href,
                 callback=self.parse_producto,
-                meta={"categoria_origen": categoria_origen, "prelim": prelim},
+                meta={
+                    "categoria_origen": categoria_origen,
+                    "prelim": prelim,
+                },
                 headers=self.default_headers(),
             )
 
@@ -154,9 +185,9 @@ class AlexProductosSpider(scrapy.Spider):
 
     def parse_producto(self, response):
         prelim = response.meta.get("prelim", {}) or {}
-        body_text = self.limpiar_texto(" ".join(
-            t.strip() for t in response.css("body ::text").getall() if t.strip()
-        ))
+        body_text = self.limpiar_texto(
+            " ".join(t.strip() for t in response.css("body ::text").getall() if t.strip())
+        )
 
         nombre = self.limpiar_texto(
             response.css("h1.title-ficha::text").get()
@@ -175,11 +206,28 @@ class AlexProductosSpider(scrapy.Spider):
         if precio_contado is None:
             return
 
-        imagen = self.normalizar_imagen(prelim.get("imagen"), response) or self.extraer_imagen(response) or ""
+        imagen = (
+            self.normalizar_imagen(prelim.get("imagen"), response)
+            or self.extraer_imagen(response)
+            or ""
+        )
+
         descripcion = self.extraer_descripcion(response, body_text) or prelim.get("descripcion") or ""
-        categoria_raw = self.extraer_categoria_producto(response, nombre) or prelim.get("categoria") or ""
-        categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw or "Otros"
+
         marca = self.extraer_marca(response, nombre, descripcion) or prelim.get("marca") or "Genérico"
+
+        categoria_original = (
+            prelim.get("categoria")
+            or response.meta.get("categoria_origen")
+            or ""
+        )
+
+        categoria = extract_category(
+            nombre=nombre,
+            categoria_original=categoria_original,
+            marca=marca,
+        )
+
         stock = self.extraer_stock(response)
         if stock is None:
             stock = prelim.get("stock")
@@ -205,11 +253,17 @@ class AlexProductosSpider(scrapy.Spider):
             "limit": 24,
             "page": page,
         }
+
         attempts = [
             {**base_common, "categoria": categoria_id},
             {**base_common, "categoria_id": categoria_id},
             {**base_common, "id_categoria": categoria_id},
-            {**base_common, "categorias": categoria_id, "marcas": marcas, "categorias_top": categorias_top, "ordenar_por": 0, "limit": 24, "page": page},
+            {
+                **base_common,
+                "categorias": categoria_id,
+                "marcas": marcas,
+                "categorias_top": categorias_top,
+            },
         ]
 
         unique = []
@@ -224,14 +278,17 @@ class AlexProductosSpider(scrapy.Spider):
     def extract_api_items(self, data):
         if not isinstance(data, dict):
             return []
+
         pag = data.get("paginacion")
         if isinstance(pag, dict) and isinstance(pag.get("data"), list):
             return pag["data"]
+
         for key in ["data", "productos", "items", "results"]:
             if isinstance(data.get(key), list):
                 return data[key]
             if isinstance(data.get(key), dict) and isinstance(data[key].get("data"), list):
                 return data[key]["data"]
+
         return []
 
     def has_more_pages(self, data, current_page, item_count):
@@ -242,14 +299,20 @@ class AlexProductosSpider(scrapy.Spider):
                 lp = pag.get("last_page")
                 if isinstance(lp, int) and isinstance(cp, int):
                     return cp < lp
+
                 next_page_url = pag.get("next_page_url")
                 if next_page_url:
                     return True
-        return item_count >= 24
+
+        return item_count >= 50
 
     def default_headers(self):
         return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/123.0.0.0 Safari/537.36"
+            ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "es-PY,es;q=0.9,en;q=0.8",
         }
@@ -267,11 +330,38 @@ class AlexProductosSpider(scrapy.Spider):
         m = re.search(r"/categoria/(\d+)/", response.url)
         if m:
             return m.group(1)
-        text = response.text
-        m = re.search(r'categoria\s*:\s*\{\s*"id"\s*:\s*(\d+)', text)
+
+        m = re.search(r'categoria\s*:\s*\{\s*"id"\s*:\s*(\d+)', response.text)
         if m:
             return m.group(1)
+
         return ""
+
+    def extraer_categoria_origen(self, response):
+        m = re.search(r"/categoria/(\d+)/", response.url)
+        if not m:
+            return ""
+
+        categoria_id = m.group(1)
+
+        MAPA_CATEGORIAS = {
+            "1": "Celulares y Smartphones",
+            "4": "Hogar",
+            "7": "TV y Video",
+            "9": "Salud y Belleza",
+            "16": "Deportes",
+            "30": "Hogar",
+            "45": "Deportes",
+            "47": "Electrodomésticos",
+            "67": "Informática",
+            "75": "Climatización",
+            "78": "Herramientas",
+            "92": "Herramientas",
+            "97": "Motocicletas",
+            "110": "Motocicletas",
+        }
+
+        return MAPA_CATEGORIAS.get(categoria_id, "")
 
     def limpiar_texto(self, texto):
         if not texto:
@@ -281,46 +371,72 @@ class AlexProductosSpider(scrapy.Spider):
         return texto.strip(" -\n\t\r")
 
     def extract_brand_api(self, item):
+        # 1. Intentar desde campos directos de la API
         for key in ["marca", "brand", "nombre_marca", "fabricante"]:
             val = item.get(key)
             if val:
-                return self.limpiar_texto(val)
+                return self.limpiar_texto(val).upper()
 
+        # 2. Obtener nombre
         nombre = item.get("nombre") or item.get("name") or item.get("titulo")
         if not nombre:
             return ""
 
+        nombre = self.limpiar_texto(nombre)
+
+        # 3. Intentar con tu sistema de marcas
         marca = extract_brand(nombre)
         if marca:
             return marca.upper()
 
-        return nombre.split()[0].upper()
+        # 4. Evitar palabras genéricas
+        GENERICAS = {
+            "parlante", "tv", "auricular", "autoradio", "freidora",
+            "licuadora", "anafe", "termo", "heladera", "horno",
+            "hidrolavadora", "cocina", "microondas", "ventilador",
+            "aire", "acondicionado", "notebook", "tablet"
+        }
+
+        # 5. Buscar primera palabra válida
+        palabras = nombre.split()
+        for palabra in palabras[:3]:  # revisa primeras 3 palabras
+            limpia = self.limpiar_texto(palabra).lower()
+            if not limpia or limpia in GENERICAS:
+                continue
+            if len(limpia) <= 2:
+                continue
+            return limpia.upper()
+
+        return ""
 
     def extract_stock_api(self, item):
         for key in ["stock", "tiene_stock", "available", "disponible"]:
-            if key in item:
-                val = item.get(key)
+            if key not in item:
+                continue
 
-                if isinstance(val, bool):
-                    return 1 if val else 0
+            val = item.get(key)
 
-                if isinstance(val, (int, float)):
-                    return 1 if val > 0 else 0
+            if isinstance(val, bool):
+                return 1 if val else 0
 
-                if isinstance(val, str):
-                    v = val.strip().lower()
-                    if v in {"1", "true", "si", "sí", "disponible", "en stock"}:
-                        return 1
-                    if v in {"0", "false", "no", "sin stock", "agotado"}:
-                        return 0
+            if isinstance(val, (int, float)):
+                return 1 if val > 0 else 0
+
+            if isinstance(val, str):
+                v = val.strip().lower()
+                if v in {"1", "true", "si", "sí", "disponible", "en stock"}:
+                    return 1
+                if v in {"0", "false", "no", "sin stock", "agotado"}:
+                    return 0
+
         return None
 
     def extraer_precio_contado(self, response, body_text):
         for sel in [
-            '.compra-contado-block .contado-precio::text',
-            '.contado-precio::text',
-            '[data-price-cash]::attr(data-price-cash)',
-            '[data-precio-contado]::attr(data-precio-contado)',
+            ".compra-contado-block .contado-precio::text",
+            ".contado-precio::text",
+            "[data-price-cash]::attr(data-price-cash)",
+            "[data-precio-contado]::attr(data-precio-contado)",
             'meta[property="product:price:amount"]::attr(content)',
             'meta[itemprop="price"]::attr(content)',
         ]:
@@ -330,7 +446,7 @@ class AlexProductosSpider(scrapy.Spider):
                 if parsed is not None:
                     return parsed
 
-        for raw in response.css('script::text').getall():
+        for raw in response.css("script::text").getall():
             m = re.search(r'item_price\s*[:=]\s*["\']?([\d\.]+)', raw, re.I)
             if m:
                 parsed = self.parse_num(m.group(1))
@@ -338,7 +454,7 @@ class AlexProductosSpider(scrapy.Spider):
                     return parsed
 
         nums = []
-        for txt in response.css('.product-price ::text, .contado-precio ::text').getall():
+        for txt in response.css(".product-price ::text, .contado-precio ::text").getall():
             parsed = self.parse_num(txt)
             if parsed is not None:
                 nums.append(parsed)
@@ -346,32 +462,33 @@ class AlexProductosSpider(scrapy.Spider):
             return max(nums)
 
         nums = []
-        for match in re.findall(r'Gs\.?\s*([\d\.]+)', body_text, re.I):
+        for match in re.findall(r"Gs\.?\s*([\d\.]+)", body_text, re.I):
             parsed = self.parse_num(match)
             if parsed is not None:
                 nums.append(parsed)
+
         return max(nums) if nums else None
 
     def extraer_imagen(self, response):
         candidatos = []
 
         for sel in [
-            '.img-single::attr(data-zoom)',
-            '.img-single::attr(data-src)',
-            '.img-single::attr(src)',
-            'img.img-producto::attr(data-zoom)',
-            'img.img-producto::attr(data-src)',
-            'img.img-producto::attr(src)',
+            ".img-single::attr(data-zoom)",
+            ".img-single::attr(data-src)",
+            ".img-single::attr(src)",
+            "img.img-producto::attr(data-zoom)",
+            "img.img-producto::attr(data-src)",
+            "img.img-producto::attr(src)",
             'img[src*="/storage/"]::attr(src)',
             'img[src*="producto"]::attr(src)',
             'img[src*="sku"]::attr(src)',
         ]:
             candidatos.extend(response.css(sel).getall())
 
-        for raw in response.css('script::text').getall():
+        for raw in response.css("script::text").getall():
             for pattern in [
-                r"primera_imagen_thumb\s*[:=]\s*['\"]([^'\"]+)",
-                r"primera_imagen\s*[:=]\s*['\"]([^'\"]+)",
+                r'primera_imagen_thumb\s*[:=]\s*[\'"]([^\'"]+)',
+                r'primera_imagen\s*[:=]\s*[\'"]([^\'"]+)',
                 r'"primera_imagen_thumb"\s*:\s*"([^"]+)"',
                 r'"primera_imagen"\s*:\s*"([^"]+)"',
                 r'"imagen"\s*:\s*"([^"]+/storage/[^"]+)"',
@@ -385,38 +502,53 @@ class AlexProductosSpider(scrapy.Spider):
 
         for sel in [
             'meta[property="og:image"]::attr(content)',
-            'img.img-ficha::attr(src)',
+            "img.img-ficha::attr(src)",
         ]:
             val = response.css(sel).get()
             img = self.normalizar_imagen(val, response)
             if img:
                 return img
+
         return ""
 
     def extraer_descripcion(self, response, body_text):
         bloques = []
 
         selectores = [
-            '#home-tab-pane *::text',
-            '.product-description *::text',
-            '.text-descripton *::text',
-            '.tab-content *::text',
-            '.tab-pane *::text',
-            '.descripcion-producto *::text',
-            '.summary-description *::text',
+            "#home-tab-pane *::text",
+            ".product-description *::text",
+            ".text-descripton *::text",
+            ".tab-content *::text",
+            ".tab-pane *::text",
+            ".descripcion-producto *::text",
+            ".summary-description *::text",
             '[class*="description"] *::text',
             '[id*="description"] *::text',
         ]
 
         basura_exacta = {
-            'descripcion', 'descripción', 'relacionados', 'comparar producto',
-            'producto agregado', 'cantidad', 'precio', 'total del carrito',
-            'seguir comprando', 'ir al carrito'
+            "descripcion",
+            "descripción",
+            "relacionados",
+            "comparar producto",
+            "producto agregado",
+            "cantidad",
+            "precio",
+            "total del carrito",
+            "seguir comprando",
+            "ir al carrito",
+            "especificaciones generales",
         }
+
         basura_contiene = [
-            'comprá en cuotas', 'compra en cuotas', 'añadir al carrito',
-            'agregar al carrito', 'medios de pago', 'calculá tu cuota',
-            'seguir comparando', 'producto agregado correctamente al carrito'
+            "comprá en cuotas",
+            "compra en cuotas",
+            "añadir al carrito",
+            "agregar al carrito",
+            "medios de pago",
+            "calculá tu cuota",
+            "seguir comparando",
+            "producto agregado correctamente al carrito",
         ]
 
         for sel in selectores:
@@ -425,19 +557,22 @@ class AlexProductosSpider(scrapy.Spider):
                 limpio = self.limpiar_texto(x)
                 if not limpio:
                     continue
+
                 low = limpio.lower()
                 if low in basura_exacta:
                     continue
                 if any(b in low for b in basura_contiene):
                     continue
+
                 txts.append(limpio)
+
             if txts:
                 bloque = self.dedup_text_preserve_order(txts)
                 if bloque:
                     bloques.append(" ".join(bloque))
 
         if not bloques:
-            for raw in response.css('script::text').getall():
+            for raw in response.css("script::text").getall():
                 for pattern in [
                     r'"descripcion"\s*:\s*"([^"]+)"',
                     r'"description"\s*:\s*"([^"]+)"',
@@ -447,7 +582,10 @@ class AlexProductosSpider(scrapy.Spider):
                     mm = re.search(pattern, raw, re.I | re.S)
                     if mm:
                         desc = self.limpiar_texto(
-                            mm.group(1).replace('\\n', ' ').replace('\\r', ' ').replace('\/', '/')
+                            mm.group(1)
+                            .replace("\\n", " ")
+                            .replace("\\r", " ")
+                            .replace("\\/", "/")
                         )
                         if desc:
                             bloques.append(desc)
@@ -461,6 +599,7 @@ class AlexProductosSpider(scrapy.Spider):
     def extraer_categoria_producto(self, response, nombre):
         categoria_origen = self.limpiar_texto(response.meta.get("categoria_origen", ""))
         candidatos = []
+
         breadcrumbs = [
             self.limpiar_texto(t)
             for t in response.css('.breadcrumb a::text, [class*="breadcrumb"] a::text').getall()
@@ -480,9 +619,20 @@ class AlexProductosSpider(scrapy.Spider):
             candidatos.append(cat_nombre)
 
         ignorar = {
-            "inicio", "home", "alex", "alex s.a.", "alex s.a", "producto",
-            "productos", "tienda", "shop", "sin categoría", "sin categoria", "uncategorized"
+            "inicio",
+            "home",
+            "alex",
+            "alex s.a.",
+            "alex s.a",
+            "producto",
+            "productos",
+            "tienda",
+            "shop",
+            "sin categoría",
+            "sin categoria",
+            "uncategorized",
         }
+
         for cat in candidatos:
             cat = self.limpiar_texto(cat)
             if not cat:
@@ -500,7 +650,7 @@ class AlexProductosSpider(scrapy.Spider):
         return "Otros"
 
     def extraer_marca(self, response, nombre, descripcion):
-        for raw in response.css('script::text').getall():
+        for raw in response.css("script::text").getall():
             m = re.search(r'"marca"\s*:\s*"([^"]+)"', raw, re.I)
             if m:
                 return self.limpiar_texto(m.group(1)).upper()
@@ -517,8 +667,8 @@ class AlexProductosSpider(scrapy.Spider):
 
     def extraer_stock(self, response):
         for sel in [
-            '#cantidad-input::attr(max)',
-            '.cantidad-input::attr(max)',
+            "#cantidad-input::attr(max)",
+            ".cantidad-input::attr(max)",
             'input[type="number"]::attr(max)',
         ]:
             val = response.css(sel).get()
@@ -529,10 +679,13 @@ class AlexProductosSpider(scrapy.Spider):
                     pass
 
         texto = response.text.lower()
+
         if any(x in texto for x in ["sin stock", "agotado", "no disponible"]):
             return 0
+
         if any(x in texto for x in ["agregar al carrito", "añadir al carrito", "comprá al contado", "comprar al contado"]):
             return 1
+
         return 1
 
     def safe_json(self, response):

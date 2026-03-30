@@ -70,10 +70,19 @@ CATEGORY_ALIASES: Dict[str, str] = {
     "salud y belleza": "Salud y Belleza",
     "sin categoria": "Productos",
     "tablets": "Tablets",
-    "tecnologia": "Productos",
+    "tecnologia": "Informática",
     "televisores y audio": "TV y Video",
     "televisores y equipos de audio": "TV y Video",
     "tv y video": "TV y Video",
+    "televisores": "TV y Video",
+    "refrigeracion": "Electrodomésticos",
+    "coccion": "Electrodomésticos",
+    "audio y sonido": "Audio",
+    "pequenos electrodomesticos": "Electrodomésticos",
+    "lavado": "Electrodomésticos",
+    "muebles": "Hogar",
+    "bienestar y ocio": "Hogar",
+    "industriales y herramientas": "Herramientas",
 }
 
 
@@ -84,7 +93,7 @@ CATEGORY_ALIASES: Dict[str, str] = {
 CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "Celulares y Smartphones": [
         "celular", "smartphone", "iphone", "redmi", "galaxy", "motorola",
-        "oppo", "honor", "nokia", "xiaomi", "poco", "infinix", "tecno"
+        "oppo", "honor", "nokia", "poco", "infinix", "tecno"
     ],
     "Tablets": [
         "tablet", "ipad", "tab "
@@ -92,16 +101,16 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "Informática": [
         "notebook", "laptop", "ultrabook", "pc", "computadora", "monitor",
         "impresora", "teclado", "mouse", "ssd", "disco duro", "memoria ram",
-        "pendrive", "ups", "webcam", "microfono", "gabinete", "placa madre",
+        "pendrive", "ups", "webcam", "gabinete", "placa madre",
         "procesador", "all in one", "aio", "scanner", "escaner"
     ],
     "Audio": [
-        "parlante", "speaker", "auricular", "headset", "microfono", "soundbar",
-        "barra de sonido", "subwoofer", "amplificador", "earbuds", "buds"
+        "parlante", "speaker", "auricular", "headset", "microfono", "soundbar", "micrófono",
+        "barra de sonido", "subwoofer", "amplificador", "earbuds", "buds", "bluetooth speaker"
     ],
     "TV y Video": [
         "tv", "televisor", "smart tv", "proyector", "chromecast", "roku",
-        "google tv", "android tv"
+        "google tv", "android tv","led","qled","uhd","fhd","hdr10"
     ],
     "Gaming": [
         "playstation", "ps4", "ps5", "xbox", "nintendo", "joystick",
@@ -123,11 +132,12 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "Electrodomésticos": [
         "heladera", "lavarropas", "lavarropa", "microondas", "licuadora",
         "freidora", "aspiradora", "cafetera", "horno", "cocina", "batidora",
-        "plancha", "sandwichera", "freezer", "lavavajillas", "extractor"
+        "plancha", "sandwichera", "freezer", "lavavajillas", "extractor", "frigobar", 
+        "cocina a gas", "cocina eléctrica", "congelador"
     ],
     "Climatización": [
         "aire acondicionado", "acondicionado", "ventilador", "calefactor",
-        "estufa", "climatizador"
+        "estufa", "climatizador", "split", "btu"
     ],
     "Herramientas": [
         "taladro", "atornillador", "amoladora", "hidrolavadora", "compresor",
@@ -148,7 +158,8 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     ],
     "Deportes": [
         "bicicleta", "cinta para caminar", "caminadora", "mancuerna",
-        "banco de ejercicio", "pelota", "fitness", "pesas", "spinning"
+        "banco de ejercicio", "pelota", "fitness", "pesas", "spinning", "camiseta", 
+        "remera", "short", "pantalon", "botin", "zapatilla", "jersey",
     ],
     "Motocicletas": [
         "moto", "motocicleta", "casco", "cubierta", "buler", "benelli",
@@ -164,8 +175,8 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
 CATEGORY_ORDER = [
     "Celulares y Smartphones",
     "Tablets",
-    "Informática",
     "Audio",
+    "Informática",
     "TV y Video",
     "Gaming",
     "Accesorios",

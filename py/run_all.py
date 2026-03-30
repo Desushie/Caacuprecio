@@ -29,7 +29,6 @@ def main():
     process.crawl(GonzalitoProductosSpider)
     process.crawl(AlexProductosSpider)
     process.crawl(ChacomerProductosSpider)
-
     # lento al final
     process.crawl(InverfinProductosSpider)
 

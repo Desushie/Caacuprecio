@@ -212,7 +212,6 @@ render_navbar('producto');
         <div class="detail-card glass-card p-4 mb-4">
           <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h2 class="h4 fw-bold mb-0">Comparar precios</h2>
-            <small class="text-body-secondary">Tabla conectada con <code>productos_precios</code></small>
           </div>
 
           <?php if ($offers): ?>
@@ -253,7 +252,6 @@ render_navbar('producto');
         <div class="detail-card glass-card p-4 mb-4">
           <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h2 class="h4 fw-bold mb-0">Historial reciente</h2>
-            <small class="text-body-secondary">Últimos registros de <code>historial_precios</code></small>
           </div>
           <?php if ($history): ?>
             <div class="table-responsive">

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 29, 2026 at 08:36 AM
+-- Generation Time: Mar 30, 2026 at 05:16 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -196,6 +196,20 @@ CREATE TABLE `tiendas` (
   `tie_url` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `tiendas`
+--
+
+INSERT INTO `tiendas` (`idtiendas`, `tie_nombre`, `tie_descripcion`, `tie_logo`, `tie_ubicacion`, `tie_url`) VALUES
+(1, 'Alex', 'ALEX S.A. se posiciona como una de las empresas comerciales más importantes del Paraguay. Tras una sólida historia en el mercado mayorista de Repuestos, hace más de 25 años comenzaron a ensamblar las reconocidas Motocicletas STAR y en los últimos 14 se ha', 'https://www.alex.com.py/assets_front/images/logo.svg', '-25.382304253447398, -57.13623210798882', 'https://www.alex.com.py/'),
+(2, 'Chacomer', 'Chacomer es una empresa fundada por el Sr. Cornelius Walde en el año 1956. Con una cultura transparente de hacer negocios, basada en principios bíblicos que les guían, y fuertes valores como Integridad, Efectividad, Lealtad, espíritu Innovador y Responsab', 'https://www.chacomer.com.py/static/version1774538686/frontend/Chacomer/default/es_AR/images/logo.svg', '-25.385922958287978, -57.14344200004215', 'https://www.chacomer.com.py/'),
+(3, 'Tienda Gonzalito', '15 años siendo la solución en electrodomésticos, muebles y más. Financiación con mínimos requisitos', 'https://www.tiendagonzalito.com.py/assets_front/images/logo-con-border.png', '-25.384987837249938, -57.13990794250004', 'https://www.tiendagonzalito.com.py/'),
+(4, 'Comfort House', 'En Comfort House, ofrecen todo lo que necesitas para el hogar con calidad, variedad de marcas y excelentes opciones de pago. Como parte de Consulting and Company SAECA, son una empresa minorista con 15 años de experiencia, en la venta de electrodoméstico', 'https://f.fcdn.app/assets/commerce/www.ch.com.py/0c87_b351/public/web/img/logo.svg', '-25.387066164746294, -57.143220198033404', 'https://www.ch.com.py/'),
+(5, 'Bristol', 'Bristol S.A. es una Sociedad Anónima, orientada a satisfacer las necesidades de sus clientes brindándoles la mejor atención, los mejores productos, la mejor financiación y los mejores servicios. Fueron fundados el 10 de julio de 1980, con 45 años de exper', 'https://f.fcdn.app/assets/commerce/www.bristol.com.py/b81b_e9e5/public/web/img/logo.svg', '-25.386646423253413, -57.142096166045754', 'https://www.bristol.com.py/'),
+(6, 'Computex', 'Computex ofrece las mejores ofertas, las mejores marcas y los mejores precios, Tecnología y seguridad a tu alcance, pedidos y envíos a todo el país', 'https://computex.com.py/wp-content/uploads/2024/11/logocompletocomputex-1536x458.png', '-25.393026269447617, -57.14990553398656', 'https://computex.com.py/'),
+(7, 'Inverfin', 'Inverfin S.A.E.C.A. es una empresa de Gente que Avanza con más de 20 años de dedicación, compromiso y trabajo. Se inició en el año 1996 en la ciudad de Coronel Oviedo en un pequeño local de venta de repuestos y motos. Actualmente cuenta con una moderna se', 'https://inverfin.com.py/cdn/shop/files/thumbnail_image.png?v=1755894019&width=480', '-25.38240094063622, -57.135378191862955', 'https://inverfin.com.py/'),
+(8, 'Full Office', 'Full Office S.R.L. es una empresa 100% paraguaya con sede en Caacupé – Cordillera que se dedica a la comercialización de productos, más de 19 años llevan como empresa y demuestra cabalmente su compromiso con el cliente a la hora de depositar su confianza ', 'https://www.fulloffice.com.py/storage/2025/02/Logo_fulloffice.svg', '-25.388011598949447, -57.14312940616084', 'https://www.fulloffice.com.py/');
+
 -- --------------------------------------------------------
 
 --
@@ -369,7 +383,7 @@ ALTER TABLE `scrape_logs`
 -- AUTO_INCREMENT for table `tiendas`
 --
 ALTER TABLE `tiendas`
-  MODIFY `idtiendas` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `idtiendas` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `usuario`

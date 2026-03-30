@@ -3,8 +3,7 @@ import re
 import scrapy
 from scraper.items import ProductoItem
 from scraper.utils.brands import extract_brand
-from scraper.utils.categories import extract_category
-
+from scraper.utils.categories import category_from_site, category_from_keywords
 
 class BristolProductosSpider(scrapy.Spider):
     name = "bristol_productos"
@@ -74,8 +73,6 @@ class BristolProductosSpider(scrapy.Spider):
 
         precio = self.parse_precio(body_text)
 
-        categoria = extract_category(categoria_origen) or extract_category(nombre) or categoria_origen or "Sin categoría"
-
         stock_text = body_text.lower()
         if any(x in stock_text for x in ["sin stock", "agotado", "no disponible"]):
             stock = "Sin stock"
@@ -95,6 +92,18 @@ class BristolProductosSpider(scrapy.Spider):
         descripcion = self.extraer_descripcion(response, nombre)
 
         marca = self.extraer_marca(response, nombre, descripcion)
+        
+        categoria_site = category_from_site(categoria_origen)
+        categoria_kw = category_from_keywords(
+            nombre=nombre,
+            categoria_original=categoria_origen,
+            marca=marca
+        )
+
+        if categoria_site in ["TV y Video", "Productos", None]:
+            categoria = categoria_kw or categoria_site or "Productos"
+        else:
+            categoria = categoria_site or categoria_kw or "Productos"
 
         item["nombre"] = nombre
         item["precio"] = precio

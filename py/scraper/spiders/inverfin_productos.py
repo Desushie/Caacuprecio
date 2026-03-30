@@ -23,6 +23,7 @@ class InverfinProductosSpider(scrapy.Spider):
         "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
         "RETRY_TIMES": 8,
         "COOKIES_ENABLED": False,
+        "DUPEFILTER_DEBUG": True,
         "DEFAULT_REQUEST_HEADERS": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -49,24 +50,54 @@ class InverfinProductosSpider(scrapy.Spider):
             or response.css("title::text").get(default="")
         )
 
-        vistos = set()
+        # -------- SELECTORES DEL GRID (PRIORIDAD) --------
+        selectors = [
+            'ul[id*="product-grid"] a[href*="/products/"]::attr(href)',
+            '.product-grid a[href*="/products/"]::attr(href)',
+            '.card-wrapper a[href*="/products/"]::attr(href)',
+            'main a[href*="/products/"]::attr(href)',  # fallback
+        ]
 
-        for href in response.css('a[href*="/products/"]::attr(href)').getall():
+        links = []
+        for sel in selectors:
+            links = response.css(sel).getall()
+            if links:
+                self.logger.warning(f"[{response.url}] usando selector: {sel} -> {len(links)} links")
+                break
+
+        # fallback extremo
+        if not links:
+            links = response.css('a[href*="/products/"]::attr(href)').getall()
+            self.logger.warning(f"[{response.url}] fallback global -> {len(links)} links")
+
+        # -------- NORMALIZAR Y QUITAR DUPLICADOS --------
+        vistos = set()
+        links_unicos = []
+
+        for href in links:
             href = response.urljoin((href or "").strip())
             if not href:
                 continue
 
             href = href.split("?")[0].rstrip("/")
+
             if href in vistos:
                 continue
 
             vistos.add(href)
+            links_unicos.append(href)
+
+        self.logger.warning(f"[{response.url}] productos únicos: {len(links_unicos)}")
+
+        # -------- SEGUIR PRODUCTOS --------
+        for href in links_unicos:
             yield response.follow(
                 href,
                 callback=self.parse_producto,
                 meta={"categoria_origen": categoria_origen},
             )
 
+        # -------- PAGINACIÓN --------
         next_page = (
             response.css('link[rel="next"]::attr(href)').get()
             or response.css('a[rel="next"]::attr(href)').get()
@@ -82,6 +113,7 @@ class InverfinProductosSpider(scrapy.Spider):
                     break
 
         if next_page:
+            self.logger.warning(f"[{response.url}] -> siguiente página: {next_page}")
             yield response.follow(next_page, callback=self.parse)
 
     def parse_producto(self, response):
@@ -110,14 +142,12 @@ class InverfinProductosSpider(scrapy.Spider):
 
         descripcion = self.extract_description(response, jsonld, shopify, nombre)
         imagen = self.extract_image(response, jsonld, shopify)
-        marca = self.extract_brand_value(nombre, body_text, jsonld, shopify)
-
-        categoria = (
-            extract_category((shopify or {}).get("type") or "")
-            or extract_category(categoria_origen)
-            or extract_category(nombre)
-            or categoria_origen
-            or "Otros"
+        marca = self.extraer_marca(response, nombre, body_text)
+        categoria = self.extraer_categoria(
+            response,
+            nombre,
+            response.meta.get("categoria_origen", ""),
+            marca,
         )
 
         stock = self.extract_stock(response, body_text, shopify, jsonld)

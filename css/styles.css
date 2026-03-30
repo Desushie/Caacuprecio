@@ -325,6 +325,9 @@ small,
   text-decoration: none;
   color: var(--text-main);
   transition: .25s ease;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
 }
 
 .fancy-hover,

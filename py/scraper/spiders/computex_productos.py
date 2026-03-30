@@ -64,7 +64,14 @@ class ComputexProductosSpider(scrapy.Spider):
         imagen = self.extraer_imagen(response)
         marca = extract_brand(nombre)
         categoria_raw = self.extraer_categoria(response, nombre)
-        categoria = extract_category(categoria_raw) or extract_category(nombre) or categoria_raw
+        slug = response.url.rstrip("/").split("/")[-1]
+
+        categoria = (
+            extract_category(nombre)
+            or extract_category(slug.replace("-", " "))
+            or extract_category(categoria_raw)
+            or categoria_raw
+        )
         descripcion = self.extraer_descripcion(response)
 
         item = ProductoItem()
@@ -82,6 +89,30 @@ class ComputexProductosSpider(scrapy.Spider):
 
         yield item
 
+    def limpiar_descripcion(self, texto):
+        texto = self.limpiar_texto(texto)
+        if not texto:
+            return ""
+
+        # Quitar encabezados comunes al inicio
+        texto = re.sub(
+            r'^(especificaciones\s+generales\s*[:.\-]?\s*)',
+            '',
+            texto,
+            flags=re.IGNORECASE
+        )
+
+        texto = re.sub(
+            r'^(descripci[oó]n\s*[:.\-]?\s*)',
+            '',
+            texto,
+            flags=re.IGNORECASE
+        )
+
+        # Limpiar repeticiones o separadores raros
+        texto = re.sub(r'\s*[|•·]+\s*', ' ', texto)
+        texto = re.sub(r'\s+', ' ', texto).strip(" -–—:;,.")
+        return texto[:1000]
 
     def normalizar_item(self, item):
         marca = self.limpiar_texto(item.get("marca") or "")
@@ -91,9 +122,14 @@ class ComputexProductosSpider(scrapy.Spider):
             item["marca"] = marca
 
         categoria = self.limpiar_texto(item.get("categoria") or "")
-        if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized"}:
+        if not categoria or categoria.lower() in {
+            "sin categoría", "sin categoria", "uncategorized", "productos", "producto"
+        }:
             categoria = self.limpiar_texto(extract_category(item.get("nombre") or "")) or "Otros"
         item["categoria"] = categoria
+
+        item["descripcion"] = self.limpiar_descripcion(item.get("descripcion") or "")
+
         return item
 
     def limpiar_texto(self, texto):
@@ -105,42 +141,42 @@ class ComputexProductosSpider(scrapy.Spider):
     def extraer_categoria(self, response, nombre):
         candidatos = []
 
-        # 1. Breadcrumbs / navegación
-        breadcrumbs = [
-            self.limpiar_texto(t)
-            for t in response.css(
-                '.woocommerce-breadcrumb a::text, '
-                '.breadcrumb a::text, '
-                'nav.woocommerce-breadcrumb a::text, '
-                '[class*="breadcrumb"] a::text'
-            ).getall()
-            if self.limpiar_texto(t)
-        ]
-        breadcrumbs = [
-            c for c in breadcrumbs
-            if c.lower() not in {"inicio", "home", "productos", "tienda", "shop"}
-        ]
-        candidatos.extend(breadcrumbs)
+        ignorar = {
+            "productos", "producto", "tienda", "shop", "inicio", "home",
+            "sin categoria", "sin categoría", "uncategorized"
+        }
 
-        # 2. Categorías de WooCommerce / taxonomías visibles
-        taxonomias = [
-            self.limpiar_texto(t)
-            for t in response.css(
-                '.posted_in a::text, '
-                '.product_meta .posted_in a::text, '
-                'a[rel="tag"]::text, '
-                '.product-categories a::text'
-            ).getall()
-            if self.limpiar_texto(t)
-        ]
-        candidatos.extend(taxonomias)
+        def agregar_candidato(valor):
+            valor = self.limpiar_texto(valor)
+            if not valor:
+                return
+            if valor.lower() in ignorar:
+                return
+            if len(valor) < 3:
+                return
+            candidatos.append(valor)
 
-        # 3. Meta keywords / itemprops
+        # 1. Breadcrumbs
+        for t in response.css(
+            '.woocommerce-breadcrumb a::text, '
+            '.breadcrumb a::text, '
+            'nav.woocommerce-breadcrumb a::text, '
+            '[class*="breadcrumb"] a::text'
+        ).getall():
+            agregar_candidato(t)
+
+        # 2. Categorías visibles / taxonomías
+        for t in response.css(
+            '.posted_in a::text, '
+            '.product_meta .posted_in a::text, '
+            '.product-categories a::text'
+        ).getall():
+            agregar_candidato(t)
+
+        # 3. Meta keywords
         meta_keywords = response.css('meta[name="keywords"]::attr(content)').get() or ""
         for part in re.split(r"[,|]", meta_keywords):
-            part = self.limpiar_texto(part)
-            if part:
-                candidatos.append(part)
+            agregar_candidato(part)
 
         # 4. JSON-LD
         for raw in response.css('script[type="application/ld+json"]::text').getall():
@@ -149,26 +185,24 @@ class ComputexProductosSpider(scrapy.Spider):
             except Exception:
                 continue
             for cat in self._buscar_categorias_jsonld(data):
-                cat = self.limpiar_texto(cat)
-                if cat:
-                    candidatos.append(cat)
+                agregar_candidato(cat)
 
-        # 5. Utilidad existente por nombre
+        # 5. Slug URL
+        slug = response.url.rstrip("/").split("/")[-1]
+        agregar_candidato(slug.replace("-", " "))
+
+        # 6. Nombre del producto como respaldo
         cat_nombre = self.limpiar_texto(extract_category(nombre))
         if cat_nombre:
-            candidatos.append(cat_nombre)
+            return cat_nombre
 
-        # Elegir la primera útil, evitando genéricas
-        ignorar = {
-            "productos", "producto", "tienda", "shop", "inicio", "home",
-            "sin categoria", "uncategorized"
-        }
+        # 7. Elegir mejor candidato
         for cat in candidatos:
-            cat_l = cat.lower()
-            if cat_l in ignorar:
-                continue
-            if len(cat) < 3:
-                continue
+            cat_extraida = self.limpiar_texto(extract_category(cat))
+            if cat_extraida and cat_extraida.lower() not in ignorar:
+                return cat_extraida
+
+        for cat in candidatos:
             return cat
 
         return "Otros"
@@ -271,45 +305,65 @@ class ComputexProductosSpider(scrapy.Spider):
         return encontrados
 
     def extraer_descripcion(self, response):
-        descripcion = " ".join(
-            t.strip()
-            for t in response.css(
-                ".woocommerce-Tabs-panel--description *::text, "
-                "#tab-description *::text, "
-                ".product .woocommerce-product-details__short-description *::text"
-            ).getall()
-            if t.strip()
-        )
-        descripcion = self.limpiar_texto(descripcion)
-        if descripcion:
-            return descripcion[:1000]
+        bloques = []
 
-        textos = response.css("body ::text").getall()
-        textos = [self.limpiar_texto(t) for t in textos if self.limpiar_texto(t)]
+        # 1. Descripción principal
+        for sel in [
+            ".woocommerce-Tabs-panel--description *::text",
+            "#tab-description *::text",
+            ".product .woocommerce-product-details__short-description *::text",
+            ".entry-content *::text",
+        ]:
+            textos = [
+                self.limpiar_texto(t)
+                for t in response.css(sel).getall()
+                if self.limpiar_texto(t)
+            ]
+            if textos:
+                bloques.append(" ".join(textos))
 
-        inicio = None
-        fin = None
-        for i, t in enumerate(textos):
-            t_lower = t.lower()
-            if t_lower in {"descripción", "descripcion"}:
-                inicio = i + 1
-                continue
-            if inicio is not None and (
-                "también te puede gustar" in t_lower
-                or "tambien te puede gustar" in t_lower
-                or "volver a la lista" in t_lower
-                or "valoraciones" in t_lower
-                or "reseñas" in t_lower
-            ):
-                fin = i
-                break
+        # 2. Si no encontró nada útil, intentar por body
+        if not bloques:
+            textos = [self.limpiar_texto(t) for t in response.css("body ::text").getall()]
+            textos = [t for t in textos if t]
 
-        if inicio is not None:
-            bloque = textos[inicio:fin] if fin is not None else textos[inicio:inicio + 30]
-            bloque = [t for t in bloque if len(t) > 1]
-            return self.limpiar_texto(" ".join(bloque))[:1000]
+            inicio = None
+            fin = None
 
-        return ""
+            for i, t in enumerate(textos):
+                t_lower = t.lower()
+                if t_lower in {"descripción", "descripcion", "especificaciones generales"}:
+                    inicio = i + 1
+                    continue
+
+                if inicio is not None and (
+                    "también te puede gustar" in t_lower
+                    or "tambien te puede gustar" in t_lower
+                    or "volver a la lista" in t_lower
+                    or "valoraciones" in t_lower
+                    or "reseñas" in t_lower
+                    or "productos relacionados" in t_lower
+                ):
+                    fin = i
+                    break
+
+            if inicio is not None:
+                bloque = textos[inicio:fin] if fin is not None else textos[inicio:inicio + 40]
+                bloque = [t for t in bloque if len(t) > 1]
+                if bloque:
+                    bloques.append(" ".join(bloque))
+
+        if not bloques:
+            return ""
+
+        descripcion = " ".join(bloques)
+        descripcion = self.limpiar_descripcion(descripcion)
+
+        # Evitar textos demasiado pobres
+        if descripcion.lower() in {"especificaciones generales", "descripción", "descripcion"}:
+            return ""
+
+        return descripcion
 
     def parse_precio(self, texto):
         if not texto:

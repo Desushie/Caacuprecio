@@ -47,7 +47,6 @@ BRAND_ALIASES = {
     "Abba": ["abba"],
     "Parana": ["parana"],
     "Koala": ["koala"],
-    "Comfee": ["comfee"],
     "Tokyo": ["tokyo", "tokio"],
     "Bosch": ["bosch"],
     "Black+Decker": ["black decker", "black+decker", "black&decker"],
@@ -154,6 +153,8 @@ BRAND_ALIASES = {
     "Split": ["split"],
     "AKG": ["akg"],
     "Speakon": ["speakon"],
+    "Multilaser ": ["multilaser"],
+    "Progas": ["progas"],
 }
 
 

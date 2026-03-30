@@ -229,6 +229,14 @@ class GonzalitoProductosSpider(scrapy.Spider):
 
         return list(found)
 
+    def clean_text(self, text):
+        if not text:
+            return ""
+        text = re.sub(r"<[^>]+>", " ", str(text))
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"\s+", " ", text)
+        return text.strip(" -\n\t\r")
+
     def detect_next_page_from_json(self, data, current_page):
         if isinstance(data, dict):
             for key in ("next_page", "nextPage", "page", "pagina"):
@@ -306,8 +314,13 @@ class GonzalitoProductosSpider(scrapy.Spider):
         if precio is None:
             return
 
-        categoria = self.extraer_categoria(response, nombre, response.meta.get("categoria_origen", ""))
         marca = self.extraer_marca(response, nombre, body_text)
+        categoria = self.extraer_categoria(
+            response,
+            nombre,
+            response.meta.get("categoria_origen", ""),
+            marca,
+        )
         descripcion = self.extraer_descripcion(response, nombre)
         imagen = self.extraer_imagen(response)
         stock = self.extraer_stock(body_text)
@@ -386,50 +399,27 @@ class GonzalitoProductosSpider(scrapy.Spider):
 
         return text[:cut_at].strip()
 
-    def extraer_categoria(self, response, nombre, categoria_origen=""):
-        candidatos = []
-
+    def extraer_categoria(self, response, nombre, categoria_origen="", marca=""):
         breadcrumbs = [
             self.clean_text(t)
             for t in response.css(
-                '.breadcrumb *::text, [class*="breadcrumb"] *::text, nav *::text'
+                '.breadcrumb *::text, [class*="breadcrumb"] *::text'
             ).getall()
             if self.clean_text(t)
         ]
-        candidatos.extend(breadcrumbs)
 
-        for raw in response.css('script[type="application/ld+json"]::text').getall():
-            try:
-                data = json.loads(raw)
-            except Exception:
-                continue
-            for cat in self._search_json_keys(data, {"category", "articleSection"}):
-                candidatos.append(self.clean_text(cat))
+        categoria_base = categoria_origen
+        if not categoria_base:
+            for crumb in breadcrumbs:
+                if crumb and crumb.lower() not in {"inicio", "home", "productos", "producto"}:
+                    categoria_base = crumb
+                    break
 
-        if categoria_origen:
-            categoria_origen_norm = extract_category(categoria_origen) or self.clean_text(categoria_origen)
-            candidatos.append(self.clean_text(categoria_origen_norm))
-
-        cat_nombre = self.clean_text(extract_category(nombre))
-        if cat_nombre:
-            candidatos.append(cat_nombre)
-
-        ignorar = {
-            "", "inicio", "home", "catalogo", "catálogo", "producto", "productos",
-            "descripcion", "descripción", "ver todo", "tienda gonzalito", "tu solución",
-            nombre.lower(), "sin categoría", "sin categoria", "uncategorized"
-        }
-        for cat in candidatos:
-            cat_clean = self.clean_text(cat)
-            if not cat_clean:
-                continue
-            cat_l = cat_clean.lower()
-            if cat_l in ignorar:
-                continue
-            if len(cat_clean) < 3:
-                continue
-            return extract_category(cat_clean) or extract_category(nombre) or cat_clean
-        return extract_category(nombre) or "Otros"
+        return extract_category(
+            nombre=nombre,
+            categoria_original=categoria_base,
+            marca=marca,
+        )
 
     def extraer_marca(self, response, nombre, body_text):
         for raw in response.css('script[type="application/ld+json"]::text').getall():

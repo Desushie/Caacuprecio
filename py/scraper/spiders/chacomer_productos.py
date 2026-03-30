@@ -22,32 +22,80 @@ class ChacomerProductosSpider(scrapy.Spider):
 
     custom_settings = {
         "DOWNLOAD_DELAY": 0.25,
+        "CONCURRENT_REQUESTS": 8,
     }
 
     def parse(self, response):
         categoria_origen = self.extraer_categoria_listado(response)
         vistos = set()
+        encontrados = 0
 
-        for href in response.css('a[href$=".html"]::attr(href)').getall():
-            href = response.urljoin((href or "").strip())
-            href = href.split("?")[0]
+        # Primero: selectores específicos de productos del listado.
+        product_selectors = [
+            'a.product-item-link::attr(href)',
+            '.product-item-info a.product-item-link::attr(href)',
+            '.products-grid .product-item-link::attr(href)',
+            '.product-item-photo::attr(href)',
+            '.product.photo.product-item-photo::attr(href)',
+            '[data-container="product-grid"] a[href]::attr(href)',
+            'ol.products li.product-item a[href]::attr(href)',
+        ]
 
-            if not href or href in vistos:
-                continue
+        for sel in product_selectors:
+            for href in response.css(sel).getall():
+                href = self.normalizar_url_producto(response, href)
+                if not href or href in vistos:
+                    continue
+                if self.es_link_no_producto(href):
+                    continue
+                vistos.add(href)
+                encontrados += 1
+                yield response.follow(
+                    href,
+                    callback=self.parse_producto,
+                    meta={"categoria_origen": categoria_origen},
+                    priority=10,
+                )
 
-            if self.es_link_no_producto(href):
-                continue
+        # Fallback: si no encontró productos con selectores específicos,
+        # probar con cualquier link del listado que parezca de producto.
+        if encontrados == 0:
+            for href in response.css('a[href]::attr(href)').getall():
+                href = self.normalizar_url_producto(response, href)
+                if not href or href in vistos:
+                    continue
+                if self.es_link_no_producto(href):
+                    continue
+                if not self.parece_producto(href):
+                    continue
+                vistos.add(href)
+                yield response.follow(
+                    href,
+                    callback=self.parse_producto,
+                    meta={"categoria_origen": categoria_origen},
+                    priority=10,
+                )
 
-            vistos.add(href)
-            yield response.follow(
-                href,
-                callback=self.parse_producto,
-                meta={"categoria_origen": categoria_origen},
-            )
+        self.logger.info("Listado %s | productos detectados en página: %s", response.url, encontrados)
 
         next_page = self.extraer_next_page(response)
         if next_page:
-            yield response.follow(next_page, callback=self.parse)
+            yield response.follow(next_page, callback=self.parse, priority=-10)
+
+    def normalizar_url_producto(self, response, href):
+        href = response.urljoin((href or "").strip())
+        if not href:
+            return ""
+        href = href.split("#")[0]
+        return href
+
+    def parece_producto(self, href):
+        href_l = href.lower()
+        return (
+            "/catalog/product/" in href_l
+            or "/product/" in href_l
+            or href_l.endswith(".html")
+        )
 
     def parse_producto(self, response):
         nombre = self.limpiar_texto(
@@ -66,6 +114,7 @@ class ChacomerProductosSpider(scrapy.Spider):
 
         precio = self.extraer_precio(response, body_text)
         if precio is None:
+            self.logger.debug("Producto sin precio, omitido: %s", response.url)
             return
 
         descripcion = self.extraer_descripcion(response, body_text)
@@ -111,14 +160,33 @@ class ChacomerProductosSpider(scrapy.Spider):
             "/la-empresa",
             "/trabaja-con-nosotros",
             "/newsletter",
+            "?product_list_order=",
+            "?product_list_dir=",
+            "?product_list_mode=",
         ]
         if any(x in href_l for x in no_producto):
             return True
-        if href_l.endswith(".html") and re.search(r"/(hogar|deportes|auto|moto|indumentaria|maquinas)\.html$", href_l):
+        if re.search(r"/(hogar|deportes|auto|moto|indumentaria|maquinas)\.html(?:\?.*)?$", href_l):
             return True
         return False
 
     def extraer_next_page(self, response):
+        # Selectores específicos del paginador de Magento.
+        for sel in [
+            'link[rel="next"]::attr(href)',
+            '.pages-item-next a::attr(href)',
+            'a.next::attr(href)',
+            'li.item.pages-item-next a::attr(href)',
+            'a[title="Siguiente"]::attr(href)',
+            'a[title="Next"]::attr(href)',
+            'a[aria-label="Next"]::attr(href)',
+            'a[aria-label="Siguiente"]::attr(href)',
+        ]:
+            href = response.css(sel).get()
+            if href:
+                return response.urljoin(href)
+
+        # Fallback por texto.
         for a in response.css("a"):
             texto = self.limpiar_texto(" ".join(a.css("::text").getall())).lower()
             title = self.limpiar_texto(a.attrib.get("title", "")).lower()
@@ -155,8 +223,11 @@ class ChacomerProductosSpider(scrapy.Spider):
             '[data-price-amount]::attr(data-price-amount)',
             '.price-wrapper::attr(data-price-amount)',
             '.special-price .price::text',
+            '.old-price .price::text',
+            '.price-final_price .price::text',
             '.product-info-price .price::text',
             '.price-box .price::text',
+            '.normal-price .price::text',
         ]:
             for val in response.css(sel).getall():
                 parsed = self._parse_num(val)

@@ -683,13 +683,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="mini-log-list mt-4">
-              <div class="mini-log-item">
-                <div>
-                  <div class="fw-semibold">Catálogo</div>
-                  <small class="text-body-secondary">No hay datos disponibles por el momento.</small>
-                </div>
-              </div>
             </div>
           <?php endif; ?>
         </div>
