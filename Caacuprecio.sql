@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 30, 2026 at 05:16 AM
+-- Generation Time: Mar 31, 2026 at 05:34 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -110,7 +110,9 @@ CREATE TABLE `productos` (
   `pro_fecha_scraping` datetime NOT NULL DEFAULT current_timestamp(),
   `pro_activo` tinyint(1) NOT NULL DEFAULT 1,
   `tiendas_idtiendas` int(11) NOT NULL,
-  `categorias_idcategorias` int(11) DEFAULT NULL
+  `categorias_idcategorias` int(11) DEFAULT NULL,
+  `pro_grupo` varchar(255) DEFAULT NULL,
+  `pro_modelo` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -149,6 +151,24 @@ CREATE TABLE `productos_vistos` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `producto_clicks`
+--
+
+CREATE TABLE `producto_clicks` (
+  `idclick` int(11) NOT NULL,
+  `productos_idproductos` int(11) NOT NULL,
+  `usuario_idusuario` int(11) DEFAULT NULL,
+  `session_id` varchar(128) DEFAULT NULL,
+  `click_origen` varchar(50) NOT NULL,
+  `click_tipo` varchar(50) NOT NULL,
+  `click_busqueda` varchar(255) DEFAULT NULL,
+  `click_destino_url` varchar(500) DEFAULT NULL,
+  `click_fecha` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `scraper_jobs`
 --
 
@@ -161,7 +181,8 @@ CREATE TABLE `scraper_jobs` (
   `output` longtext DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `started_at` datetime DEFAULT NULL,
-  `finished_at` datetime DEFAULT NULL
+  `finished_at` datetime DEFAULT NULL,
+  `pid` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -296,6 +317,17 @@ ALTER TABLE `productos_vistos`
   ADD KEY `idx_vistos_producto` (`productos_idproductos`,`visto_en`);
 
 --
+-- Indexes for table `producto_clicks`
+--
+ALTER TABLE `producto_clicks`
+  ADD PRIMARY KEY (`idclick`),
+  ADD KEY `idx_producto_clicks_producto` (`productos_idproductos`),
+  ADD KEY `idx_producto_clicks_usuario` (`usuario_idusuario`),
+  ADD KEY `idx_producto_clicks_session` (`session_id`),
+  ADD KEY `idx_producto_clicks_origen` (`click_origen`),
+  ADD KEY `idx_producto_clicks_tipo` (`click_tipo`);
+
+--
 -- Indexes for table `scraper_jobs`
 --
 ALTER TABLE `scraper_jobs`
@@ -368,6 +400,12 @@ ALTER TABLE `productos_vistos`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `producto_clicks`
+--
+ALTER TABLE `producto_clicks`
+  MODIFY `idclick` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `scraper_jobs`
 --
 ALTER TABLE `scraper_jobs`
@@ -420,6 +458,12 @@ ALTER TABLE `historial_precios`
 ALTER TABLE `productos`
   ADD CONSTRAINT `fk_productos_categorias` FOREIGN KEY (`categorias_idcategorias`) REFERENCES `categorias` (`idcategorias`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_productos_tiendas` FOREIGN KEY (`tiendas_idtiendas`) REFERENCES `tiendas` (`idtiendas`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `producto_clicks`
+--
+ALTER TABLE `producto_clicks`
+  ADD CONSTRAINT `fk_producto_clicks_producto` FOREIGN KEY (`productos_idproductos`) REFERENCES `productos` (`idproductos`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `scrape_logs`
