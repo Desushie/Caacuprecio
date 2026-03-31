@@ -1,4 +1,6 @@
 import pymysql
+import re
+import unicodedata
 from itemadapter import ItemAdapter
 
 
@@ -37,6 +39,10 @@ class MySQLPipeline:
         if not nombre or not url:
             return item
 
+        modelo_key = self.extract_model(nombre, marca)
+        grupo_key = self.normalize_text(modelo_key)
+        grupo_nombre = self.format_group_name(modelo_key)
+
         en_stock = self.parse_stock(stock_texto)
 
         categoria_id = self.get_or_create_categoria(categoria)
@@ -67,7 +73,9 @@ class MySQLPipeline:
                     pro_fecha_scraping = NOW(),
                     pro_activo = 1,
                     tiendas_idtiendas = %s,
-                    categorias_idcategorias = %s
+                    categorias_idcategorias = %s,
+                    pro_grupo = %s,
+                    pro_modelo = %s
                 WHERE idproductos = %s
             """, (
                 nombre,
@@ -79,6 +87,8 @@ class MySQLPipeline:
                 en_stock,
                 tienda_id,
                 categoria_id,
+                grupo_nombre,
+                grupo_key,
                 producto_id
             ))
 
@@ -102,8 +112,10 @@ class MySQLPipeline:
                     pro_fecha_scraping,
                     pro_activo,
                     tiendas_idtiendas,
-                    categorias_idcategorias
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), 1, %s, %s)
+                    categorias_idcategorias,
+                    pro_grupo,
+                    pro_modelo
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), 1, %s, %s, %s, %s)
             """, (
                 nombre,
                 descripcion,
@@ -114,7 +126,9 @@ class MySQLPipeline:
                 url,
                 en_stock,
                 tienda_id,
-                categoria_id
+                categoria_id,
+                grupo_nombre,
+                grupo_key,
             ))
 
             producto_id = self.cursor.lastrowid
@@ -271,6 +285,65 @@ class MySQLPipeline:
         if value is None:
             return ""
         return str(value).strip()
+
+    def normalize_text(self, text):
+        if not text:
+            return ""
+
+        text = text.lower()
+        text = unicodedata.normalize("NFD", text)
+        text = text.encode("ascii", "ignore").decode("utf-8")
+
+        text = text.replace("+", " plus ")
+        text = text.replace("-", " ")
+
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text
+
+    def extract_model(self, nombre, marca=""):
+        texto = self.normalize_text(nombre)
+
+        basura = [
+            "parlante", "speaker", "altavoz", "bluetooth", "wireless",
+            "audifono", "auricular", "smartphone", "celular",
+            "nuevo", "original", "negro", "blanco", "azul", "rojo",
+            "verde", "gris", "plata", "rosa", "optico", "inalambrico"
+        ]
+
+        for palabra in basura:
+            texto = re.sub(rf"\b{re.escape(palabra)}\b", " ", texto)
+
+        texto = re.sub(r"\s+", " ", texto).strip()
+
+        patrones = [
+            r"\bjbl\s+flip\s+\d+\b",
+            r"\bjbl\s+charge\s+\d+\b",
+            r"\bjbl\s+go\s+\d+\b",
+            r"\bgalaxy\s+a\d{1,3}\b",
+            r"\bgalaxy\s+s\d{1,3}\b",
+            r"\biphone\s+\d{1,2}\b",
+            r"\bredmi\s+note\s+\d{1,2}\b",
+            r"\bredmi\s+\d{1,2}\b",
+            r"\bmoto\s+[a-z]+\d*\b",
+            r"\bpoco\s+[a-z]+\d*\b",
+        ]
+
+        for patron in patrones:
+            m = re.search(patron, texto)
+            if m:
+                return m.group(0).strip()
+
+        palabras = texto.split()
+        return " ".join(palabras[:4]).strip()
+
+    def format_group_name(self, grupo):
+        if not grupo:
+            return ""
+
+        grupo = self.normalize_text(grupo)
+        return grupo.upper()
 
     def normalize_price(self, value):
         if value is None or value == "":

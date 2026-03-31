@@ -292,7 +292,7 @@ if ($mode === 'suggest') {
 }
 
 if ($mode === 'live') {
-    $where = ['p.pro_activo = 1'];
+    $where = ['p.pro_activo = 1', 'COALESCE(NULLIF(TRIM(p.pro_grupo), ""), p.pro_nombre) <> ""'];
     $params = [];
 
     if ($q !== '') {
@@ -302,6 +302,7 @@ if ($mode === 'live') {
             OR p.pro_marca LIKE :q_marca
             OR t.tie_nombre LIKE :q_tienda
             OR c.cat_nombre LIKE :q_categoria
+            OR p.pro_grupo LIKE :q_grupo
         )';
 
         $likeQ = '%' . $q . '%';
@@ -310,6 +311,7 @@ if ($mode === 'live') {
         $params[':q_marca'] = $likeQ;
         $params[':q_tienda'] = $likeQ;
         $params[':q_categoria'] = $likeQ;
+        $params[':q_grupo'] = $likeQ;
     }
 
     if ($categoriaId > 0) {
@@ -319,21 +321,42 @@ if ($mode === 'live') {
 
     $whereSql = implode(' AND ', $where);
 
+    $orderBy = match ($sort) {
+        'precio_asc'  => 'precio_min ASC, total_ofertas DESC, nombre ASC',
+        'precio_desc' => 'precio_min DESC, total_ofertas DESC, nombre ASC',
+        'nombre_asc'  => 'nombre ASC',
+        'nombre_desc' => 'nombre DESC',
+        default       => 'total_ofertas DESC, precio_min ASC, nombre ASC',
+    };
+
     $sql = "
         SELECT
-            p.idproductos,
-            p.pro_nombre,
-            p.pro_marca,
-            p.pro_precio,
-            p.pro_imagen,
-            p.pro_en_stock,
-            t.tie_nombre,
-            c.cat_nombre
-        FROM productos p
-        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-        LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
-        WHERE {$whereSql}
-        ORDER BY " . sort_sql($sort) . "
+            grupo,
+            MIN(idproductos) AS id_representante,
+            MIN(pro_nombre) AS nombre,
+            MAX(pro_marca) AS marca,
+            MIN(pro_precio) AS precio_min,
+            MAX(pro_imagen) AS imagen,
+            MAX(cat_nombre) AS categoria,
+            SUM(CASE WHEN pro_en_stock = 1 THEN 1 ELSE 0 END) AS ofertas_stock,
+            COUNT(*) AS total_ofertas
+        FROM (
+            SELECT
+                p.idproductos,
+                COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo,
+                p.pro_nombre,
+                p.pro_marca,
+                p.pro_precio,
+                p.pro_imagen,
+                p.pro_en_stock,
+                c.cat_nombre
+            FROM productos p
+            INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+            LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+            WHERE {$whereSql}
+        ) base
+        GROUP BY grupo
+        ORDER BY {$orderBy}
         LIMIT :limit
     ";
 
@@ -346,18 +369,24 @@ if ($mode === 'live') {
 
     $items = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $product) {
+        $enStock = ((int) $product['ofertas_stock']) > 0 ? 1 : 0;
+        $totalOfertas = (int) $product['total_ofertas'];
+        $nombreBase = trim((string) ($product['grupo'] ?: $product['nombre']));
+
         $items[] = [
-            'id' => (int) $product['idproductos'],
-            'nombre' => $product['pro_nombre'],
-            'marca' => $product['pro_marca'],
-            'categoria' => $product['cat_nombre'],
-            'precio' => gs($product['pro_precio']),
-            'precio_raw' => (float) $product['pro_precio'],
-            'imagen' => image_url($product['pro_imagen'], $product['pro_nombre']),
-            'stock' => stock_label($product['pro_en_stock']),
-            'stock_class' => stock_badge_class($product['pro_en_stock']),
-            'tienda' => $product['tie_nombre'],
-            'url' => 'producto.php?id=' . (int) $product['idproductos'],
+            'id' => (int) $product['id_representante'],
+            'grupo' => $product['grupo'],
+            'nombre' => $nombreBase,
+            'marca' => $product['marca'],
+            'categoria' => $product['categoria'],
+            'precio' => 'Desde ' . gs($product['precio_min']),
+            'precio_raw' => (float) $product['precio_min'],
+            'imagen' => image_url($product['imagen'], $nombreBase),
+            'stock' => $enStock ? 'Disponible' : 'Sin stock',
+            'stock_class' => stock_badge_class($enStock),
+            'tienda' => $totalOfertas . ' oferta' . ($totalOfertas !== 1 ? 's' : ''),
+            'url' => 'producto.php?grupo=' . urlencode($product['grupo']),
+            'ofertas' => $totalOfertas,
         ];
     }
 

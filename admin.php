@@ -60,6 +60,9 @@ render_head('Panel administrador');
             <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-terminal me-2"></i>Importar datos
             </a>
+            <a href="analytics.php" class="btn btn-outline-primary rounded-pill px-4">
+              <i class="bi bi-bar-chart-line me-2"></i>Analíticas
+            </a>
           </div>
         </div>
         <div class="col-lg-4 position-relative z-1">

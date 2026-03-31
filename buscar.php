@@ -193,6 +193,7 @@ if ($q !== '') {
         OR p.pro_marca LIKE :q_marca
         OR t.tie_nombre LIKE :q_tienda
         OR c.cat_nombre LIKE :q_categoria
+        OR COALESCE(NULLIF(TRIM(p.pro_grupo), ""), p.pro_nombre) LIKE :q_grupo
     )';
 
     $likeQ = '%' . $q . '%';
@@ -201,6 +202,7 @@ if ($q !== '') {
     $params[':q_marca'] = $likeQ;
     $params[':q_tienda'] = $likeQ;
     $params[':q_categoria'] = $likeQ;
+    $params[':q_grupo'] = $likeQ;
 }
 
 if ($categoriaId > 0) {
@@ -231,21 +233,22 @@ if ($precioMax !== '' && is_numeric($precioMax)) {
 $whereSql = implode(' AND ', $where);
 
 /* =========================
-   CONTEO TOTAL
+   CONTEO TOTAL AGRUPADO
    ========================= */
 $countSql = "
     SELECT COUNT(*)
-    FROM productos p
-    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
-    WHERE {$whereSql}
+    FROM (
+        SELECT COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+        WHERE {$whereSql}
+        GROUP BY COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre)
+    ) grouped
 ";
 
 $countStmt = $pdo->prepare($countSql);
-foreach ($params as $key => $value) {
-    $countStmt->bindValue($key, $value);
-}
-$countStmt->execute();
+$countStmt->execute($params);
 
 $totalProducts = (int) $countStmt->fetchColumn();
 $totalPages = max(1, (int) ceil($totalProducts / $perPage));
@@ -253,43 +256,54 @@ $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
 
 /* =========================
-   CONSULTA PRODUCTOS
+   ORDEN
+   ========================= */
+$orderBy = match ($sort) {
+    'precio_asc'  => 'precio_min ASC, total_ofertas DESC, nombre ASC',
+    'precio_desc' => 'precio_min DESC, total_ofertas DESC, nombre ASC',
+    'nombre_asc'  => 'nombre ASC',
+    'nombre_desc' => 'nombre DESC',
+    default       => 'precio_min ASC, total_ofertas DESC, nombre ASC',
+};
+
+/* =========================
+   CONSULTA PRODUCTOS AGRUPADOS
    ========================= */
 $sql = "
     SELECT
-        p.idproductos,
-        p.pro_nombre,
-        p.pro_descripcion,
-        p.pro_marca,
-        p.pro_precio,
-        p.pro_precio_anterior,
-        p.pro_imagen,
-        p.pro_url,
-        p.pro_en_stock,
-        p.pro_fecha_scraping,
-        t.idtiendas,
-        t.tie_nombre,
-        c.cat_nombre,
-        (
-            SELECT COUNT(*)
-            FROM historial_precios hp
-            WHERE hp.productos_idproductos = p.idproductos
-        ) AS total_historial,
-        (
-            SELECT COUNT(*)
-            FROM productos_precios pp
-            WHERE pp.productos_idproductos = p.idproductos
-              AND pp.prop_estado = 'activo'
-        ) AS total_ofertas
-    FROM productos p
-    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
-    WHERE {$whereSql}
-    ORDER BY " . sort_sql($sort) . "
+        grupo,
+        MIN(idproductos) AS id_representante,
+        MIN(pro_nombre) AS nombre,
+        MAX(pro_marca) AS marca,
+        MIN(pro_precio) AS precio_min,
+        MAX(pro_imagen) AS imagen,
+        MAX(cat_nombre) AS cat_nombre,
+        SUM(CASE WHEN pro_en_stock = 1 THEN 1 ELSE 0 END) AS ofertas_stock,
+        COUNT(*) AS total_ofertas,
+        MAX(pro_fecha_scraping) AS pro_fecha_scraping
+    FROM (
+        SELECT
+            p.idproductos,
+            COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo,
+            p.pro_nombre,
+            p.pro_marca,
+            p.pro_precio,
+            p.pro_imagen,
+            p.pro_en_stock,
+            p.pro_fecha_scraping,
+            c.cat_nombre
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+        WHERE {$whereSql}
+    ) base
+    GROUP BY grupo
+    ORDER BY {$orderBy}
     LIMIT :limit OFFSET :offset
 ";
 
 $stmt = $pdo->prepare($sql);
+
 foreach ($params as $key => $value) {
     $stmt->bindValue($key, $value);
 }
@@ -512,71 +526,49 @@ render_navbar('home');
         <div class="row g-4">
           <?php if ($products): ?>
             <?php foreach ($products as $product): ?>
-              <?php
-              $currentPrice = (float) $product['pro_precio'];
-              $oldPrice = $product['pro_precio_anterior'] !== null ? (float) $product['pro_precio_anterior'] : null;
-              $discount = ($oldPrice && $oldPrice > $currentPrice) ? (int) round((($oldPrice - $currentPrice) / $oldPrice) * 100) : 0;
-              $isFavorite = ($favoritesEnabled && $userLogged) ? is_favorite_product((int) $product['idproductos']) : false;
-              ?>
-              <div class="col-md-6 col-xl-4">
+              <div class="col-md-6 col-xl-3">
                 <article class="custom-card product-card h-100 p-3 fancy-hover">
-                  <div class="d-flex justify-content-end mb-2">
-                    <?php if ($favoritesEnabled && $userLogged): ?>
-                      <a
-                        href="<?= e(favorite_toggle_url((int) $product['idproductos'], $_SERVER['REQUEST_URI'])) ?>"
-                        class="btn btn-sm <?= $isFavorite ? 'btn-danger' : 'btn-outline-danger' ?> rounded-pill position-relative z-2"
-                        title="<?= $isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
-                      >
-                        <i class="bi <?= $isFavorite ? 'bi-heart-fill' : 'bi-heart' ?>"></i>
-                      </a>
-                    <?php else: ?>
-                      <a href="login.php" class="btn btn-sm btn-outline-danger rounded-pill position-relative z-2" title="Iniciá sesión para guardar favoritos">
-                        <i class="bi bi-heart"></i>
-                      </a>
-                    <?php endif; ?>
-                  </div>
-
-                  <a href="producto.php?id=<?= (int) $product['idproductos'] ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset d-block">
+                  <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset d-block">
                     <div class="product-thumb-wrap mb-3">
-                      <img class="offer-thumb" src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>">
+                      <img class="offer-thumb" src="<?= e(image_url($product['imagen'] ?? null, $product['nombre'] ?? 'Producto')) ?>" alt="<?= e($product['nombre'] ?? 'Producto') ?>">
                     </div>
                   </a>
 
                   <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                     <span class="badge soft-badge"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
-                    <?php if ($discount > 0): ?><span class="price-badge">-<?= $discount ?>%</span><?php endif; ?>
+                    <span class="mini-badge <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'badge-stock-ok' : 'badge-stock-no' ?>">
+                      <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'En stock' : 'Sin stock' ?>
+                    </span>
                   </div>
 
-                  <h3 class="h6 fw-bold mb-1">
-                    <a href="producto.php?id=<?= (int) $product['idproductos'] ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset stretched-link-sibling">
-                      <?= e($product['pro_nombre']) ?>
+                  <h3 class="h6 fw-bold mb-2">
+                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset stretched-link-sibling">
+                      <?= e($product['grupo'] ?: $product['nombre']) ?>
                     </a>
                   </h3>
 
-                  <p class="text-body-secondary small mb-2 line-clamp-2"><?= e($product['pro_descripcion'] ?: 'Sin descripción disponible.') ?></p>
-
-                  <?php if (!empty($product['pro_marca'])): ?>
-                    <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['pro_marca']) ?></strong></div>
+                  <?php if (!empty($product['marca'])): ?>
+                    <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['marca']) ?></strong></div>
                   <?php endif; ?>
 
                   <div class="d-flex align-items-end justify-content-between mb-3 gap-2">
                     <div>
-                      <div class="price-now"><?= gs($currentPrice) ?></div>
-                      <?php if ($oldPrice): ?><div class="price-old"><?= gs($oldPrice) ?></div><?php endif; ?>
+                      <div class="price-now"><?= gs($product['precio_min']) ?></div>
+                      <div class="small text-body-secondary">Desde</div>
                     </div>
                     <div class="text-end small text-body-secondary">
-                      <div><span class="mini-badge <?= e(stock_badge_class($product['pro_en_stock'])) ?>"><?= e(stock_label($product['pro_en_stock'])) ?></span></div>
-                      <div><?= e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) ?></div>
+                      <div><?= (int) ($product['total_ofertas'] ?? 0) ?> oferta(s)</div>
+                      <div><?= !empty($product['pro_fecha_scraping']) ? e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) : '' ?></div>
                     </div>
                   </div>
 
                   <div class="product-meta d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-3">
-                    <a class="small text-body-secondary text-decoration-none position-relative z-2" href="tienda.php?id=<?= (int) $product['idtiendas'] ?>">
-                      <i class="bi bi-shop me-1"></i><?= e($product['tie_nombre']) ?>
-                    </a>
                     <div class="small text-body-secondary position-relative z-2">
-                      <?= (int) $product['total_historial'] ?> historial · <?= (int) $product['total_ofertas'] ?> ofertas
+                      Mejor precio agrupado
                     </div>
+                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="btn btn-sm btn-outline-primary rounded-pill position-relative z-2">
+                      Ver ofertas
+                    </a>
                   </div>
                 </article>
               </div>

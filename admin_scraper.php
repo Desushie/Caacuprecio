@@ -53,6 +53,11 @@ $scraperJobs = [
         'path'  => __DIR__ . '/py/run_inverfin.py',
         'type'  => 'tienda',
     ],
+      'fulloffice' => [
+      'label' => 'Full Office',
+      'path'  => __DIR__ . '/py/run_fulloffice.py',
+      'type'  => 'tienda',
+    ],
 ];
 
 $flash = null;

@@ -243,17 +243,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function appendQueryToUrl(url, q) {
-    try {
+      try {
         const parsed = new URL(url, window.location.href);
 
         if (q && q.trim()) {
-        parsed.searchParams.set('q', q.trim());
+          parsed.searchParams.set('q', q.trim());
         }
 
         return parsed.toString();
-    } catch (err) {
+      } catch (err) {
         return url;
-    }
+      }
     }
 
     function escapeHtml(value) {
@@ -268,22 +268,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const TRACK_ENDPOINT = 'event.php';
 
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('a[href*="producto.php?id="]');
-    if (!link) return;
+function sendTracking(data) {
+  const body = new URLSearchParams({
+    action: data.action,
+    product_id: data.product_id,
+    term: data.term || '',
+    source: data.source || '',
+    click_type: data.click_type || '',
+    target_url: data.target_url || ''
+  });
 
-    const productId = getProductId(link.href);
-    if (!productId) return;
-
-    const term = getSearchTermFromLinkOrPage(link);
-    const action = term ? 'search_click' : 'view';
-
-    sendTracking({
-      action,
-      product_id: productId,
-      term: term || ''
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body.toString()], {
+      type: 'application/x-www-form-urlencoded'
     });
-  }, true);
+    navigator.sendBeacon(TRACK_ENDPOINT, blob);
+  } else {
+    fetch(TRACK_ENDPOINT, {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    }).catch(() => {});
+  }
+}
 
   function getSearchTermFromLinkOrPage(link) {
     try {
@@ -292,8 +301,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (linkTerm) return linkTerm;
     } catch (err) {}
 
-    const pageUrl = new URL(window.location.href);
-    return (pageUrl.searchParams.get('q') || '').trim();
+    try {
+      const pageUrl = new URL(window.location.href);
+      return (pageUrl.searchParams.get('q') || '').trim();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function getSourceFromLinkOrPage(link) {
+    try {
+      const url = new URL(link.href, window.location.origin);
+      const explicitSource = (url.searchParams.get('src') || '').trim();
+      if (explicitSource) return explicitSource;
+    } catch (err) {}
+
+    const path = window.location.pathname.toLowerCase();
+
+    if (path.includes('/buscar.php')) return 'buscar';
+    if (path.includes('/producto.php')) return 'producto';
+    if (path.includes('/index.php')) return 'index';
+
+    const lastSegment = path.split('/').filter(Boolean).pop() || '';
+    if (lastSegment === '') return 'index';
+
+    return 'index';
   }
 
   function getProductId(href) {
@@ -305,7 +337,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const body = new URLSearchParams({
       action: data.action,
       product_id: data.product_id,
-      term: data.term
+      term: data.term || '',
+      source: data.source || ''
     });
 
     if (navigator.sendBeacon) {

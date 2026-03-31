@@ -890,3 +890,25 @@ code {
   line-height: 1;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 6px 16px rgba(255,122,0,0.28);
 }
+
+.offer-list-item {
+  width: 100%;
+}
+
+.offer-list-item .offer-product-thumb {
+  flex-shrink: 0;
+}
+
+.offer-list-item .offer-block {
+  min-width: 140px;
+}
+
+.offer-list-item .offer-price {
+  min-width: 120px;
+  text-align: right;
+}
+
+.offer-list-item .offer-actions {
+  min-width: 110px;
+  text-align: right;
+}

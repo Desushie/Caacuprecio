@@ -155,6 +155,9 @@ BRAND_ALIASES = {
     "Speakon": ["speakon"],
     "Multilaser ": ["multilaser"],
     "Progas": ["progas"],
+    "Pro-X": ["prox", "pro-x"],
+    "HJC": ["hjc"],
+    "MENUTRE": ["menutre"],
 }
 
 
