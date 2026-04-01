@@ -8,6 +8,8 @@ $searchTerm = trim((string) ($_GET['q'] ?? ''));
 $pdo = db();
 $userId = function_exists('current_user_id') ? current_user_id() : null;
 $sessionId = session_id();
+$userLogged = function_exists('is_logged_in') && is_logged_in();
+$favoritesEnabled = function_exists('is_favorite_product') && function_exists('favorite_toggle_url');
 
 $product = null;
 $groupName = '';
@@ -180,18 +182,99 @@ foreach ($offersRaw as $offer) {
 }
 
 /**
- * Historial combinado del grupo
+ * Historial mensual combinado del grupo
+ * Último precio registrado por mes y por producto/tienda
  */
 $historySql = "
-    SELECT his_precio, his_en_stock, his_fecha
-    FROM historial_precios
-    WHERE productos_idproductos IN ($placeholders)
-    ORDER BY his_fecha DESC
-    LIMIT 12
+    SELECT
+        hp.his_precio,
+        hp.his_en_stock,
+        hp.his_fecha,
+        p.idproductos,
+        p.pro_nombre,
+        t.idtiendas,
+        t.tie_nombre,
+        DATE_FORMAT(hp.his_fecha, '%m/%Y') AS month_label,
+        DATE_FORMAT(hp.his_fecha, '%Y-%m') AS month_sort
+    FROM historial_precios hp
+    INNER JOIN productos p ON p.idproductos = hp.productos_idproductos
+    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+    INNER JOIN (
+        SELECT
+            hp2.productos_idproductos,
+            DATE_FORMAT(hp2.his_fecha, '%Y-%m') AS month_key,
+            MAX(hp2.his_fecha) AS max_fecha
+        FROM historial_precios hp2
+        WHERE hp2.productos_idproductos IN ($placeholders)
+        GROUP BY hp2.productos_idproductos, DATE_FORMAT(hp2.his_fecha, '%Y-%m')
+    ) monthly_idx
+        ON monthly_idx.productos_idproductos = hp.productos_idproductos
+       AND monthly_idx.month_key = DATE_FORMAT(hp.his_fecha, '%Y-%m')
+       AND monthly_idx.max_fecha = hp.his_fecha
+    WHERE hp.productos_idproductos IN ($placeholders)
+    ORDER BY month_sort ASC, t.tie_nombre ASC, hp.his_fecha ASC, hp.idhistorial ASC
 ";
 $historyStmt = $pdo->prepare($historySql);
-$historyStmt->execute($groupProductIds);
-$history = $historyStmt->fetchAll();
+$historyStmt->execute(array_merge($groupProductIds, $groupProductIds));
+$historyRows = $historyStmt->fetchAll();
+
+$history = array_reverse(array_slice($historyRows, -20));
+
+$historyStats = [
+    'min' => null,
+    'max' => null,
+    'latest' => null,
+    'latestDate' => null,
+    'count' => 0,
+];
+
+$historyLabels = [];
+$historySeries = [];
+
+foreach ($historyRows as $entry) {
+    $storeName = trim((string) ($entry['tie_nombre'] ?? 'Sin tienda'));
+    $price = isset($entry['his_precio']) ? (float) $entry['his_precio'] : null;
+    $monthLabel = trim((string) ($entry['month_label'] ?? ''));
+    $monthSort = trim((string) ($entry['month_sort'] ?? ''));
+
+    if ($price === null || $monthLabel === '' || $monthSort === '') {
+        continue;
+    }
+
+    $historyLabels[$monthSort] = $monthLabel;
+
+    if (!isset($historySeries[$storeName])) {
+        $historySeries[$storeName] = [];
+    }
+
+    $historySeries[$storeName][$monthSort] = round($price, 2);
+
+    $historyStats['min'] = $historyStats['min'] === null ? $price : min($historyStats['min'], $price);
+    $historyStats['max'] = $historyStats['max'] === null ? $price : max($historyStats['max'], $price);
+    $historyStats['latest'] = $price;
+    $historyStats['latestDate'] = $entry['his_fecha'];
+    $historyStats['count']++;
+}
+
+ksort($historyLabels);
+
+$historyChartLabels = array_values($historyLabels);
+$historyChartDatasets = [];
+
+foreach ($historySeries as $storeName => $pointsByMonth) {
+    $datasetData = [];
+    foreach ($historyLabels as $monthSort => $monthLabel) {
+        $datasetData[] = array_key_exists($monthSort, $pointsByMonth) ? $pointsByMonth[$monthSort] : null;
+    }
+
+    $historyChartDatasets[] = [
+        'label' => $storeName,
+        'data' => $datasetData,
+        'tension' => 0.25,
+        'fill' => false,
+        'spanGaps' => true,
+    ];
+}
 
 /**
  * Imágenes únicas del grupo para slider
@@ -269,13 +352,48 @@ render_navbar('producto');
     background: rgba(255,255,255,.03);
     min-height: 380px;
 }
+.soft-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    padding-top: .5rem;
+    padding-bottom: .5rem;
+}
+.gallery-progress {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(148,163,184,.22);
+    overflow: hidden;
+    margin-top: 1rem;
+}
+.gallery-progress-bar {
+    width: 0%;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+    transition: width .1s linear;
+}
 .product-gallery-slide {
-    display: none;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     padding: 1rem;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(24px) scale(.985);
+    transition: opacity .45s ease, transform .45s ease, visibility .45s ease;
 }
 .product-gallery-slide.active {
-    display: block;
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0) scale(1);
+    z-index: 1;
 }
 .product-gallery-slide img {
     max-width: 100%;
@@ -340,6 +458,33 @@ render_navbar('producto');
 .offer-meta-small {
     font-size: .85rem;
 }
+.offer-actions .btn {
+    white-space: nowrap;
+}
+
+.history-chart-wrap {
+    position: relative;
+    min-height: 320px;
+}
+.history-chart-canvas {
+    width: 100% !important;
+    height: 320px !important;
+}
+.history-stat-card {
+    border: 1px solid rgba(148,163,184,.12);
+    border-radius: 1rem;
+    background: rgba(255,255,255,.03);
+    padding: 1rem;
+}
+.history-stat-label {
+    font-size: .82rem;
+    color: var(--bs-secondary-color);
+}
+.history-stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
 </style>
 
 <div class="site-bg" aria-hidden="true">
@@ -386,6 +531,9 @@ render_navbar('producto');
                   <img src="<?= e($img['src']) ?>" alt="<?= e($img['alt']) ?>">
                 </button>
               <?php endforeach; ?>
+            </div>
+            <div class="gallery-progress" aria-hidden="true">
+              <div class="gallery-progress-bar" id="galleryProgressBar"></div>
             </div>
           <?php endif; ?>
         </div>
@@ -510,12 +658,23 @@ render_navbar('producto');
                       </span>
                     </div>
 
-                    <div class="offer-actions">
+                    <div class="offer-actions d-flex align-items-center gap-2">
+                      <?php if ($favoritesEnabled): ?>
+                        <?php $offerIsFavorite = $userLogged ? is_favorite_product((int) $offer['idproductos']) : false; ?>
+                        <a
+                          href="<?= $userLogged ? e(favorite_toggle_url((int) $offer['idproductos'], $_SERVER['REQUEST_URI'])) : 'login.php' ?>"
+                          class="btn <?= $userLogged ? ($offerIsFavorite ? 'btn-danger' : 'btn-outline-danger') : 'btn-outline-danger' ?> rounded-pill"
+                          title="<?= $userLogged ? ($offerIsFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos') : 'Iniciá sesión para guardar favoritos' ?>"
+                        >
+                          <i class="bi <?= $userLogged && $offerIsFavorite ? 'bi-heart-fill' : 'bi-heart' ?>"></i>
+                        </a>
+                      <?php endif; ?>
+
                       <a
                         href="go.php?id=<?= (int) $offer['idproductos'] ?>&source=producto&click_type=ir_oferta<?= $searchTerm !== '' ? '&term=' . rawurlencode($searchTerm) : '' ?><?= !empty($offer['pro_url']) ? '&target_url=' . rawurlencode((string) $offer['pro_url']) : '' ?>"
                         target="_blank"
                         rel="noopener"
-                        class="btn btn-outline-primary rounded-pill w-100"
+                        class="btn btn-outline-primary rounded-pill"
                       >
                         Ver
                       </a>
@@ -532,15 +691,45 @@ render_navbar('producto');
 
         <div class="detail-card glass-card p-4 mb-4">
           <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h2 class="h4 fw-bold mb-0">Historial reciente</h2>
+            <h2 class="h4 fw-bold mb-0">Histórico mensual de precios</h2>
+            <span class="text-body-secondary small"><?= (int) ($historyStats['count'] ?? 0) ?> registro(s)</span>
           </div>
 
-          <?php if ($history): ?>
+          <?php if (!empty($historyChartDatasets)): ?>
+            <div class="row g-3 mb-4">
+              <div class="col-md-4">
+                <div class="history-stat-card h-100">
+                  <div class="history-stat-label mb-1">Precio más bajo</div>
+                  <div class="history-stat-value"><?= $historyStats['min'] !== null ? gs($historyStats['min']) : 'Sin datos' ?></div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="history-stat-card h-100">
+                  <div class="history-stat-label mb-1">Precio más alto</div>
+                  <div class="history-stat-value"><?= $historyStats['max'] !== null ? gs($historyStats['max']) : 'Sin datos' ?></div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="history-stat-card h-100">
+                  <div class="history-stat-label mb-1">Último precio registrado</div>
+                  <div class="history-stat-value"><?= $historyStats['latest'] !== null ? gs($historyStats['latest']) : 'Sin datos' ?></div>
+                  <?php if (!empty($historyStats['latestDate'])): ?>
+                    <div class="small text-body-secondary mt-1"><?= e(date('d/m/Y H:i', strtotime((string) $historyStats['latestDate']))) ?></div>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+
+            <div class="history-chart-wrap mb-4">
+              <canvas id="priceHistoryChart" class="history-chart-canvas"></canvas>
+            </div>
+
             <div class="table-responsive">
               <table class="table align-middle mb-0 custom-table">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
+                    <th>Mes</th>
+                    <th>Tienda</th>
                     <th>Precio</th>
                     <th>Stock</th>
                   </tr>
@@ -548,7 +737,8 @@ render_navbar('producto');
                 <tbody>
                   <?php foreach ($history as $entry): ?>
                     <tr>
-                      <td><?= e(date('d/m/Y H:i', strtotime((string) $entry['his_fecha']))) ?></td>
+                      <td><?= e($entry['month_label'] ?? date('m/Y', strtotime((string) $entry['his_fecha']))) ?></td>
+                      <td><?= e($entry['tie_nombre'] ?? 'Sin tienda') ?></td>
                       <td><?= gs($entry['his_precio']) ?></td>
                       <td>
                         <span class="mini-badge <?= e(stock_badge_class($entry['his_en_stock'])) ?>">
@@ -590,18 +780,28 @@ render_navbar('producto');
   </div>
 </section>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+window.priceHistoryLabels = <?= json_encode($historyChartLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+window.priceHistoryDatasets = <?= json_encode($historyChartDatasets, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const slides = Array.from(document.querySelectorAll('.product-gallery-slide'));
   const thumbs = Array.from(document.querySelectorAll('.gallery-thumb'));
   const prevBtn = document.getElementById('galleryPrev');
   const nextBtn = document.getElementById('galleryNext');
-
-  if (!slides.length) return;
-
+  const gallery = document.getElementById('productGallery');
+  const progressBar = document.getElementById('galleryProgressBar');
+  const autoplayDelay = 4000;
   let current = 0;
+  let autoplayTimer = null;
+  let progressTimer = null;
+  let progress = 0;
 
   function showSlide(index) {
+    if (!slides.length) return;
     current = (index + slides.length) % slides.length;
 
     slides.forEach((slide, i) => {
@@ -611,21 +811,132 @@ document.addEventListener('DOMContentLoaded', function () {
     thumbs.forEach((thumb, i) => {
       thumb.classList.toggle('active', i === current);
     });
+
+    if (progressBar) {
+      progressBar.style.width = '0%';
+    }
+  }
+
+  function stopProgress() {
+    if (progressTimer) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+  }
+
+  function startProgress() {
+    stopProgress();
+    progress = 0;
+    if (!progressBar) return;
+
+    progressBar.style.width = '0%';
+    progressTimer = setInterval(function () {
+      progress += 100 / (autoplayDelay / 100);
+      progressBar.style.width = Math.min(progress, 100) + '%';
+    }, 100);
+  }
+
+  function stopAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+    }
+    stopProgress();
+  }
+
+  function startAutoplay() {
+    if (slides.length <= 1) return;
+    stopAutoplay();
+    startProgress();
+    autoplayTimer = setInterval(function () {
+      showSlide(current + 1);
+      startProgress();
+    }, autoplayDelay);
   }
 
   if (prevBtn) {
-    prevBtn.addEventListener('click', () => showSlide(current - 1));
+    prevBtn.addEventListener('click', function () {
+      showSlide(current - 1);
+      startAutoplay();
+    });
   }
 
   if (nextBtn) {
-    nextBtn.addEventListener('click', () => showSlide(current + 1));
+    nextBtn.addEventListener('click', function () {
+      showSlide(current + 1);
+      startAutoplay();
+    });
   }
 
-  thumbs.forEach((thumb, idx) => {
-    thumb.addEventListener('click', () => showSlide(idx));
+  thumbs.forEach(function (thumb, idx) {
+    thumb.addEventListener('click', function () {
+      showSlide(idx);
+      startAutoplay();
+    });
   });
 
+  if (gallery && slides.length > 1) {
+    gallery.addEventListener('mouseenter', stopAutoplay);
+    gallery.addEventListener('mouseleave', startAutoplay);
+  }
+
   showSlide(0);
+  startAutoplay();
+
+  const historyCanvas = document.getElementById('priceHistoryChart');
+  if (historyCanvas && window.priceHistoryDatasets && window.priceHistoryDatasets.length && window.Chart) {
+    new Chart(historyCanvas, {
+      type: 'bar',
+      data: {
+        labels: Array.isArray(window.priceHistoryLabels) ? window.priceHistoryLabels : [],
+        datasets: window.priceHistoryDatasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true
+            },
+            grid: {
+              display: false
+            }
+          },
+          y: {
+            beginAtZero: false,
+            ticks: {
+              callback: function(value) {
+                try {
+                  return 'Gs. ' + Number(value).toLocaleString('es-PY');
+                } catch (e) {
+                  return value;
+                }
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'bottom'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const value = context.parsed.y;
+                return context.dataset.label + ': Gs. ' + Number(value).toLocaleString('es-PY');
+              }
+            }
+          }
+        }
+      }
+    });
+  }
 });
 </script>
 

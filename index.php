@@ -961,7 +961,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 
                 <h3 class="h6 fw-bold mb-2"><?= e($store['tie_nombre']) ?></h3>
 
-                <p class="text-body-secondary small mb-3 line-clamp-3">
+                <p class="text-body-secondary small mb-3 line-clamp-2">
                   <?= e($store['tie_descripcion'] ?: 'Próximamente más información de esta tienda.') ?>
                 </p>
 

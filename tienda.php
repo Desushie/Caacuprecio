@@ -7,10 +7,56 @@ if ($id <= 0) {
     die('ID de tienda inválido.');
 }
 
-$q = trim($_GET['q'] ?? '');
-$sort = $_GET['orden'] ?? 'recientes';
-
+$q = trim((string) ($_GET['q'] ?? ''));
+$sort = (string) ($_GET['orden'] ?? 'recientes');
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$perPage = 12;
 $pdo = db();
+
+function store_sort_sql(string $sort, bool $hasSearch): string
+{
+    $allowed = [
+        'recientes',
+        'precio_asc',
+        'precio_desc',
+        'nombre_asc',
+        'nombre_desc',
+    ];
+
+    if (!in_array($sort, $allowed, true)) {
+        $sort = 'recientes';
+    }
+
+    return match ($sort) {
+        'precio_asc' => 'p.pro_precio ASC, p.pro_nombre ASC',
+        'precio_desc' => 'p.pro_precio DESC, p.pro_nombre ASC',
+        'nombre_asc' => 'p.pro_nombre ASC',
+        'nombre_desc' => 'p.pro_nombre DESC',
+        default => $hasSearch
+            ? 'CASE WHEN p.pro_nombre LIKE :q_sort THEN 0 WHEN p.pro_marca LIKE :q_sort THEN 1 ELSE 2 END, p.pro_fecha_scraping DESC, p.pro_nombre ASC'
+            : 'p.pro_fecha_scraping DESC, p.pro_nombre ASC',
+    };
+}
+
+function h(?string $value): string
+{
+    return e((string) ($value ?? ''));
+}
+
+function build_store_page_url(int $storeId, array $extra = []): string
+{
+    $params = array_merge([
+        'id' => $storeId,
+    ], $extra);
+
+    foreach ($params as $key => $value) {
+        if ($value === '' || $value === null) {
+            unset($params[$key]);
+        }
+    }
+
+    return 'tienda.php?' . http_build_query($params);
+}
 
 $storeStmt = $pdo->prepare("
     SELECT
@@ -19,13 +65,28 @@ $storeStmt = $pdo->prepare("
         MAX(p.pro_fecha_scraping) AS ultima_actualizacion,
         (
             SELECT COUNT(*)
-            FROM scrape_logs s
-            WHERE s.tiendas_idtiendas = t.idtiendas
-        ) AS total_scrapes
+            FROM tienda_reviews tr
+            WHERE tr.tiendas_idtiendas = t.idtiendas AND tr.rev_activo = 1
+        ) AS total_reviews,
+        (
+            SELECT ROUND(AVG(tr.rev_puntaje), 1)
+            FROM tienda_reviews tr
+            WHERE tr.tiendas_idtiendas = t.idtiendas AND tr.rev_activo = 1
+        ) AS rating_promedio
     FROM tiendas t
     LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas AND p.pro_activo = 1
     WHERE t.idtiendas = :id
-    GROUP BY t.idtiendas, t.tie_nombre, t.tie_descripcion, t.tie_logo, t.tie_ubicacion, t.tie_url
+    GROUP BY
+        t.idtiendas,
+        t.tie_nombre,
+        t.tie_descripcion,
+        t.tie_logo,
+        t.tie_ubicacion,
+        t.tie_url,
+        t.tie_telefono,
+        t.tie_email,
+        t.tie_contacto,
+        t.tie_horarios
     LIMIT 1
 ");
 $storeStmt->execute([':id' => $id]);
@@ -36,23 +97,92 @@ if (!$store) {
     die('Tienda no encontrada.');
 }
 
-$mapEmbedUrl = '';
-$mapOpenUrl = '';
+$isAdmin = function_exists('is_admin') ? is_admin() : false;
+$reviewSuccess = isset($_GET['review_saved']) && $_GET['review_saved'] === '1';
+$reviewDeleted = isset($_GET['review_deleted']) && $_GET['review_deleted'] === '1';
+$reviewError = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'delete_review') {
+    if (!$isAdmin) {
+        http_response_code(403);
+        die('No autorizado.');
+    }
+
+    $reviewId = (int) ($_POST['review_id'] ?? 0);
+    if ($reviewId > 0) {
+        $deleteReview = $pdo->prepare("
+            UPDATE tienda_reviews
+            SET rev_activo = 0
+            WHERE idreview = :review_id AND tiendas_idtiendas = :store_id
+            LIMIT 1
+        ");
+        $deleteReview->execute([
+            ':review_id' => $reviewId,
+            ':store_id' => $id,
+        ]);
+    }
+
+    header('Location: ' . build_store_page_url($id, [
+        'q' => $q,
+        'orden' => $sort,
+        'page' => $page,
+        'review_deleted' => 1,
+    ]) . '#reviews');
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'save_review') {
+    $reviewName = trim((string) ($_POST['rev_nombre'] ?? ''));
+    $reviewComment = trim((string) ($_POST['rev_comentario'] ?? ''));
+    $reviewScore = (int) ($_POST['rev_puntaje'] ?? 0);
+
+    if ($reviewName === '') {
+        $reviewError = 'Ingresá tu nombre para dejar una reseña.';
+    } elseif ($reviewScore < 1 || $reviewScore > 5) {
+        $reviewError = 'Seleccioná una puntuación válida entre 1 y 5 estrellas.';
+    } elseif ($reviewComment === '') {
+        $reviewError = 'Escribí un comentario para la reseña.';
+    } else {
+        $insertReview = $pdo->prepare("
+            INSERT INTO tienda_reviews (
+                tiendas_idtiendas,
+                rev_nombre,
+                rev_puntaje,
+                rev_comentario,
+                rev_activo,
+                rev_fecha
+            ) VALUES (
+                :tienda,
+                :nombre,
+                :puntaje,
+                :comentario,
+                1,
+                NOW()
+            )
+        ");
+        $insertReview->execute([
+            ':tienda' => $id,
+            ':nombre' => mb_substr($reviewName, 0, 120),
+            ':puntaje' => $reviewScore,
+            ':comentario' => mb_substr($reviewComment, 0, 1000),
+        ]);
+
+        header('Location: ' . build_store_page_url($id, ['review_saved' => 1]) . '#reviews');
+        exit;
+    }
+}
 
 $mapEmbedUrl = '';
 $mapOpenUrl = '';
-
 if (!empty($store['tie_ubicacion'])) {
     $rawLocation = trim((string) $store['tie_ubicacion']);
 
     $isUrl = preg_match('~^https?://~i', $rawLocation) === 1;
     $isCoords = preg_match('~^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$~', $rawLocation) === 1;
 
-    if ($isUrl) {
-        $mapOpenUrl = $rawLocation;
-    } else {
-        $mapOpenUrl = 'https://www.google.com/maps?q=' . rawurlencode($rawLocation);
-    }
+    $mapOpenUrl = $isUrl
+        ? $rawLocation
+        : 'https://www.google.com/maps?q=' . rawurlencode($rawLocation);
 
     if ($isCoords) {
         $mapEmbedUrl = 'https://www.google.com/maps?q=' . rawurlencode($rawLocation) . '&output=embed';
@@ -73,13 +203,27 @@ if (!empty($store['tie_ubicacion'])) {
 
 $where = ['p.tiendas_idtiendas = :id', 'p.pro_activo = 1'];
 $params = [':id' => $id];
+$hasSearch = $q !== '';
 
-if ($q !== '') {
-    $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR p.pro_marca LIKE :q)';
-    $params[':q'] = '%' . $q . '%';
+if ($hasSearch) {
+    $where[] = '(p.pro_nombre LIKE :q_filter OR p.pro_descripcion LIKE :q_filter OR p.pro_marca LIKE :q_filter)';
+    $params[':q_filter'] = '%' . $q . '%';
+    $params[':q_sort'] = '%' . $q . '%';
 }
 
 $whereSql = implode(' AND ', $where);
+$orderSql = store_sort_sql($sort, $hasSearch);
+
+$countStmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM productos p
+    WHERE {$whereSql}
+");
+$countStmt->execute($params);
+$totalProductsFiltered = (int) $countStmt->fetchColumn();
+$totalPages = max(1, (int) ceil($totalProductsFiltered / $perPage));
+$page = min($page, $totalPages);
+$offset = ($page - 1) * $perPage;
 
 $productStmt = $pdo->prepare("
     SELECT
@@ -96,7 +240,8 @@ $productStmt = $pdo->prepare("
     FROM productos p
     LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
     WHERE {$whereSql}
-    ORDER BY " . sort_sql($sort) . "
+    ORDER BY {$orderSql}
+    LIMIT {$perPage} OFFSET {$offset}
 ");
 $productStmt->execute($params);
 $products = $productStmt->fetchAll();
@@ -113,15 +258,15 @@ $categoryBreakdown = $pdo->prepare("
 $categoryBreakdown->execute([':id' => $id]);
 $categories = $categoryBreakdown->fetchAll();
 
-$lastScrapesStmt = $pdo->prepare("
-    SELECT scrape_inicio, scrape_fin, scrape_estado, scrape_productos_encontrados, scrape_productos_actualizados
-    FROM scrape_logs
-    WHERE tiendas_idtiendas = :id
-    ORDER BY COALESCE(scrape_fin, scrape_inicio) DESC
-    LIMIT 4
+$reviewsStmt = $pdo->prepare("
+    SELECT idreview, rev_nombre, rev_puntaje, rev_comentario, rev_fecha
+    FROM tienda_reviews
+    WHERE tiendas_idtiendas = :id AND rev_activo = 1
+    ORDER BY rev_fecha DESC, idreview DESC
+    LIMIT 12
 ");
-$lastScrapesStmt->execute([':id' => $id]);
-$lastScrapes = $lastScrapesStmt->fetchAll();
+$reviewsStmt->execute([':id' => $id]);
+$reviews = $reviewsStmt->fetchAll();
 
 render_head($store['tie_nombre']);
 render_navbar('tienda');
@@ -140,48 +285,55 @@ render_navbar('tienda');
       <ol class="breadcrumb custom-breadcrumb">
         <li class="breadcrumb-item"><a href="index.php">Inicio</a></li>
         <li class="breadcrumb-item"><a href="index.php#tiendas">Tiendas</a></li>
-        <li class="breadcrumb-item active" aria-current="page"><?= e($store['tie_nombre']) ?></li>
+        <li class="breadcrumb-item active" aria-current="page"><?= h($store['tie_nombre']) ?></li>
       </ol>
     </nav>
 
     <div class="store-hero glass-card p-4 p-lg-5 mb-4">
-      <div class="row g-4 align-items-center">
+      <div class="row g-4 align-items-start">
         <div class="col-lg-8">
           <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
             <div class="store-logo d-flex align-items-center justify-content-center store-detail-logo">
               <?php if (!empty($store['tie_logo'])): ?>
-                <img src="<?= e($store['tie_logo']) ?>" alt="<?= e($store['tie_nombre']) ?>" class="img-fluid rounded-3 store-logo-img">
+                <img src="<?= h($store['tie_logo']) ?>" alt="<?= h($store['tie_nombre']) ?>" class="img-fluid rounded-3 store-logo-img">
               <?php else: ?>
-                <span class="fw-bold fs-2"><?= e(mb_strtoupper(mb_substr($store['tie_nombre'], 0, 2))) ?></span>
+                <span class="fw-bold fs-2"><?= h(mb_strtoupper(mb_substr((string) $store['tie_nombre'], 0, 2))) ?></span>
               <?php endif; ?>
             </div>
 
-            <div>
+            <div class="flex-grow-1">
               <span class="badge soft-badge mb-2">Tienda</span>
-              <h1 class="display-6 fw-bold mb-2"><?= e($store['tie_nombre']) ?></h1>
-              <p class="text-body-secondary mb-2">
-                <?= e($store['tie_descripcion'] ?: 'Catálogo disponible y actualizado dentro de la plataforma.') ?>
-              </p>
+              <h1 class="display-6 fw-bold mb-2"><?= h($store['tie_nombre']) ?></h1>
 
-              <?php if (!empty($store['tie_url'])): ?>
-                <div class="small">
-                  <a href="<?= e($store['tie_url']) ?>" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
-                    <i class="bi bi-globe2 me-1"></i>Visitar sitio web
-                  </a>
+              <div class="d-flex flex-wrap gap-3 small text-body-secondary mb-3">
+                <span>
+                  <i class="bi bi-star-fill text-warning me-1"></i>
+                  <?= number_format((float) ($store['rating_promedio'] ?? 0), 1, ',', '.') ?> / 5
+                </span>
+                <span>
+                  <i class="bi bi-chat-left-text me-1"></i>
+                  <?= number_format((int) ($store['total_reviews'] ?? 0), 0, ',', '.') ?> reseña(s)
+                </span>
+              </div>
+
+              <div class="mini-row glass-soft">
+                <div class="small text-body-secondary mb-1">Descripción</div>
+                <div class="store-description-full" style="white-space: pre-line; line-height: 1.65;">
+                  <?= h($store['tie_descripcion'] ?: 'Catálogo disponible y actualizado dentro de la plataforma.') ?>
                 </div>
-              <?php endif; ?>
+              </div>
             </div>
           </div>
 
           <div class="d-flex flex-wrap gap-2">
             <?php if ($mapOpenUrl !== ''): ?>
-              <a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary rounded-pill px-4">
+              <a href="<?= h($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary rounded-pill px-4">
                 <i class="bi bi-geo-alt-fill me-2"></i>Ver ubicación
               </a>
             <?php endif; ?>
 
             <?php if (!empty($store['tie_url'])): ?>
-              <a href="<?= e($store['tie_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill px-4">
+              <a href="<?= h($store['tie_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill px-4">
                 <i class="bi bi-globe2 me-2"></i>Ir al sitio
               </a>
             <?php endif; ?>
@@ -201,8 +353,8 @@ render_navbar('tienda');
 
             <div class="col-6 col-lg-12 col-xl-6">
               <div class="stats-card p-3 h-100">
-                <div class="small text-body-secondary mb-1">Scrapes</div>
-                <div class="fw-bold fs-4"><?= number_format((int) $store['total_scrapes'], 0, ',', '.') ?></div>
+                <div class="small text-body-secondary mb-1">Reseñas</div>
+                <div class="fw-bold fs-4"><?= number_format((int) ($store['total_reviews'] ?? 0), 0, ',', '.') ?></div>
               </div>
             </div>
 
@@ -210,8 +362,21 @@ render_navbar('tienda');
               <div class="stats-card p-3 h-100">
                 <div class="small text-body-secondary mb-1">Última actualización</div>
                 <div class="fw-bold small">
-                  <?= $store['ultima_actualizacion'] ? e(date('d/m/Y H:i', strtotime((string) $store['ultima_actualizacion']))) : 'Sin datos' ?>
+                  <?= $store['ultima_actualizacion'] ? h(date('d/m/Y H:i', strtotime((string) $store['ultima_actualizacion']))) : 'Sin datos' ?>
                 </div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="stats-card p-3 h-100">
+                <div class="small text-body-secondary mb-1">Horarios</div>
+
+                <?php if (!empty($store['tie_horarios'])): ?>
+                  <div class="small" style="white-space: pre-line; line-height: 1.5;">
+                    <?= h($store['tie_horarios']) ?>
+                  </div>
+                <?php else: ?>
+                  <div class="small text-body-secondary">No disponible</div>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -225,28 +390,49 @@ render_navbar('tienda');
           <h2 class="h5 fw-bold mb-3">Buscar en la tienda</h2>
           <form method="get" action="tienda.php" class="d-grid gap-3">
             <input type="hidden" name="id" value="<?= (int) $id ?>">
-            <input type="text" class="form-control" name="q" value="<?= e($q) ?>" placeholder="Nombre o marca del producto">
+            <input type="text" class="form-control" name="q" value="<?= h($q) ?>" placeholder="Nombre, descripción o marca">
             <select class="form-select" name="orden">
               <?php foreach (active_sort_options() as $value => $label): ?>
-                <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                <option value="<?= h($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= h($label) ?></option>
               <?php endforeach; ?>
             </select>
             <button type="submit" class="btn btn-primary rounded-pill">Aplicar</button>
           </form>
         </div>
 
+        <div class="detail-card glass-card p-4 mb-4">
+          <h2 class="h5 fw-bold mb-3">Contacto</h2>
+          <div class="d-grid gap-2 small">
+            <?php if (!empty($store['tie_contacto'])): ?>
+              <div><i class="bi bi-person-badge me-2"></i><?= h($store['tie_contacto']) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($store['tie_telefono'])): ?>
+              <div><i class="bi bi-telephone me-2"></i><?= h($store['tie_telefono']) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($store['tie_email'])): ?>
+              <div><i class="bi bi-envelope me-2"></i><?= h($store['tie_email']) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($store['tie_url'])): ?>
+              <div class="text-break"><i class="bi bi-globe2 me-2"></i><?= h($store['tie_url']) ?></div>
+            <?php endif; ?>
+            <?php if (empty($store['tie_contacto']) && empty($store['tie_telefono']) && empty($store['tie_email']) && empty($store['tie_url'])): ?>
+              <div class="empty-state small">Todavía no se cargó información de contacto.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+
         <?php if ($mapEmbedUrl !== ''): ?>
           <div class="detail-card glass-card p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h2 class="h5 fw-bold mb-0">Ubicación</h2>
-              <a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary rounded-pill">
+              <a href="<?= h($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary rounded-pill">
                 <i class="bi bi-geo-alt-fill me-1"></i>Abrir
               </a>
             </div>
 
             <div class="ratio ratio-4x3 rounded-4 overflow-hidden border">
               <iframe
-                src="<?= e($mapEmbedUrl) ?>"
+                src="<?= h($mapEmbedUrl) ?>"
                 loading="lazy"
                 referrerpolicy="no-referrer-when-downgrade"
                 style="border:0;"
@@ -262,7 +448,7 @@ render_navbar('tienda');
             <?php if ($categories): ?>
               <?php foreach ($categories as $category): ?>
                 <div class="d-flex justify-content-between align-items-center mini-row glass-soft">
-                  <span><?= e($category['cat_nombre']) ?></span>
+                  <span><?= h($category['cat_nombre']) ?></span>
                   <span class="mini-badge badge-neutral"><?= (int) $category['total'] ?></span>
                 </div>
               <?php endforeach; ?>
@@ -271,37 +457,18 @@ render_navbar('tienda');
             <?php endif; ?>
           </div>
         </div>
-
-        <div class="detail-card glass-card p-4">
-          <h2 class="h5 fw-bold mb-3">Últimos scrapes</h2>
-          <div class="d-grid gap-2">
-            <?php if ($lastScrapes): ?>
-              <?php foreach ($lastScrapes as $scrape): ?>
-                <div class="mini-row glass-soft">
-                  <div class="fw-semibold mb-1"><?= e($scrape['scrape_estado']) ?></div>
-                  <div class="small text-body-secondary">
-                    Encontrados: <?= (int) $scrape['scrape_productos_encontrados'] ?> · Actualizados: <?= (int) $scrape['scrape_productos_actualizados'] ?>
-                  </div>
-                  <div class="small text-body-secondary mt-1">
-                    <?= !empty($scrape['scrape_fin']) ? e(date('d/m/Y H:i', strtotime((string) $scrape['scrape_fin']))) : 'En curso' ?>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div class="empty-state small">No hay logs para esta tienda.</div>
-            <?php endif; ?>
-          </div>
-        </div>
       </div>
 
       <div class="col-lg-9">
-        <div class="detail-card glass-card p-4">
+        <div class="detail-card glass-card p-4 mb-4">
           <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
             <div>
-              <h2 class="h4 fw-bold mb-1">Productos de <?= e($store['tie_nombre']) ?></h2>
+              <h2 class="h4 fw-bold mb-1">Productos de <?= h($store['tie_nombre']) ?></h2>
               <p class="text-body-secondary mb-0">Explorá el catálogo disponible de esta tienda.</p>
             </div>
-            <div class="small text-body-secondary"><?= number_format(count($products), 0, ',', '.') ?> resultado(s)</div>
+            <div class="small text-body-secondary">
+              <?= number_format($totalProductsFiltered, 0, ',', '.') ?> resultado(s) · Página <?= $page ?> de <?= $totalPages ?>
+            </div>
           </div>
 
           <div class="row g-3">
@@ -309,24 +476,24 @@ render_navbar('tienda');
               <?php foreach ($products as $product): ?>
                 <div class="col-md-6">
                   <article class="related-card related-card-lg fancy-hover h-100">
-                    <img src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= e($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
+                    <img src="<?= h(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= h($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
 
                     <div class="flex-grow-1">
                       <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                        <span class="badge soft-badge"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
-                        <span class="mini-badge <?= e(stock_badge_class($product['pro_en_stock'])) ?>">
-                          <?= e(stock_label($product['pro_en_stock'])) ?>
+                        <span class="badge soft-badge"><?= h($product['cat_nombre'] ?? 'Sin categoría') ?></span>
+                        <span class="mini-badge <?= h(stock_badge_class($product['pro_en_stock'])) ?>">
+                          <?= h(stock_label($product['pro_en_stock'])) ?>
                         </span>
                       </div>
 
-                      <h3 class="h6 fw-bold mb-2 line-clamp-2"><?= e($product['pro_nombre']) ?></h3>
+                      <h3 class="h6 fw-bold mb-2 line-clamp-2"><?= h($product['pro_nombre']) ?></h3>
 
                       <p class="text-body-secondary small mb-2 line-clamp-2">
-                        <?= e($product['pro_descripcion'] ?: 'Sin descripción.') ?>
+                        <?= h($product['pro_descripcion'] ?: 'Sin descripción.') ?>
                       </p>
 
                       <?php if (!empty($product['pro_marca'])): ?>
-                        <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['pro_marca']) ?></strong></div>
+                        <div class="small text-body-secondary mb-3">Marca: <strong><?= h($product['pro_marca']) ?></strong></div>
                       <?php endif; ?>
 
                       <div class="d-flex justify-content-between align-items-end gap-2 flex-wrap">
@@ -349,6 +516,118 @@ render_navbar('tienda');
               <div class="col-12">
                 <div class="empty-state">No se encontraron productos para esta tienda con esos filtros.</div>
               </div>
+            <?php endif; ?>
+          </div>
+
+          <?php if ($totalPages > 1): ?>
+            <nav class="mt-4" aria-label="Paginación de productos de tienda">
+              <ul class="pagination justify-content-center flex-wrap gap-2 mb-0">
+                <?php $prevDisabled = $page <= 1; ?>
+                <li class="page-item <?= $prevDisabled ? 'disabled' : '' ?>">
+                  <a class="page-link rounded-pill" href="<?= $prevDisabled ? '#' : h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page - 1])) ?>">Anterior</a>
+                </li>
+
+                <?php
+                  $startPage = max(1, $page - 2);
+                  $endPage = min($totalPages, $page + 2);
+                  if ($startPage > 1) {
+                      $startPage = 1;
+                      $endPage = min($totalPages, 5);
+                  }
+                  if ($endPage - $startPage < 4) {
+                      $startPage = max(1, $endPage - 4);
+                  }
+                ?>
+
+                <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                  <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                    <a class="page-link rounded-pill" href="<?= h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $i])) ?>"><?= $i ?></a>
+                  </li>
+                <?php endfor; ?>
+
+                <?php $nextDisabled = $page >= $totalPages; ?>
+                <li class="page-item <?= $nextDisabled ? 'disabled' : '' ?>">
+                  <a class="page-link rounded-pill" href="<?= $nextDisabled ? '#' : h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page + 1])) ?>">Siguiente</a>
+                </li>
+              </ul>
+            </nav>
+          <?php endif; ?>
+        </div>
+
+        <div class="detail-card glass-card p-4 mb-4" id="reviews">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h2 class="h4 fw-bold mb-0">Reseñas</h2>
+            <div class="small text-body-secondary">
+              <?= number_format((float) ($store['rating_promedio'] ?? 0), 1, ',', '.') ?> / 5 · <?= number_format((int) ($store['total_reviews'] ?? 0), 0, ',', '.') ?> reseña(s)
+            </div>
+          </div>
+
+          <?php if ($reviewSuccess): ?>
+            <div class="alert alert-success">Tu reseña se guardó correctamente.</div>
+          <?php endif; ?>
+
+          <?php if ($reviewDeleted): ?>
+            <div class="alert alert-success">La reseña fue eliminada correctamente.</div>
+          <?php endif; ?>
+
+          <?php if ($reviewError !== ''): ?>
+            <div class="alert alert-danger"><?= h($reviewError) ?></div>
+          <?php endif; ?>
+
+          <form method="post" class="row g-3 mb-4">
+            <input type="hidden" name="action" value="save_review">
+            <div class="col-md-4">
+              <label class="form-label">Tu nombre</label>
+              <input type="text" name="rev_nombre" class="form-control" maxlength="120" value="<?= h($_POST['rev_nombre'] ?? '') ?>" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Estrellas</label>
+              <select name="rev_puntaje" class="form-select" required>
+                <option value="">Elegir</option>
+                <?php for ($i = 5; $i >= 1; $i--): ?>
+                  <option value="<?= $i ?>" <?= (string) ($_POST['rev_puntaje'] ?? '') === (string) $i ? 'selected' : '' ?>><?= $i ?> estrella(s)</option>
+                <?php endfor; ?>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Comentario</label>
+              <textarea name="rev_comentario" class="form-control" rows="4" maxlength="1000" required><?= h($_POST['rev_comentario'] ?? '') ?></textarea>
+            </div>
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary rounded-pill px-4">Enviar reseña</button>
+            </div>
+          </form>
+
+          <div class="d-grid gap-3">
+            <?php if ($reviews): ?>
+              <?php foreach ($reviews as $review): ?>
+                <article class="mini-row glass-soft p-3">
+                  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-2">
+                    <div>
+                      <div class="fw-semibold"><?= h($review['rev_nombre']) ?></div>
+                      <div class="small text-body-secondary"><?= h(date('d/m/Y H:i', strtotime((string) $review['rev_fecha']))) ?></div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <div class="small fw-semibold text-warning">
+                        <?= str_repeat('★', (int) $review['rev_puntaje']) ?><?= str_repeat('☆', max(0, 5 - (int) $review['rev_puntaje'])) ?>
+                      </div>
+
+                      <?php if ($isAdmin): ?>
+                        <form method="post" class="m-0" onsubmit="return confirm('¿Eliminar esta reseña?');">
+                          <input type="hidden" name="action" value="delete_review">
+                          <input type="hidden" name="review_id" value="<?= (int) $review['idreview'] ?>">
+                          <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">Eliminar</button>
+                        </form>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+
+                  <div class="text-body-secondary small" style="white-space: pre-line;"><?= h($review['rev_comentario']) ?></div>
+                </article>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <div class="empty-state">Todavía no hay reseñas para esta tienda.</div>
             <?php endif; ?>
           </div>
         </div>
