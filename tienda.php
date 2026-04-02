@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    @session_start();
+}
+
 $id = (int) ($_GET['id'] ?? 0);
 if ($id <= 0) {
     http_response_code(400);
@@ -58,6 +62,62 @@ function build_store_page_url(int $storeId, array $extra = []): string
     return 'tienda.php?' . http_build_query($params);
 }
 
+function client_ip_address(): string
+{
+    $keys = [
+        'HTTP_CF_CONNECTING_IP',
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_CLIENT_IP',
+        'REMOTE_ADDR',
+    ];
+
+    foreach ($keys as $key) {
+        $value = trim((string) ($_SERVER[$key] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+
+        if ($key === 'HTTP_X_FORWARDED_FOR') {
+            $parts = array_map('trim', explode(',', $value));
+            $value = (string) ($parts[0] ?? '');
+        }
+
+        if ($value !== '' && filter_var($value, FILTER_VALIDATE_IP)) {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function store_user_is_admin(): bool
+{
+    if (function_exists('is_admin')) {
+        try {
+            return (bool) is_admin();
+        } catch (Throwable $e) {
+        }
+    }
+
+    $checks = [
+        $_SESSION['usuario']['usu_tipo'] ?? null,
+        $_SESSION['user']['usu_tipo'] ?? null,
+        $_SESSION['auth']['usu_tipo'] ?? null,
+        $_SESSION['usuario']['tipo'] ?? null,
+        $_SESSION['user']['tipo'] ?? null,
+        $_SESSION['usu_tipo'] ?? null,
+        $_SESSION['tipo'] ?? null,
+    ];
+
+    foreach ($checks as $value) {
+        if ((string) $value === '1' || (string) $value === 'admin') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 $storeStmt = $pdo->prepare("
     SELECT
         t.*,
@@ -97,10 +157,13 @@ if (!$store) {
     die('Tienda no encontrada.');
 }
 
-$isAdmin = function_exists('is_admin') ? is_admin() : false;
+$isAdmin = store_user_is_admin();
 $reviewSuccess = isset($_GET['review_saved']) && $_GET['review_saved'] === '1';
 $reviewDeleted = isset($_GET['review_deleted']) && $_GET['review_deleted'] === '1';
+$reviewReported = isset($_GET['review_reported']) && $_GET['review_reported'] === '1';
 $reviewError = '';
+$reportError = '';
+$reviewModals = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'delete_review') {
     if (!$isAdmin) {
@@ -129,6 +192,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') =
         'review_deleted' => 1,
     ]) . '#reviews');
     exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'report_review') {
+    $reviewId = (int) ($_POST['review_id'] ?? 0);
+    $reportName = trim((string) ($_POST['rep_nombre'] ?? ''));
+    $reportEmail = trim((string) ($_POST['rep_email'] ?? ''));
+    $reportReason = trim((string) ($_POST['rep_motivo'] ?? ''));
+    $reportDetail = trim((string) ($_POST['rep_detalle'] ?? ''));
+
+    $allowedReasons = [
+        'spam',
+        'ofensivo',
+        'informacion_falsa',
+        'lenguaje_inapropiado',
+        'otro',
+    ];
+
+    $sessionId = session_id();
+    $ipAddress = client_ip_address();
+
+    if ($reviewId <= 0) {
+        $reportError = 'La reseña seleccionada no es válida.';
+    } elseif (!in_array($reportReason, $allowedReasons, true)) {
+        $reportError = 'Seleccioná un motivo válido.';
+    } else {
+        $reviewExistsStmt = $pdo->prepare("
+            SELECT idreview
+            FROM tienda_reviews
+            WHERE idreview = :review_id
+              AND tiendas_idtiendas = :store_id
+              AND rev_activo = 1
+            LIMIT 1
+        ");
+        $reviewExistsStmt->execute([
+            ':review_id' => $reviewId,
+            ':store_id' => $id,
+        ]);
+
+        if (!$reviewExistsStmt->fetchColumn()) {
+            $reportError = 'No se encontró la reseña.';
+        } else {
+            $duplicateSql = "
+                SELECT idreporte
+                FROM tienda_review_reportes
+                WHERE reviews_idreview = :review_id
+            ";
+
+            $duplicateParams = [
+                ':review_id' => $reviewId,
+            ];
+
+            $duplicateConditions = [];
+
+            if ($sessionId !== '') {
+                $duplicateConditions[] = 'rep_session_id = :session_id_dup';
+                $duplicateParams[':session_id_dup'] = $sessionId;
+            }
+
+            if ($ipAddress !== '') {
+                $duplicateConditions[] = 'rep_ip = :ip_address_dup';
+                $duplicateParams[':ip_address_dup'] = $ipAddress;
+            }
+
+            if ($duplicateConditions) {
+                $duplicateSql .= " AND (" . implode(' OR ', $duplicateConditions) . ") LIMIT 1";
+                $duplicateStmt = $pdo->prepare($duplicateSql);
+                $duplicateStmt->execute($duplicateParams);
+
+                if ($duplicateStmt->fetch()) {
+                    $reportError = 'Ya reportaste esta reseña anteriormente.';
+                }
+            }
+
+            if ($reportError === '') {
+                $insertReport = $pdo->prepare("
+                    INSERT INTO tienda_review_reportes (
+                        reviews_idreview,
+                        rep_nombre,
+                        rep_email,
+                        rep_motivo,
+                        rep_detalle,
+                        rep_ip,
+                        rep_session_id,
+                        rep_estado,
+                        rep_fecha
+                    ) VALUES (
+                        :review_id,
+                        :nombre,
+                        :email,
+                        :motivo,
+                        :detalle,
+                        :ip,
+                        :session_id,
+                        'pendiente',
+                        NOW()
+                    )
+                ");
+                $insertReport->execute([
+                    ':review_id' => $reviewId,
+                    ':nombre' => $reportName !== '' ? mb_substr($reportName, 0, 120) : null,
+                    ':email' => $reportEmail !== '' ? mb_substr($reportEmail, 0, 150) : null,
+                    ':motivo' => $reportReason,
+                    ':detalle' => $reportDetail !== '' ? mb_substr($reportDetail, 0, 1000) : null,
+                    ':ip' => $ipAddress !== '' ? $ipAddress : null,
+                    ':session_id' => $sessionId !== '' ? $sessionId : null,
+                ]);
+
+                header('Location: ' . build_store_page_url($id, [
+                    'q' => $q,
+                    'orden' => $sort,
+                    'page' => $page,
+                    'review_reported' => 1,
+                ]) . '#reviews');
+                exit;
+            }
+        }
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'save_review') {
@@ -202,13 +382,12 @@ if (!empty($store['tie_ubicacion'])) {
 }
 
 $where = ['p.tiendas_idtiendas = :id', 'p.pro_activo = 1'];
-$params = [':id' => $id];
+$baseParams = [':id' => $id];
 $hasSearch = $q !== '';
 
 if ($hasSearch) {
     $where[] = '(p.pro_nombre LIKE :q_filter OR p.pro_descripcion LIKE :q_filter OR p.pro_marca LIKE :q_filter)';
-    $params[':q_filter'] = '%' . $q . '%';
-    $params[':q_sort'] = '%' . $q . '%';
+    $baseParams[':q_filter'] = '%' . $q . '%';
 }
 
 $whereSql = implode(' AND ', $where);
@@ -219,11 +398,16 @@ $countStmt = $pdo->prepare("
     FROM productos p
     WHERE {$whereSql}
 ");
-$countStmt->execute($params);
+$countStmt->execute($baseParams);
 $totalProductsFiltered = (int) $countStmt->fetchColumn();
 $totalPages = max(1, (int) ceil($totalProductsFiltered / $perPage));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
+
+$productParams = $baseParams;
+if ($hasSearch && str_contains($orderSql, ':q_sort')) {
+    $productParams[':q_sort'] = '%' . $q . '%';
+}
 
 $productStmt = $pdo->prepare("
     SELECT
@@ -243,7 +427,7 @@ $productStmt = $pdo->prepare("
     ORDER BY {$orderSql}
     LIMIT {$perPage} OFFSET {$offset}
 ");
-$productStmt->execute($params);
+$productStmt->execute($productParams);
 $products = $productStmt->fetchAll();
 
 $categoryBreakdown = $pdo->prepare("
@@ -271,6 +455,22 @@ $reviews = $reviewsStmt->fetchAll();
 render_head($store['tie_nombre']);
 render_navbar('tienda');
 ?>
+
+<style>
+.modal {
+  z-index: 2000 !important;
+}
+
+.modal-backdrop {
+  z-index: 1990 !important;
+}
+
+.site-bg,
+.bg-orb,
+.bg-grid {
+  pointer-events: none;
+}
+</style>
 
 <div class="site-bg" aria-hidden="true">
   <span class="bg-orb orb-1"></span>
@@ -426,8 +626,7 @@ render_navbar('tienda');
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h2 class="h5 fw-bold mb-0">Ubicación</h2>
               <a href="<?= h($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary rounded-pill">
-                <i class="bi bi-geo-alt-fill me-1"></i>Abrir
-              </a>
+                <i class="bi bi-geo-alt-fill me-1"></i>Abrir</a>
             </div>
 
             <div class="ratio ratio-4x3 rounded-4 overflow-hidden border">
@@ -570,8 +769,16 @@ render_navbar('tienda');
             <div class="alert alert-success">La reseña fue eliminada correctamente.</div>
           <?php endif; ?>
 
+          <?php if ($reviewReported): ?>
+            <div class="alert alert-warning">La reseña fue reportada correctamente.</div>
+          <?php endif; ?>
+
           <?php if ($reviewError !== ''): ?>
             <div class="alert alert-danger"><?= h($reviewError) ?></div>
+          <?php endif; ?>
+
+          <?php if ($reportError !== ''): ?>
+            <div class="alert alert-danger"><?= h($reportError) ?></div>
           <?php endif; ?>
 
           <form method="post" class="row g-3 mb-4">
@@ -612,22 +819,94 @@ render_navbar('tienda');
                       <div class="small fw-semibold text-warning">
                         <?= str_repeat('★', (int) $review['rev_puntaje']) ?><?= str_repeat('☆', max(0, 5 - (int) $review['rev_puntaje'])) ?>
                       </div>
-
-                      <?php if ($isAdmin): ?>
-                        <form method="post" class="m-0" onsubmit="return confirm('¿Eliminar esta reseña?');">
-                          <input type="hidden" name="action" value="delete_review">
-                          <input type="hidden" name="review_id" value="<?= (int) $review['idreview'] ?>">
-                          <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">Eliminar</button>
-                        </form>
-                      <?php endif; ?>
                     </div>
                   </div>
 
-                  <div class="text-body-secondary small" style="white-space: pre-line;"><?= h($review['rev_comentario']) ?></div>
+                  <div style="white-space: pre-line; line-height: 1.6;">
+                    <?= h($review['rev_comentario']) ?>
+                  </div>
+
+                  <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger rounded-pill"
+                      data-bs-toggle="modal"
+                      data-bs-target="#reportReviewModal<?= (int) $review['idreview'] ?>"
+                    >
+                      <i class="bi bi-flag me-1"></i>Reportar
+                    </button>
+
+                    <?php if ($isAdmin): ?>
+                      <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar esta reseña?');">
+                        <input type="hidden" name="action" value="delete_review">
+                        <input type="hidden" name="review_id" value="<?= (int) $review['idreview'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">
+                          Eliminar
+                        </button>
+                      </form>
+                    <?php endif; ?>
+                  </div>
                 </article>
+
+                <?php ob_start(); ?>
+                <div class="modal fade" id="reportReviewModal<?= (int) $review['idreview'] ?>" tabindex="-1" aria-hidden="true">
+                  <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content border-0 shadow-lg">
+                      <form method="post">
+                        <div class="modal-header">
+                          <h5 class="modal-title">Reportar reseña</h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                        </div>
+
+                        <div class="modal-body">
+                          <input type="hidden" name="action" value="report_review">
+                          <input type="hidden" name="review_id" value="<?= (int) $review['idreview'] ?>">
+
+                          <div class="mb-3">
+                            <label class="form-label">Motivo</label>
+                            <select name="rep_motivo" class="form-select" required>
+                              <option value="">Elegir</option>
+                              <option value="spam">Spam</option>
+                              <option value="ofensivo">Ofensivo</option>
+                              <option value="informacion_falsa">Información falsa</option>
+                              <option value="lenguaje_inapropiado">Lenguaje inapropiado</option>
+                              <option value="otro">Otro</option>
+                            </select>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Tu nombre</label>
+                            <input type="text" name="rep_nombre" class="form-control" maxlength="120" placeholder="Opcional">
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="rep_email" class="form-control" maxlength="150" placeholder="Opcional">
+                          </div>
+
+                          <div class="mb-0">
+                            <label class="form-label">Detalle</label>
+                            <textarea
+                              name="rep_detalle"
+                              class="form-control"
+                              rows="3"
+                              maxlength="1000"
+                              placeholder="Opcional"></textarea>
+                          </div>
+                        </div>
+
+                        <div class="modal-footer">
+                          <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Cancelar</button>
+                          <button type="submit" class="btn btn-danger rounded-pill">Enviar reporte</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+                <?php $reviewModals[] = ob_get_clean(); ?>
               <?php endforeach; ?>
             <?php else: ?>
-              <div class="empty-state">Todavía no hay reseñas para esta tienda.</div>
+              <div class="empty-state">Todavía no hay reseñas activas para esta tienda.</div>
             <?php endif; ?>
           </div>
         </div>
@@ -635,5 +914,9 @@ render_navbar('tienda');
     </div>
   </div>
 </section>
+
+<?php if ($reviewModals): ?>
+  <?= implode("\n", $reviewModals) ?>
+<?php endif; ?>
 
 <?php render_footer(); ?>

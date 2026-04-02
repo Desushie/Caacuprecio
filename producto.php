@@ -323,6 +323,21 @@ $goSource = 'producto';
 $goTerm = $searchTerm;
 
 /**
+ * Compartir producto
+ */
+$currentScheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$currentHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$currentRequestUri = $_SERVER['REQUEST_URI'] ?? ('/producto.php?id=' . (int) $product['idproductos']);
+$shareUrl = $currentScheme . '://' . $currentHost . $currentRequestUri;
+$shareTitle = trim((string) ($groupName ?: $product['pro_nombre']));
+$sharePriceText = $minPrice !== null ? gs($minPrice) : 'un excelente precio';
+$shareText = 'Mira, encontré este ' . $shareTitle . ' a tan solo ' . $sharePriceText . ' en Caacuprecio!';
+
+$shareWhatsappUrl = 'https://wa.me/?text=' . rawurlencode($shareText . ' ' . $shareUrl);
+$shareFacebookUrl = 'https://www.facebook.com/sharer/sharer.php?u=' . rawurlencode($shareUrl);
+$shareTwitterUrl = 'https://twitter.com/intent/tweet?text=' . rawurlencode($shareText) . '&url=' . rawurlencode($shareUrl);
+
+/**
  * Relacionados
  */
 $relatedStmt = $pdo->prepare("
@@ -485,6 +500,19 @@ render_navbar('producto');
     font-weight: 700;
 }
 
+.share-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+.share-actions .btn i {
+    margin-right: .35rem;
+}
+.share-actions-title {
+    font-size: .82rem;
+    color: var(--bs-secondary-color);
+}
+
 </style>
 
 <div class="site-bg" aria-hidden="true">
@@ -586,7 +614,7 @@ render_navbar('producto');
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
+          <div class="d-flex flex-wrap gap-2 mb-3">
             <a
               href="go.php?id=<?= $bestOfferProductId ?>&source=<?= rawurlencode($goSource) ?>&click_type=ir_mejor_oferta<?= $goTerm !== '' ? '&term=' . rawurlencode($goTerm) : '' ?><?= $bestOfferUrl !== '' && $bestOfferUrl !== '#' ? '&target_url=' . rawurlencode($bestOfferUrl) : '' ?>"
               class="btn btn-primary rounded-pill px-4"
@@ -598,6 +626,36 @@ render_navbar('producto');
             <a href="tienda.php?id=<?= (int) $product['idtiendas'] ?>" class="btn btn-outline-primary rounded-pill px-4">
               Ver tienda
             </a>
+          </div>
+
+          <div>
+            <div class="share-actions-title mb-2">Compartir producto</div>
+            <div class="share-actions">
+              <a
+                href="<?= e($shareWhatsappUrl) ?>"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-outline-success rounded-pill"
+              >
+                <i class="bi bi-whatsapp"></i>WhatsApp
+              </a>
+              <a
+                href="<?= e($shareFacebookUrl) ?>"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-outline-primary rounded-pill"
+              >
+                <i class="bi bi-facebook"></i>Facebook
+              </a>
+              <a
+                href="<?= e($shareTwitterUrl) ?>"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-outline-dark rounded-pill"
+              >
+                <i class="bi bi-twitter-x"></i>Twitter/X
+              </a>
+            </div>
           </div>
         </div>
 

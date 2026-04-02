@@ -1,7 +1,7 @@
 import os
 import sys
 
-sys.path.append(r"C:\xampp2\htdocs\Caacuprecio\py")
+sys.path.append(r"C:\xampp\htdocs\Caacuprecio\py")
 os.environ.setdefault("SCRAPY_SETTINGS_MODULE", "scraper.settings")
 
 from scrapy.crawler import CrawlerProcess

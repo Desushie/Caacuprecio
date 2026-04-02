@@ -63,6 +63,9 @@ render_head('Panel administrador');
             <a href="analytics.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-bar-chart-line me-2"></i>Analíticas
             </a>
+            <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4">
+              <i class="bi bi-flag me-2"></i>Reseñas reportadas
+            </a>
           </div>
         </div>
         <div class="col-lg-4 position-relative z-1">
