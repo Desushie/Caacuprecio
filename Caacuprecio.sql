@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 02, 2026 at 07:04 PM
+-- Generation Time: Apr 02, 2026 at 09:28 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -218,24 +218,6 @@ CREATE TABLE `scraper_jobs` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `scrape_logs`
---
-
-DROP TABLE IF EXISTS `scrape_logs`;
-CREATE TABLE `scrape_logs` (
-  `idscrape` int(11) NOT NULL,
-  `tiendas_idtiendas` int(11) NOT NULL,
-  `scrape_inicio` datetime NOT NULL,
-  `scrape_fin` datetime DEFAULT NULL,
-  `scrape_productos_encontrados` int(11) DEFAULT 0,
-  `scrape_productos_actualizados` int(11) DEFAULT 0,
-  `scrape_estado` varchar(20) NOT NULL,
-  `scrape_error` text DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `tiendas`
 --
 
@@ -417,13 +399,6 @@ ALTER TABLE `scraper_jobs`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `scrape_logs`
---
-ALTER TABLE `scrape_logs`
-  ADD PRIMARY KEY (`idscrape`),
-  ADD KEY `idx_scrape_tienda` (`tiendas_idtiendas`);
-
---
 -- Indexes for table `tiendas`
 --
 ALTER TABLE `tiendas`
@@ -521,12 +496,6 @@ ALTER TABLE `scraper_jobs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT for table `scrape_logs`
---
-ALTER TABLE `scrape_logs`
-  MODIFY `idscrape` int(11) NOT NULL AUTO_INCREMENT;
-
---
 -- AUTO_INCREMENT for table `tiendas`
 --
 ALTER TABLE `tiendas`
@@ -585,12 +554,6 @@ ALTER TABLE `productos`
 --
 ALTER TABLE `producto_clicks`
   ADD CONSTRAINT `fk_producto_clicks_producto` FOREIGN KEY (`productos_idproductos`) REFERENCES `productos` (`idproductos`) ON DELETE CASCADE ON UPDATE CASCADE;
-
---
--- Constraints for table `scrape_logs`
---
-ALTER TABLE `scrape_logs`
-  ADD CONSTRAINT `fk_scrape_tienda` FOREIGN KEY (`tiendas_idtiendas`) REFERENCES `tiendas` (`idtiendas`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tienda_reviews`

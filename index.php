@@ -390,14 +390,6 @@ $stores = $pdo->query("
     LIMIT 8
 ")->fetchAll();
 
-$recentLogs = $pdo->query("
-    SELECT s.scrape_estado, s.scrape_productos_actualizados, s.scrape_fin, t.tie_nombre
-    FROM scrape_logs s
-    INNER JOIN tiendas t ON t.idtiendas = s.tiendas_idtiendas
-    ORDER BY COALESCE(s.scrape_fin, s.scrape_inicio) DESC
-    LIMIT 4
-")->fetchAll();
-
 $recentlyViewed = cp_get_recently_viewed_products($pdo, $currentUserId, $currentSessionId, 8);
 $trendingProducts = cp_get_trending_products($pdo, 7, 8);
 $mostSearchedProducts = cp_get_most_searched_products($pdo, 30, 8);
@@ -666,25 +658,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             <span>Guardados por usuarios</span>
             <strong><?= number_format($stats['favoritos'], 0, ',', '.') ?></strong>
           </div>
-
-          <?php if ($recentLogs): ?>
-            <div class="mini-log-list mt-4">
-              <?php foreach ($recentLogs as $log): ?>
-                <div class="mini-log-item">
-                  <div>
-                    <div class="fw-semibold"><?= e($log['tie_nombre']) ?></div>
-                    <small class="text-body-secondary"><?= e($log['scrape_estado']) ?></small>
-                  </div>
-                  <div class="text-end">
-                    <div class="fw-semibold"><?= (int) $log['scrape_productos_actualizados'] ?></div>
-                    <small class="text-body-secondary"><?= !empty($log['scrape_fin']) ? e(date('d/m/Y H:i', strtotime((string) $log['scrape_fin']))) : 'En curso' ?></small>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            </div>
-          <?php else: ?>
-            </div>
-          <?php endif; ?>
         </div>
       </div>
     </div>
