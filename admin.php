@@ -11,6 +11,18 @@ $stats = [
     'favoritos' => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
 ];
 
+$pendingReviewReports = (int) $pdo->query("
+    SELECT COUNT(*)
+    FROM tienda_review_reportes
+    WHERE rep_estado = 'pendiente'
+")->fetchColumn();
+
+$pendingProductReports = (int) $pdo->query("
+    SELECT COUNT(*)
+    FROM producto_reportes
+    WHERE rep_estado = 'pendiente'
+")->fetchColumn();
+
 $latestProducts = $pdo->query("
     SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
     FROM productos p
@@ -50,24 +62,46 @@ render_head('Panel administrador');
           <p class="text-body-secondary mb-4">
             Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.
           </p>
+
           <div class="d-flex flex-wrap gap-3">
             <a href="admin_productos.php" class="btn btn-primary rounded-pill px-4">
               <i class="bi bi-box-seam me-2"></i>Gestionar productos
             </a>
+
             <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-shop me-2"></i>Gestionar tiendas
             </a>
+
             <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-terminal me-2"></i>Importar datos
             </a>
+
             <a href="analytics.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-bar-chart-line me-2"></i>Analíticas
             </a>
-            <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4">
+
+            <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4 position-relative">
               <i class="bi bi-flag me-2"></i>Reseñas reportadas
+              <?php if ($pendingReviewReports > 0): ?>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                  <?= number_format($pendingReviewReports, 0, ',', '.') ?>
+                  <span class="visually-hidden">reportes de reseñas pendientes</span>
+                </span>
+              <?php endif; ?>
+            </a>
+
+            <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
+              <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
+              <?php if ($pendingProductReports > 0): ?>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+                  <?= number_format($pendingProductReports, 0, ',', '.') ?>
+                  <span class="visually-hidden">reportes de productos pendientes</span>
+                </span>
+              <?php endif; ?>
             </a>
           </div>
         </div>
+
         <div class="col-lg-4 position-relative z-1">
           <div class="admin-side-list">
             <div class="admin-side-item">

@@ -11,6 +11,39 @@ $sessionId = session_id();
 $userLogged = function_exists('is_logged_in') && is_logged_in();
 $favoritesEnabled = function_exists('is_favorite_product') && function_exists('favorite_toggle_url');
 
+$reportSuccess = isset($_GET['product_reported']) && $_GET['product_reported'] === '1';
+$reportError = '';
+$productReportModals = [];
+
+function client_ip_address(): string
+{
+    $keys = [
+        'HTTP_CF_CONNECTING_IP',
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_CLIENT_IP',
+        'REMOTE_ADDR',
+    ];
+
+    foreach ($keys as $key) {
+        $value = trim((string) ($_SERVER[$key] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+
+        if ($key === 'HTTP_X_FORWARDED_FOR') {
+            $parts = array_map('trim', explode(',', $value));
+            $value = (string) ($parts[0] ?? '');
+        }
+
+        if ($value !== '' && filter_var($value, FILTER_VALIDATE_IP)) {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+
 $product = null;
 $groupName = '';
 $groupProductIds = [];
@@ -98,6 +131,129 @@ if (!$groupProductIds) {
 }
 
 $placeholders = implode(',', array_fill(0, count($groupProductIds), '?'));
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'report_product') {
+    $reportProductId = (int) ($_POST['product_id'] ?? 0);
+    $reportName = trim((string) ($_POST['rep_nombre'] ?? ''));
+    $reportEmail = trim((string) ($_POST['rep_email'] ?? ''));
+    $reportReason = trim((string) ($_POST['rep_motivo'] ?? ''));
+    $reportDetail = trim((string) ($_POST['rep_detalle'] ?? ''));
+
+    $allowedReasons = [
+        'precio_incorrecto',
+        'desactualizado',
+        'sin_stock',
+        'producto_equivocado',
+        'informacion_falsa',
+        'otro',
+    ];
+
+    $ipAddress = client_ip_address();
+
+    if ($reportProductId <= 0) {
+        $reportError = 'El producto seleccionado no es válido.';
+    } elseif (!in_array($reportReason, $allowedReasons, true)) {
+        $reportError = 'Seleccioná un motivo válido.';
+    } else {
+        $productExistsStmt = $pdo->prepare("
+            SELECT idproductos
+            FROM productos
+            WHERE idproductos = :product_id
+              AND pro_activo = 1
+            LIMIT 1
+        ");
+        $productExistsStmt->execute([
+            ':product_id' => $reportProductId,
+        ]);
+
+        if (!$productExistsStmt->fetchColumn()) {
+            $reportError = 'No se encontró el producto.';
+        } else {
+            $duplicateSql = "
+                SELECT idreporte
+                FROM producto_reportes
+                WHERE productos_idproductos = :product_id
+            ";
+
+            $duplicateParams = [
+                ':product_id' => $reportProductId,
+            ];
+
+            $duplicateConditions = [];
+
+            if ($sessionId !== '') {
+                $duplicateConditions[] = 'rep_session_id = :session_id_dup';
+                $duplicateParams[':session_id_dup'] = $sessionId;
+            }
+
+            if ($ipAddress !== '') {
+                $duplicateConditions[] = 'rep_ip = :ip_address_dup';
+                $duplicateParams[':ip_address_dup'] = $ipAddress;
+            }
+
+            if ($duplicateConditions) {
+                $duplicateSql .= " AND (" . implode(' OR ', $duplicateConditions) . ") LIMIT 1";
+                $duplicateStmt = $pdo->prepare($duplicateSql);
+                $duplicateStmt->execute($duplicateParams);
+
+                if ($duplicateStmt->fetch()) {
+                    $reportError = 'Ya reportaste este producto anteriormente.';
+                }
+            }
+
+            if ($reportError === '') {
+                $insertReport = $pdo->prepare("
+                    INSERT INTO producto_reportes (
+                        productos_idproductos,
+                        rep_nombre,
+                        rep_email,
+                        rep_motivo,
+                        rep_detalle,
+                        rep_ip,
+                        rep_session_id,
+                        rep_estado,
+                        rep_fecha
+                    ) VALUES (
+                        :product_id,
+                        :nombre,
+                        :email,
+                        :motivo,
+                        :detalle,
+                        :ip,
+                        :session_id,
+                        'pendiente',
+                        NOW()
+                    )
+                ");
+                $insertReport->execute([
+                    ':product_id' => $reportProductId,
+                    ':nombre' => $reportName !== '' ? mb_substr($reportName, 0, 120) : null,
+                    ':email' => $reportEmail !== '' ? mb_substr($reportEmail, 0, 150) : null,
+                    ':motivo' => $reportReason,
+                    ':detalle' => $reportDetail !== '' ? mb_substr($reportDetail, 0, 1000) : null,
+                    ':ip' => $ipAddress !== '' ? $ipAddress : null,
+                    ':session_id' => $sessionId !== '' ? $sessionId : null,
+                ]);
+
+                $redirectParams = [
+                    'id' => (int) $product['idproductos'],
+                    'product_reported' => 1,
+                ];
+
+                if ($grupo !== '') {
+                    $redirectParams['grupo'] = $grupo;
+                }
+                if ($searchTerm !== '') {
+                    $redirectParams['q'] = $searchTerm;
+                }
+
+                header('Location: producto.php?' . http_build_query($redirectParams));
+                exit;
+            }
+        }
+    }
+}
+
 
 /**
  * Tracking de vista
@@ -532,6 +688,14 @@ render_navbar('producto');
       </ol>
     </nav>
 
+    <?php if ($reportSuccess): ?>
+      <div class="alert alert-warning mb-4">El producto fue reportado correctamente.</div>
+    <?php endif; ?>
+
+    <?php if ($reportError !== ''): ?>
+      <div class="alert alert-danger mb-4"><?= e($reportError) ?></div>
+    <?php endif; ?>
+
     <div class="row g-4 align-items-start">
       <div class="col-lg-5">
         <div class="detail-card glass-card p-3 p-lg-4 sticky-lg-top detail-sticky">
@@ -626,6 +790,14 @@ render_navbar('producto');
             <a href="tienda.php?id=<?= (int) $product['idtiendas'] ?>" class="btn btn-outline-primary rounded-pill px-4">
               Ver tienda
             </a>
+            <button
+              type="button"
+              class="btn btn-outline-danger rounded-pill px-4"
+              data-bs-toggle="modal"
+              data-bs-target="#reportProductModalMain"
+            >
+              <i class="bi bi-flag me-1"></i>Reportar producto
+            </button>
           </div>
 
           <div>
@@ -645,15 +817,15 @@ render_navbar('producto');
                 rel="noopener"
                 class="btn btn-outline-primary rounded-pill"
               >
-                <i class="bi bi-facebook"></i>Facebook
+                <i class="bi bi-facebook text-primary"></i>Facebook
               </a>
               <a
                 href="<?= e($shareTwitterUrl) ?>"
                 target="_blank"
                 rel="noopener"
-                class="btn btn-outline-dark rounded-pill"
+                class="btn btn-outline-dark text-secondary rounded-pill"
               >
-                <i class="bi bi-twitter-x"></i>Twitter/X
+                <i class="bi bi-twitter-x text-secondary"></i>Twitter/X
               </a>
             </div>
           </div>
@@ -736,10 +908,82 @@ render_navbar('producto');
                       >
                         Ver
                       </a>
+
+                      <button
+                        type="button"
+                        class="btn btn-outline-danger rounded-pill"
+                        data-bs-toggle="modal"
+                        data-bs-target="#reportProductModal<?= (int) $offer['idproductos'] ?>"
+                        title="Reportar producto"
+                      >
+                        <i class="bi bi-flag"></i>
+                      </button>
                     </div>
 
                   </div>
                 </div>
+
+                <?php ob_start(); ?>
+                <div class="modal fade" id="reportProductModal<?= (int) $offer['idproductos'] ?>" tabindex="-1" aria-hidden="true">
+                  <div class="modal-dialog modal-dialog-centered modal-sm">
+                    <div class="modal-content border-0 shadow-lg">
+                      <form method="post">
+                        <div class="modal-header">
+                          <h5 class="modal-title">Reportar producto</h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                        </div>
+
+                        <div class="modal-body">
+                          <input type="hidden" name="action" value="report_product">
+                          <input type="hidden" name="product_id" value="<?= (int) $offer['idproductos'] ?>">
+
+                          <div class="small text-body-secondary mb-3">
+                            <?= e($offer['tie_nombre']) ?> · <?= e($offer['pro_nombre']) ?>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Motivo</label>
+                            <select name="rep_motivo" class="form-select" required>
+                              <option value="">Elegir</option>
+                              <option value="precio_incorrecto">Precio incorrecto</option>
+                              <option value="desactualizado">Falta actualizar</option>
+                              <option value="sin_stock">Sin stock</option>
+                              <option value="producto_equivocado">Producto equivocado</option>
+                              <option value="informacion_falsa">Información falsa</option>
+                              <option value="otro">Otro</option>
+                            </select>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Tu nombre</label>
+                            <input type="text" name="rep_nombre" class="form-control" maxlength="120" placeholder="Opcional">
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="rep_email" class="form-control" maxlength="150" placeholder="Opcional">
+                          </div>
+
+                          <div class="mb-0">
+                            <label class="form-label">Detalle</label>
+                            <textarea
+                              name="rep_detalle"
+                              class="form-control"
+                              rows="3"
+                              maxlength="1000"
+                              placeholder="Opcional"></textarea>
+                          </div>
+                        </div>
+
+                        <div class="modal-footer">
+                          <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Cancelar</button>
+                          <button type="submit" class="btn btn-danger rounded-pill">Enviar reporte</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+                <?php $productReportModals[] = ob_get_clean(); ?>
               <?php endforeach; ?>
             </div>
           <?php else: ?>
@@ -837,6 +1081,72 @@ render_navbar('producto');
     </div>
   </div>
 </section>
+
+<?php ob_start(); ?>
+<div class="modal fade" id="reportProductModalMain" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content border-0 shadow-lg">
+      <form method="post">
+        <div class="modal-header">
+          <h5 class="modal-title">Reportar producto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" name="action" value="report_product">
+          <input type="hidden" name="product_id" value="<?= (int) $product['idproductos'] ?>">
+
+          <div class="small text-body-secondary mb-3">
+            <?= e($product['tie_nombre']) ?> · <?= e($groupName ?: $product['pro_nombre']) ?>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Motivo</label>
+            <select name="rep_motivo" class="form-select" required>
+              <option value="">Elegir</option>
+              <option value="precio_incorrecto">Precio incorrecto</option>
+              <option value="desactualizado">Falta actualizar</option>
+              <option value="sin_stock">Sin stock</option>
+              <option value="producto_equivocado">Producto equivocado</option>
+              <option value="informacion_falsa">Información falsa</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Tu nombre</label>
+            <input type="text" name="rep_nombre" class="form-control" maxlength="120" placeholder="Opcional">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" name="rep_email" class="form-control" maxlength="150" placeholder="Opcional">
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label">Detalle</label>
+            <textarea
+              name="rep_detalle"
+              class="form-control"
+              rows="3"
+              maxlength="1000"
+              placeholder="Opcional"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger rounded-pill">Enviar reporte</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<?php $productReportModals[] = ob_get_clean(); ?>
+
+<?php if ($productReportModals): ?>
+  <?= implode("\n", $productReportModals) ?>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
