@@ -37,7 +37,7 @@ function store_sort_sql(string $sort, bool $hasSearch): string
         'nombre_asc' => 'p.pro_nombre ASC',
         'nombre_desc' => 'p.pro_nombre DESC',
         default => $hasSearch
-            ? 'CASE WHEN p.pro_nombre LIKE :q_sort THEN 0 WHEN p.pro_marca LIKE :q_sort THEN 1 ELSE 2 END, p.pro_fecha_scraping DESC, p.pro_nombre ASC'
+            ? 'CASE WHEN p.pro_nombre LIKE :q_sort_nombre THEN 0 WHEN p.pro_marca LIKE :q_sort_marca THEN 1 ELSE 2 END, p.pro_fecha_scraping DESC, p.pro_nombre ASC'
             : 'p.pro_fecha_scraping DESC, p.pro_nombre ASC',
     };
 }
@@ -385,11 +385,17 @@ $where = ['p.tiendas_idtiendas = :id', 'p.pro_activo = 1'];
 $baseParams = [':id' => $id];
 $hasSearch = $q !== '';
 
-if ($hasSearch) {
-    $where[] = '(p.pro_nombre LIKE :q_filter OR p.pro_descripcion LIKE :q_filter OR p.pro_marca LIKE :q_filter)';
-    $baseParams[':q_filter'] = '%' . $q . '%';
-}
+$where = ['p.tiendas_idtiendas = :id', 'p.pro_activo = 1'];
+$baseParams = [':id' => $id];
+$hasSearch = $q !== '';
 
+if ($hasSearch) {
+    $where[] = '(p.pro_nombre LIKE :q_nombre OR p.pro_descripcion LIKE :q_descripcion OR p.pro_marca LIKE :q_marca)';
+    $searchTerm = '%' . $q . '%';
+    $baseParams[':q_nombre'] = $searchTerm;
+    $baseParams[':q_descripcion'] = $searchTerm;
+    $baseParams[':q_marca'] = $searchTerm;
+}
 $whereSql = implode(' AND ', $where);
 $orderSql = store_sort_sql($sort, $hasSearch);
 
@@ -405,8 +411,9 @@ $page = min($page, $totalPages);
 $offset = ($page - 1) * $perPage;
 
 $productParams = $baseParams;
-if ($hasSearch && str_contains($orderSql, ':q_sort')) {
-    $productParams[':q_sort'] = '%' . $q . '%';
+if ($hasSearch) {
+    $productParams[':q_sort_nombre'] = '%' . $q . '%';
+    $productParams[':q_sort_marca'] = '%' . $q . '%';
 }
 
 $productStmt = $pdo->prepare("

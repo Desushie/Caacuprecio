@@ -489,34 +489,54 @@ class GonzalitoProductosSpider(scrapy.Spider):
         return ""
 
     def extraer_descripcion(self, response, nombre):
+        # 1) JSON-LD primero
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
             except Exception:
                 continue
+
             descs = self._search_json_keys(data, {"description"})
             for desc in descs:
                 if isinstance(desc, str):
                     cleaned = self.clean_description(desc, nombre)
-                    if cleaned:
+                    if cleaned and not self.is_garbage_description(cleaned):
                         return cleaned[:1200]
 
+        # 2) Si existe encabezado "Descripción", priorizar ese bloque
         textos = [self.clean_text(t) for t in response.css("body ::text").getall()]
         textos = [t for t in textos if t]
 
         inicio = None
         fin = None
+
         for i, t in enumerate(textos):
-            tl = t.lower()
+            tl = t.lower().strip()
+
             if inicio is None and tl in {"descripción", "descripcion"}:
                 inicio = i + 1
                 continue
+
             if inicio is not None and (
                 "productos que te pueden interesar" in tl
+                or "también te puede interesar" in tl
+                or "tambien te puede interesar" in tl
+                or "productos relacionados" in tl
                 or "información" in tl
                 or "informacion" in tl
                 or "métodos de pago" in tl
                 or "metodos de pago" in tl
+                or "características" in tl
+                or "caracteristicas" in tl
+                or "especificaciones" in tl
+                or "opiniones" in tl
+                or "reseñas" in tl
+                or "resenas" in tl
+                or "delivery gratis" in tl
+                or tl == "enlaces"
+                or tl == "sucursales"
+                or tl == "catálogo"
+                or tl == "catalogo"
             ):
                 fin = i
                 break
@@ -524,52 +544,271 @@ class GonzalitoProductosSpider(scrapy.Spider):
         if inicio is not None:
             chunk = textos[inicio:fin]
             cleaned = self.clean_description(" ".join(chunk), nombre)
-            if cleaned:
+            if cleaned and not self.is_garbage_description(cleaned):
                 return cleaned[:1200]
 
-        desc = " ".join(
-            t.strip()
-            for t in response.css(
-                ".description *::text, .product-description *::text, .tab-content *::text, .content *::text"
-            ).getall()
-            if t.strip()
-        )
-        desc = self.clean_description(desc, nombre)
-        return desc[:1200] if desc else ""
+        # 3) Selectores específicos del producto
+        specific_selectors = [
+            ".description *::text",
+            ".product-description *::text",
+            ".product_detail_description *::text",
+            ".product-detail-description *::text",
+            ".detalle-producto *::text",
+            ".descripcion *::text",
+            "[class*='description'] *::text",
+            "[id*='description'] *::text",
+            ".tab-pane.active *::text",
+            ".tab-content .active *::text",
+        ]
+
+        specific_texts = []
+        for sel in specific_selectors:
+            try:
+                specific_texts.extend(response.css(sel).getall())
+            except Exception:
+                continue
+
+        specific_texts = [self.clean_text(t) for t in specific_texts if self.clean_text(t)]
+        if specific_texts:
+            cleaned = self.clean_description(" ".join(specific_texts), nombre)
+            if cleaned and not self.is_garbage_description(cleaned):
+                return cleaned[:1200]
+
+        # 4) Fallback MUY controlado
+        body_texts = []
+        for t in response.css("body ::text").getall():
+            cleaned_t = self.clean_text(t)
+            if not cleaned_t:
+                continue
+            if len(cleaned_t) < 20:
+                continue
+
+            tl = cleaned_t.lower()
+
+            if (
+                tl.startswith(".")
+                or "{ display:" in tl
+                or "@media" in tl
+                or "delivery gratis" in tl
+                or "comprá y recibí" in tl
+                or "compra y recibi" in tl
+                or tl == "enlaces"
+                or tl == "sucursales"
+                or tl == "catálogo"
+                or tl == "catalogo"
+                or "beneficios de tarjetas" in tl
+                or re.search(r"\b021\s*\d", tl)
+            ):
+                continue
+
+            body_texts.append(cleaned_t)
+
+        fallback = self.clean_description(" ".join(body_texts), nombre)
+        if fallback and not self.is_garbage_description(fallback):
+            return fallback[:1200]
+
+        return ""
+
 
     def clean_description(self, text, nombre=""):
         text = self.clean_text(text)
         if not text:
             return ""
 
+        # eliminar CSS inline y media queries
+        text = re.sub(r"\.[\w\-]+\s*\{[^}]+\}", " ", text, flags=re.I)
+        text = re.sub(r"@media[^{]+\{.*?\}", " ", text, flags=re.I)
+        text = re.sub(r"-webkit-[\w\-]+\s*:\s*[^;]+;?", " ", text, flags=re.I)
+
+        lower = text.lower()
+
         cortes = [
             "productos que te pueden interesar",
-            "información", "informacion",
-            "métodos de pago", "metodos de pago",
-            "todo franquicia", "todos los derechos reservados",
+            "también te puede interesar",
+            "tambien te puede interesar",
+            "productos relacionados",
+            "información",
+            "informacion",
+            "métodos de pago",
+            "metodos de pago",
+            "formas de pago",
+            "opiniones",
+            "comentarios",
+            "reseñas",
+            "resenas",
+            "seguinos",
+            "suscribite a nuestro newsletter",
+            "todos los derechos reservados",
             "sitio web comercial adaptado",
-            "luis alberto del paraná", "luis alberto del parana",
-            "seguinos", "suscribite a nuestro newsletter",
+            "luis alberto del paraná",
+            "luis alberto del parana",
+            "delivery gratis",
+            "enlaces",
+            "sucursales",
+            "catálogo",
+            "catalogo",
         ]
-        lower = text.lower()
+        cortes.extend([
+        "beneficios de tarjetas",
+        "aires acondicionados residenciales",
+        "aires acondicionados comerciales",
+        "campanas y purificadores",
+        "accesorios de cocina",
+        "pequeños electrodomésticos",
+        "pequenos electrodomesticos",
+        "muebles para oficinas",
+        "muebles para dormitorio",
+        "industriales y herramientas",
+        ])
+
         cut_at = len(text)
         for marker in cortes:
             pos = lower.find(marker)
             if pos != -1:
                 cut_at = min(cut_at, pos)
-        text = text[:cut_at]
+        text = text[:cut_at].strip()
+
+        if not text:
+            return ""
 
         if nombre:
             nombre_clean = self.clean_text(nombre)
-            if text.lower().startswith(nombre_clean.lower()):
-                text = text[len(nombre_clean):].strip(" -:|\n\t")
+            if nombre_clean and text.lower().startswith(nombre_clean.lower()):
+                text = text[len(nombre_clean):].strip(" -:|,\n\t\r")
 
-        text = re.sub(r"\b\d+\s*cuotas?\s+de\s+gs\.\s*[\d\.]+", " ", text, flags=re.I)
-        text = re.sub(r"\b(?:o\s+al\s+contado|al\s+contado|oferta)\b", " ", text, flags=re.I)
-        text = re.sub(r"https?://\S+", " ", text)
-        text = re.sub(r"\bGs\.\s*[\d\.]+", " ", text, flags=re.I)
-        text = re.sub(r"\s+", " ", text).strip(" -|:\n\t")
+        replacements = [
+            (r"\b\d+\s*cuotas?\s*(?:de|x)?\s*gs\.?\s*[\d\.]+", " "),
+            (r"\b(?:o\s+al\s+contado|al\s+contado|oferta|precio(?:\s+especial)?)\b", " "),
+            (r"\bgs\.?\s*[\d\.]+", " "),
+            (r"https?://\S+", " "),
+            (r"¡?\s*delivery gratis!?", " "),
+            (r"compr[aá]\s+y\s+recib[ií].*?(24|48|72)\s*horas", " "),
+            (r"\benlaces\b", " "),
+            (r"\bsucursales\b", " "),
+            (r"\bcat[aá]logo\b", " "),
+            (r"\b021\s*\d+(?:\s*\d+)*\b", " "),
+        ]
+        for pattern, repl in replacements:
+            text = re.sub(pattern, repl, text, flags=re.I)
+
+        menu_patterns = [
+            r"\bver todo\b",
+            r"\bcelulares\b",
+            r"\btelevisores?\b",
+            r"\btv led\b",
+            r"\brefrigeraci[oó]n\b",
+            r"\bheladeras\b",
+            r"\bcongeladores\b",
+            r"\bexhibidores\b",
+            r"\bclimatizaci[oó]n\b",
+            r"\baires acondicionados\b",
+            r"\bestufas\b",
+            r"\bventiladores\b",
+            r"\btermocalefones\b",
+            r"\bcocci[oó]n\b",
+            r"\bcocinas\b",
+            r"\bhornos?\b",
+            r"\bmicroondas\b",
+            r"\banafes\b",
+            r"\bcampanas\b",
+            r"\bpurificadores?\b",
+        ]
+
+        menu_hits = sum(1 for p in menu_patterns if re.search(p, text, re.I))
+        if menu_hits >= 5:
+            return ""
+
+        words = text.split()
+        compact_words = []
+        prev = None
+        repeat_count = 0
+
+        for w in words:
+            wl = w.lower()
+            if wl == prev:
+                repeat_count += 1
+                if repeat_count >= 2:
+                    continue
+            else:
+                prev = wl
+                repeat_count = 0
+            compact_words.append(w)
+
+        text = " ".join(compact_words)
+        text = re.sub(r"\s+", " ", text).strip(" -|:,\n\t\r")
+
+        if len(text) < 25:
+            return ""
+
         return text
+
+
+    def is_garbage_description(self, text):
+        if not text:
+            return True
+
+        text_l = text.lower()
+
+        garbage_markers = [
+            "ver todo",
+            "seguinos",
+            "suscribite",
+            "todos los derechos reservados",
+            "sitio web comercial adaptado",
+            "productos que te pueden interesar",
+            "métodos de pago",
+            "metodos de pago",
+            "beneficios de tarjetas",
+            "delivery gratis",
+            "enlaces",
+            "sucursales",
+            "catálogo",
+            "catalogo",
+        ]
+        if sum(marker in text_l for marker in garbage_markers) >= 2:
+            return True
+
+        category_words = [
+            "aires acondicionados residenciales",
+            "aires acondicionados comerciales",
+            "campanas y purificadores",
+            "accesorios de cocina",
+            "pequeños electrodomésticos",
+            "pequenos electrodomesticos",
+            "procesador de alimentos",
+            "extractores y exprimidores",
+            "muebles para oficinas",
+            "muebles para dormitorio",
+            "industriales y herramientas",
+            "compresores y motobombas",
+            "herramientas para jardin",
+            "fabricadoras de hielo",
+            "rizadores y onduladores",
+            "beneficios de tarjetas",
+            "celulares",
+            "televisores",
+            "tv led",
+            "refrigeración",
+            "refrigeracion",
+            "heladeras",
+            "congeladores",
+            "climatización",
+            "climatizacion",
+            "cocción",
+            "coccion",
+            "microondas",
+            "anafes",
+        ]
+        if sum(word in text_l for word in category_words) >= 4:
+            return True
+
+        words = text.split()
+        if len(words) > 20:
+            unique_ratio = len(set(w.lower() for w in words)) / max(len(words), 1)
+            if unique_ratio < 0.45:
+                return True
+
+        return False
 
     def _prices_from_jsonld(self, raw):
         prices = []
@@ -634,14 +873,6 @@ class GonzalitoProductosSpider(scrapy.Spider):
             return int(m.group(1).replace(".", ""))
         except Exception:
             return None
-
-    def clean_text(self, text):
-        if not text:
-            return ""
-        text = re.sub(r"<[^>]+>", " ", str(text))
-        text = text.replace("\xa0", " ")
-        text = re.sub(r"\s+", " ", text)
-        return text.strip(" -\n\t\r")
 
     def normalize_url(self, url):
         url = (url or "").strip()

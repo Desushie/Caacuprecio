@@ -40,21 +40,32 @@ $q = trim((string) ($_GET['q'] ?? ''));
 
 $where = [];
 $params = [];
+
 if ($q !== '') {
+    $like = '%' . $q . '%';
+
     $where[] = '(
-        t.tie_nombre LIKE :q OR
-        t.tie_descripcion LIKE :q OR
-        t.tie_ubicacion LIKE :q OR
-        t.tie_contacto LIKE :q OR
-        t.tie_telefono LIKE :q OR
-        t.tie_email LIKE :q
+        t.tie_nombre LIKE :q1 OR
+        t.tie_descripcion LIKE :q2 OR
+        t.tie_ubicacion LIKE :q3 OR
+        t.tie_contacto LIKE :q4 OR
+        t.tie_telefono LIKE :q5 OR
+        t.tie_email LIKE :q6
     )';
-    $params[':q'] = '%' . $q . '%';
+
+    $params = [
+        ':q1' => $like,
+        ':q2' => $like,
+        ':q3' => $like,
+        ':q4' => $like,
+        ':q5' => $like,
+        ':q6' => $like,
+    ];
 }
 
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-$stmt = $pdo->prepare("
+$sql = "
     SELECT
         t.*,
         COUNT(p.idproductos) AS total_productos,
@@ -72,20 +83,12 @@ $stmt = $pdo->prepare("
         ) AS rating_promedio
     FROM tiendas t
     LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas
-    {$whereSql}
-    GROUP BY
-        t.idtiendas,
-        t.tie_nombre,
-        t.tie_descripcion,
-        t.tie_logo,
-        t.tie_ubicacion,
-        t.tie_url,
-        t.tie_contacto,
-        t.tie_telefono,
-        t.tie_email,
-        t.tie_horarios
+    $whereSql
+    GROUP BY t.idtiendas
     ORDER BY t.tie_nombre ASC
-");
+";
+
+$stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $stores = $stmt->fetchAll();
 
@@ -176,23 +179,23 @@ render_head('Administrar tiendas');
 <?php if ($stores): ?>
   <?php foreach ($stores as $store): ?>
     <div class="modal fade admin-modal" id="storeModal<?= (int) $store['idtiendas'] ?>" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-md-down">
-        <div class="modal-content">
-          <form method="post" class="h-100 d-flex flex-column">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-content admin-store-modal-content">
+          <form method="post" class="admin-store-modal-form">
             <input type="hidden" name="action" value="save_store">
             <input type="hidden" name="idtiendas" value="<?= (int) $store['idtiendas'] ?>">
 
             <div class="modal-header">
-              <div class="pe-3">
+              <div class="pe-2">
                 <div class="admin-kicker mb-1">Editar tienda</div>
                 <h5 class="modal-title mb-0"><?= e($store['tie_nombre']) ?></h5>
               </div>
-              <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="modal"></button>
+              <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
 
-            <div class="modal-body flex-grow-1" style="overflow-y:auto;">
+            <div class="modal-body admin-store-modal-body">
               <div class="row g-4">
-                <div class="col-12 col-lg-7">
+                <div class="col-12 col-xl-7 order-2 order-xl-1">
                   <div class="row g-3">
 
                     <div class="col-12">
@@ -243,12 +246,13 @@ render_head('Administrar tiendas');
                   </div>
                 </div>
 
-                <div class="col-12 col-lg-5">
-                  <div class="preview-box mb-3">
+                <div class="col-12 col-xl-5 order-1 order-xl-2">
+                  <div class="preview-box mb-3 text-center">
                     <img
                       src="<?= e($store['tie_logo'] ?: image_url('', $store['tie_nombre'])) ?>"
                       alt="<?= e($store['tie_nombre']) ?>"
-                      class="js-image-preview"
+                      class="js-image-preview img-fluid"
+                      style="max-height: 220px; width: auto; object-fit: contain;"
                     >
                   </div>
 
@@ -258,15 +262,17 @@ render_head('Administrar tiendas');
                     <div><strong>Productos:</strong> <?= number_format((int) $store['total_productos'], 0, ',', '.') ?></div>
                   </div>
                 </div>
-
               </div>
             </div>
 
-            <div class="modal-footer" style="position:sticky;bottom:0;background:#fff;">
-              <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
-              <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar cambios</button>
+            <div class="modal-footer admin-store-modal-footer flex-column flex-sm-row gap-2">
+              <button type="button" class="btn btn-outline-secondary rounded-pill px-4 w-100 w-sm-auto" data-bs-dismiss="modal">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary rounded-pill px-4 w-100 w-sm-auto">
+                Guardar cambios
+              </button>
             </div>
-
           </form>
         </div>
       </div>

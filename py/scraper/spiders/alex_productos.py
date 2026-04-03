@@ -157,9 +157,7 @@ class AlexProductosSpider(scrapy.Spider):
                 "marca": self.extract_brand_api(item),
                 "categoria": categoria_origen,
                 "stock": self.extract_stock_api(item),
-                "descripcion": self.limpiar_texto(
-                    self.get_first(item, ["descripcion_corta", "descripcion"])
-                ),
+                "descripcion": "",
             }
             yield response.follow(
                 href,
@@ -212,7 +210,7 @@ class AlexProductosSpider(scrapy.Spider):
             or ""
         )
 
-        descripcion = self.extraer_descripcion(response, body_text) or prelim.get("descripcion") or ""
+        descripcion = ""
 
         marca = self.extraer_marca(response, nombre, descripcion) or prelim.get("marca") or "Genérico"
 
@@ -510,91 +508,6 @@ class AlexProductosSpider(scrapy.Spider):
                 return img
 
         return ""
-
-    def extraer_descripcion(self, response, body_text):
-        bloques = []
-
-        selectores = [
-            "#home-tab-pane *::text",
-            ".product-description *::text",
-            ".text-descripton *::text",
-            ".tab-content *::text",
-            ".tab-pane *::text",
-            ".descripcion-producto *::text",
-            ".summary-description *::text",
-            '[class*="description"] *::text',
-            '[id*="description"] *::text',
-        ]
-
-        basura_exacta = {
-            "descripcion",
-            "descripción",
-            "relacionados",
-            "comparar producto",
-            "producto agregado",
-            "cantidad",
-            "precio",
-            "total del carrito",
-            "seguir comprando",
-            "ir al carrito",
-            "especificaciones generales",
-        }
-
-        basura_contiene = [
-            "comprá en cuotas",
-            "compra en cuotas",
-            "añadir al carrito",
-            "agregar al carrito",
-            "medios de pago",
-            "calculá tu cuota",
-            "seguir comparando",
-            "producto agregado correctamente al carrito",
-        ]
-
-        for sel in selectores:
-            txts = []
-            for x in response.css(sel).getall():
-                limpio = self.limpiar_texto(x)
-                if not limpio:
-                    continue
-
-                low = limpio.lower()
-                if low in basura_exacta:
-                    continue
-                if any(b in low for b in basura_contiene):
-                    continue
-
-                txts.append(limpio)
-
-            if txts:
-                bloque = self.dedup_text_preserve_order(txts)
-                if bloque:
-                    bloques.append(" ".join(bloque))
-
-        if not bloques:
-            for raw in response.css("script::text").getall():
-                for pattern in [
-                    r'"descripcion"\s*:\s*"([^"]+)"',
-                    r'"description"\s*:\s*"([^"]+)"',
-                    r'descripcion\s*[:=]\s*[\'"](.+?)[\'"]\s*,',
-                    r'description\s*[:=]\s*[\'"](.+?)[\'"]\s*,',
-                ]:
-                    mm = re.search(pattern, raw, re.I | re.S)
-                    if mm:
-                        desc = self.limpiar_texto(
-                            mm.group(1)
-                            .replace("\\n", " ")
-                            .replace("\\r", " ")
-                            .replace("\\/", "/")
-                        )
-                        if desc:
-                            bloques.append(desc)
-                            break
-                if bloques:
-                    break
-
-        descripcion = self.limpiar_texto(" ".join(bloques))
-        return descripcion[:2000] if descripcion else ""
 
     def extraer_categoria_producto(self, response, nombre):
         categoria_origen = self.limpiar_texto(response.meta.get("categoria_origen", ""))

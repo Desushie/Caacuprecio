@@ -142,12 +142,11 @@ class InverfinProductosSpider(scrapy.Spider):
 
         descripcion = self.extract_description(response, jsonld, shopify, nombre)
         imagen = self.extract_image(response, jsonld, shopify)
-        marca = self.extraer_marca(response, nombre, body_text)
-        categoria = self.extraer_categoria(
-            response,
-            nombre,
-            response.meta.get("categoria_origen", ""),
-            marca,
+        marca = self.extract_brand_value(nombre, body_text, jsonld, shopify)
+        categoria = extract_category(
+            nombre=nombre,
+            categoria_original=categoria_origen,
+            marca=marca,
         )
 
         stock = self.extract_stock(response, body_text, shopify, jsonld)

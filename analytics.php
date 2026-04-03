@@ -323,6 +323,23 @@ render_head('Analíticas');
         grid-column: span 12;
     }
 }
+
+.analytics-chart-card,
+.analytics-table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px);
+}
+
+.analytics-store-block {
+    background: var(--bg-card);
+}
+
+.analytics-filters {
+    background: var(--bg-card);
+}
 </style>
 
 <?php render_navbar('admin'); ?>

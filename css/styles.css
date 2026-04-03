@@ -912,3 +912,9 @@ code {
   min-width: 110px;
   text-align: right;
 }
+
+select,
+.form-select {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
+}
