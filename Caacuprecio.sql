@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 02, 2026 at 09:28 PM
+-- Generation Time: Apr 04, 2026 at 04:39 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -29,7 +29,6 @@ USE `caacuprecio`;
 -- Table structure for table `busquedas`
 --
 
-DROP TABLE IF EXISTS `busquedas`;
 CREATE TABLE `busquedas` (
   `idbusqueda` int(11) NOT NULL,
   `bus_termino` varchar(255) NOT NULL,
@@ -45,7 +44,6 @@ CREATE TABLE `busquedas` (
 -- Table structure for table `busqueda_click_producto`
 --
 
-DROP TABLE IF EXISTS `busqueda_click_producto`;
 CREATE TABLE `busqueda_click_producto` (
   `id` int(11) NOT NULL,
   `termino` varchar(255) NOT NULL,
@@ -61,7 +59,6 @@ CREATE TABLE `busqueda_click_producto` (
 -- Table structure for table `categorias`
 --
 
-DROP TABLE IF EXISTS `categorias`;
 CREATE TABLE `categorias` (
   `idcategorias` int(11) NOT NULL,
   `cat_nombre` varchar(100) NOT NULL,
@@ -74,7 +71,6 @@ CREATE TABLE `categorias` (
 -- Table structure for table `favoritos`
 --
 
-DROP TABLE IF EXISTS `favoritos`;
 CREATE TABLE `favoritos` (
   `usuario_idusuario` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -87,7 +83,6 @@ CREATE TABLE `favoritos` (
 -- Table structure for table `historial_precios`
 --
 
-DROP TABLE IF EXISTS `historial_precios`;
 CREATE TABLE `historial_precios` (
   `idhistorial` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -102,7 +97,6 @@ CREATE TABLE `historial_precios` (
 -- Table structure for table `productos`
 --
 
-DROP TABLE IF EXISTS `productos`;
 CREATE TABLE `productos` (
   `idproductos` int(11) NOT NULL,
   `pro_nombre` varchar(200) NOT NULL,
@@ -127,7 +121,6 @@ CREATE TABLE `productos` (
 -- Table structure for table `productos_precios`
 --
 
-DROP TABLE IF EXISTS `productos_precios`;
 CREATE TABLE `productos_precios` (
   `proprecio_id` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -147,7 +140,6 @@ CREATE TABLE `productos_precios` (
 -- Table structure for table `productos_vistos`
 --
 
-DROP TABLE IF EXISTS `productos_vistos`;
 CREATE TABLE `productos_vistos` (
   `id` int(11) NOT NULL,
   `usuario_idusuario` int(11) DEFAULT NULL,
@@ -162,7 +154,6 @@ CREATE TABLE `productos_vistos` (
 -- Table structure for table `producto_clicks`
 --
 
-DROP TABLE IF EXISTS `producto_clicks`;
 CREATE TABLE `producto_clicks` (
   `idclick` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -181,7 +172,6 @@ CREATE TABLE `producto_clicks` (
 -- Table structure for table `producto_reportes`
 --
 
-DROP TABLE IF EXISTS `producto_reportes`;
 CREATE TABLE `producto_reportes` (
   `idreporte` int(11) NOT NULL,
   `productos_idproductos` int(11) NOT NULL,
@@ -201,7 +191,6 @@ CREATE TABLE `producto_reportes` (
 -- Table structure for table `scraper_jobs`
 --
 
-DROP TABLE IF EXISTS `scraper_jobs`;
 CREATE TABLE `scraper_jobs` (
   `id` int(11) NOT NULL,
   `job_key` varchar(100) NOT NULL,
@@ -218,10 +207,27 @@ CREATE TABLE `scraper_jobs` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `sugerencias`
+--
+
+CREATE TABLE `sugerencias` (
+  `idsugerencia` int(11) NOT NULL,
+  `sug_nombre` varchar(120) DEFAULT NULL,
+  `sug_email` varchar(150) DEFAULT NULL,
+  `sug_asunto` varchar(150) DEFAULT NULL,
+  `sug_detalle` text NOT NULL,
+  `sug_ip` varchar(45) DEFAULT NULL,
+  `sug_session_id` varchar(128) DEFAULT NULL,
+  `sug_estado` enum('pendiente','leido','archivado') NOT NULL DEFAULT 'pendiente',
+  `sug_fecha` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `tiendas`
 --
 
-DROP TABLE IF EXISTS `tiendas`;
 CREATE TABLE `tiendas` (
   `idtiendas` int(11) NOT NULL,
   `tie_nombre` varchar(100) NOT NULL,
@@ -255,7 +261,6 @@ INSERT INTO `tiendas` (`idtiendas`, `tie_nombre`, `tie_descripcion`, `tie_logo`,
 -- Table structure for table `tienda_reviews`
 --
 
-DROP TABLE IF EXISTS `tienda_reviews`;
 CREATE TABLE `tienda_reviews` (
   `idreview` int(11) NOT NULL,
   `tiendas_idtiendas` int(11) NOT NULL,
@@ -272,7 +277,6 @@ CREATE TABLE `tienda_reviews` (
 -- Table structure for table `tienda_review_reportes`
 --
 
-DROP TABLE IF EXISTS `tienda_review_reportes`;
 CREATE TABLE `tienda_review_reportes` (
   `idreporte` int(11) NOT NULL,
   `reviews_idreview` int(11) NOT NULL,
@@ -292,7 +296,6 @@ CREATE TABLE `tienda_review_reportes` (
 -- Table structure for table `usuario`
 --
 
-DROP TABLE IF EXISTS `usuario`;
 CREATE TABLE `usuario` (
   `idusuario` int(11) NOT NULL,
   `usu_nombre` varchar(45) NOT NULL,
@@ -399,6 +402,15 @@ ALTER TABLE `scraper_jobs`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `sugerencias`
+--
+ALTER TABLE `sugerencias`
+  ADD PRIMARY KEY (`idsugerencia`),
+  ADD KEY `idx_sug_estado` (`sug_estado`),
+  ADD KEY `idx_sug_fecha` (`sug_fecha`),
+  ADD KEY `idx_sug_session` (`sug_session_id`);
+
+--
 -- Indexes for table `tiendas`
 --
 ALTER TABLE `tiendas`
@@ -494,6 +506,12 @@ ALTER TABLE `producto_reportes`
 --
 ALTER TABLE `scraper_jobs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `sugerencias`
+--
+ALTER TABLE `sugerencias`
+  MODIFY `idsugerencia` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `tiendas`
