@@ -918,3 +918,63 @@ select,
   background-color: var(--bg-card) !important;
   color: var(--text-main) !important;
 }
+
+.footer-suggestion-card {
+  display: flex;
+  align-items: stretch;
+  min-height: 100%;
+}
+
+.footer-suggestion-card .btn {
+  width: 100%;
+}
+
+.suggestion-modal {
+  background: var(--bg-card-strong);
+  border: 1px solid var(--border-soft);
+  border-radius: 1.35rem;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.suggestion-modal .modal-header,
+.suggestion-modal .modal-footer {
+  border-color: var(--border-soft);
+}
+
+.suggestion-modal .form-control,
+.suggestion-modal textarea {
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border-soft);
+  color: var(--text-main);
+  border-radius: 1rem;
+}
+
+body.theme-light .suggestion-modal .form-control,
+body.theme-light .suggestion-modal textarea {
+  background: rgba(255,255,255,.9);
+  color: var(--text-main);
+}
+
+.suggestion-modal .form-control::placeholder,
+.suggestion-modal textarea::placeholder {
+  color: var(--text-soft);
+}
+
+@media (max-width: 991.98px) {
+  .footer-suggestion-card .btn {
+    width: 100%;
+  }
+}
+
+.category-badge {
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+  flex: 1 1 auto;
+}
+
+.mini-badge {
+  flex-shrink: 0;
+}

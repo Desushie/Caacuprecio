@@ -340,6 +340,7 @@ render_head('Analíticas');
 .analytics-filters {
     background: var(--bg-card);
 }
+
 </style>
 
 <?php render_navbar('admin'); ?>

@@ -399,13 +399,17 @@ function render_navbar(string $current = 'home'): void
 
 function render_footer(): void
 {
+    $suggestionSaved = isset($_GET['suggestion_saved']) && $_GET['suggestion_saved'] === '1';
+    $suggestionError = isset($_GET['suggestion_error']) ? trim((string) $_GET['suggestion_error']) : '';
+
     echo '<footer class="footer pt-5 pb-4 mt-5">';
     echo '  <div class="container">';
-    echo '    <div class="row g-4 pb-4">';
+    echo '    <div class="row g-4 pb-4 align-items-stretch">';
     echo '      <div class="col-lg-5">';
     echo '        <div class="d-flex align-items-center gap-2 fw-bold text-white mb-3"><span class="brand-badge">CP</span><span>Caacuprecio</span></div>';
     echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
+
     echo '      <div class="col-6 col-lg-3">';
     echo '        <h6 class="text-white">Explorar</h6>';
     echo '        <ul class="list-unstyled d-grid gap-2 mt-3">';
@@ -415,18 +419,86 @@ function render_footer(): void
     echo '          <li><a href="favoritos.php">Favoritos</a></li>';
     echo '        </ul>';
     echo '      </div>';
+
     echo '      <div class="col-lg-4">';
-    echo '        <div class="footer-note">';
-    echo '          <strong>Caacuprecio</strong><br>';
-    echo '          Seguimiento de productos, precios y favoritos.';
+    echo '        <div class="footer-note footer-suggestion-card h-100">';
+    echo '          <div class="d-flex flex-column h-100 justify-content-between gap-3">';
+    echo '            <div>';
+    echo '              <strong class="d-block mb-2">¿Tienes alguna sugerencia?</strong>';
+    echo '              <div class="small">Contanos ideas, mejoras, errores o funciones que te gustaría ver en Caacuprecio.</div>';
+    echo '            </div>';
+    echo '            <div>';
+    echo '              <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#suggestionModal">';
+    echo '                <i class="bi bi-chat-left-text me-2"></i>Enviar sugerencia';
+    echo '              </button>';
+    echo '            </div>';
+    echo '          </div>';
     echo '        </div>';
     echo '      </div>';
     echo '    </div>';
+
     echo '    <div class="border-top border-secondary-subtle pt-3 d-flex flex-column flex-md-row justify-content-between gap-2">';
     echo '      <small>© 2026 Caacuprecio</small>';
     echo '    </div>';
     echo '  </div>';
     echo '</footer>';
+
+    if ($suggestionSaved) {
+        echo '<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">';
+        echo '  <div class="toast show align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">';
+        echo '    <div class="d-flex">';
+        echo '      <div class="toast-body">Tu sugerencia fue enviada correctamente.</div>';
+        echo '      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>';
+        echo '    </div>';
+        echo '  </div>';
+        echo '</div>';
+    }
+
+    echo '<div class="modal fade" id="suggestionModal" tabindex="-1" aria-labelledby="suggestionModalLabel" aria-hidden="true">';
+    echo '  <div class="modal-dialog modal-dialog-centered">';
+    echo '    <div class="modal-content suggestion-modal">';
+    echo '      <form method="post" action="guardar_sugerencia.php">';
+    echo '        <div class="modal-header">';
+    echo '          <h5 class="modal-title" id="suggestionModalLabel">Enviar sugerencia</h5>';
+    echo '          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>';
+    echo '        </div>';
+    echo '        <div class="modal-body">';
+
+    if ($suggestionError !== '') {
+        echo '          <div class="alert alert-danger">' . e($suggestionError) . '</div>';
+    }
+
+    echo '          <input type="hidden" name="redirect" value="' . e($_SERVER['REQUEST_URI'] ?? 'index.php') . '">';
+
+    echo '          <div class="mb-3">';
+    echo '            <label class="form-label">Tu nombre</label>';
+    echo '            <input type="text" name="sug_nombre" class="form-control" maxlength="120" placeholder="Opcional">';
+    echo '          </div>';
+
+    echo '          <div class="mb-3">';
+    echo '            <label class="form-label">Email</label>';
+    echo '            <input type="email" name="sug_email" class="form-control" maxlength="150" placeholder="Opcional">';
+    echo '          </div>';
+
+    echo '          <div class="mb-3">';
+    echo '            <label class="form-label">Asunto</label>';
+    echo '            <input type="text" name="sug_asunto" class="form-control" maxlength="150" placeholder="Ej: Mejorar filtros, nueva tienda, error visual">';
+    echo '          </div>';
+
+    echo '          <div class="mb-0">';
+    echo '            <label class="form-label">Sugerencia</label>';
+    echo '            <textarea name="sug_detalle" class="form-control" rows="5" maxlength="2000" required placeholder="Escribí tu sugerencia aquí..."></textarea>';
+    echo '          </div>';
+    echo '        </div>';
+
+    echo '        <div class="modal-footer">';
+    echo '          <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>';
+    echo '          <button type="submit" class="btn btn-primary rounded-pill px-4">Enviar</button>';
+    echo '        </div>';
+    echo '      </form>';
+    echo '    </div>';
+    echo '  </div>';
+    echo '</div>';
 
     echo '<script>';
     echo '(function(){';
@@ -437,6 +509,11 @@ function render_footer(): void
     echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
     echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme);';
     echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next);}));';
+
+    if ($suggestionError !== '') {
+        echo 'const modalEl=document.getElementById("suggestionModal"); if(modalEl && window.bootstrap){ new bootstrap.Modal(modalEl).show(); }';
+    }
+
     echo '})();';
     echo '</script>';
     echo '<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>';

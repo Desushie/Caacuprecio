@@ -751,9 +751,6 @@ render_navbar('producto');
             <div>
               <div class="price-caption">Desde</div>
               <div class="price-now detail-price"><?= $minPrice !== null ? gs($minPrice) : 'Consultar' ?></div>
-              <?php if ($product['pro_precio_anterior'] !== null): ?>
-                <div class="price-old"><?= gs($product['pro_precio_anterior']) ?></div>
-              <?php endif; ?>
             </div>
             <div class="text-body-secondary small text-md-end">
 
@@ -875,10 +872,6 @@ render_navbar('producto');
                       <div class="price-now mb-1">
                         <?= $offer['pro_precio'] !== null ? gs($offer['pro_precio']) : 'Sin precio' ?>
                       </div>
-
-                      <?php if ($offer['pro_precio_anterior'] !== null): ?>
-                        <div class="price-old"><?= gs($offer['pro_precio_anterior']) ?></div>
-                      <?php endif; ?>
                     </div>
 
                     <div>

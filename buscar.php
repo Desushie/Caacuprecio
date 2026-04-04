@@ -534,8 +534,11 @@ render_navbar('home');
                     </div>
                   </a>
 
-                  <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                    <span class="badge soft-badge"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
+                  <div class="d-flex align-items-start gap-2 mb-2 flex-wrap">
+                    <span class="badge soft-badge category-badge">
+                      <?= e($product['cat_nombre'] ?? 'Sin categoría') ?>
+                    </span>
+
                     <span class="mini-badge <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'badge-stock-ok' : 'badge-stock-no' ?>">
                       <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'En stock' : 'Sin stock' ?>
                     </span>
@@ -551,12 +554,13 @@ render_navbar('home');
                     <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['marca']) ?></strong></div>
                   <?php endif; ?>
 
-                  <div class="d-flex align-items-end justify-content-between mb-3 gap-2">
-                    <div>
+                  <div class="product-price-row d-flex align-items-end justify-content-between mb-3 gap-2 flex-wrap">
+                    <div class="product-price-main">
                       <div class="price-now"><?= gs($product['precio_min']) ?></div>
                       <div class="small text-body-secondary">Desde</div>
                     </div>
-                    <div class="text-end small text-body-secondary">
+
+                    <div class="product-price-meta text-end small text-body-secondary">
                       <div><?= (int) ($product['total_ofertas'] ?? 0) ?> oferta(s)</div>
                       <div><?= !empty($product['pro_fecha_scraping']) ? e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) : '' ?></div>
                     </div>

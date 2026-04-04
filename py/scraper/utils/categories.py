@@ -93,7 +93,7 @@ CATEGORY_ALIASES: Dict[str, str] = {
 CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "Celulares y Smartphones": [
         "celular", "smartphone", "iphone", "redmi", "galaxy", "motorola",
-        "oppo", "honor", "nokia", "poco", "infinix", "tecno"
+        "oppo", "honor", "nokia", "poco", "infinix", "tecno", "samsung"
     ],
     "Tablets": [
         "tablet", "ipad", "tab "

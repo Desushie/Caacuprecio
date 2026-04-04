@@ -23,6 +23,12 @@ $pendingProductReports = (int) $pdo->query("
     WHERE rep_estado = 'pendiente'
 ")->fetchColumn();
 
+$pendingSuggestions = (int) $pdo->query("
+    SELECT COUNT(*)
+    FROM sugerencias
+    WHERE sug_estado = 'pendiente'
+")->fetchColumn();
+
 $latestProducts = $pdo->query("
     SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
     FROM productos p
@@ -89,13 +95,21 @@ render_head('Panel administrador');
                 </span>
               <?php endif; ?>
             </a>
-
             <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
               <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
               <?php if ($pendingProductReports > 0): ?>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
                   <?= number_format($pendingProductReports, 0, ',', '.') ?>
                   <span class="visually-hidden">reportes de productos pendientes</span>
+                </span>
+              <?php endif; ?>
+            </a>
+            <a href="admin_sugerencias.php" class="btn btn-outline-info rounded-pill px-4 position-relative">
+              <i class="bi bi-lightbulb me-2"></i>Sugerencias
+              <?php if ($pendingSuggestions > 0): ?>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
+                  <?= number_format($pendingSuggestions, 0, ',', '.') ?>
+                  <span class="visually-hidden">sugerencias pendientes</span>
                 </span>
               <?php endif; ?>
             </a>

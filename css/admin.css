@@ -694,3 +694,18 @@ body.theme-light .admin-scraper-card {
     padding: 1rem;
   }
 }
+
+.admin-table td[style*="white-space: pre-line"] {
+  line-height: 1.5;
+}
+
+.admin-hero {
+    position: relative;
+    z-index: 5;
+}
+
+.admin-hero .btn,
+.admin-hero a {
+    position: relative;
+    z-index: 6;
+}
