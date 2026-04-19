@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // =====================================================================
             
             // 1. Reemplaza esto con tu API Key real de Resend
-            $resendApiKey = '***REMOVED***'; 
+            $resendApiKey = 're_'; 
             
             // 2. Reemplaza el correo con el dominio que verificaste en Resend
             $fromEmail = 'Caacuprecio <soporte@tudominio.com>'; 
