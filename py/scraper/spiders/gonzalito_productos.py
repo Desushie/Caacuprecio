@@ -323,7 +323,9 @@ class GonzalitoProductosSpider(scrapy.Spider):
         )
         descripcion = self.extraer_descripcion(response, nombre)
         imagen = self.extraer_imagen(response)
-        stock = self.extraer_stock(body_text)
+        
+        # Lógica mejorada de extracción de stock
+        stock = self.extraer_stock(response, body_text)
 
         item = ProductoItem()
         item["nombre"] = nombre
@@ -446,13 +448,30 @@ class GonzalitoProductosSpider(scrapy.Spider):
 
         return "Genérico"
 
-    def extraer_stock(self, body_text):
+    def extraer_stock(self, response, body_text):
         text = body_text.lower()
-        if any(x in text for x in ["sin stock", "agotado", "no disponible"]):
-            return "Sin stock"
-        if "en stock" in text:
+        
+        # 1. Textos explícitos que indican falta de stock
+        if any(x in text for x in ["sin stock", "agotado", "no disponible", "out of stock"]):
+            return "Consultar stock"
+            
+        # 2. JSON-LD (Schema.org)
+        for raw in response.css('script[type="application/ld+json"]::text').getall():
+            if "OutOfStock" in raw:
+                return "Consultar stock"
+            if "InStock" in raw:
+                return "En stock"
+                
+        # 3. Textos y botones que indican disponibilidad
+        if "en stock" in text or "disponible" in text:
             return "En stock"
-        return "Consultar stock"
+            
+        botones = " ".join(response.css('button::text, a::text, .btn::text').getall()).lower()
+        if "carrito" in botones or "comprar" in botones or "agregar" in botones or "añadir" in botones:
+            return "En stock"
+            
+        # 4. Por defecto optimista (si tiene precio, cargó bien y no dice agotado explícitamente)
+        return "En stock"
 
     def extraer_imagen(self, response):
         candidatos = []

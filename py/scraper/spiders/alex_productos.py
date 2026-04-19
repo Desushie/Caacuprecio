@@ -424,7 +424,7 @@ class AlexProductosSpider(scrapy.Spider):
                 v = val.strip().lower()
                 if v in {"1", "true", "si", "sí", "disponible", "en stock"}:
                     return 1
-                if v in {"0", "false", "no", "sin stock", "agotado"}:
+                if v in {"0", "false", "no", "sin stock", "agotado", "consultar stock"}:
                     return 0
 
         return None

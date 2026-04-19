@@ -94,7 +94,7 @@ class CHProductosSpider(scrapy.Spider):
             marca = marca_sitio if marca_sitio else extract_brand(nombre)
 
             precio = data.get("precioMonto")
-            stock = "En stock" if variante.get("tieneStock") else "Sin stock"
+            stock = "En stock" if variante.get("tieneStock") else "Consultar stock"
             descripcion = self.extraer_descripcion(response, data, nombre)
 
             imagen = None
@@ -136,7 +136,7 @@ class CHProductosSpider(scrapy.Spider):
         )
 
         stock_texto = " ".join(response.css("body ::text").getall()).lower()
-        stock = "Sin stock" if "sin stock" in stock_texto or "agotado" in stock_texto else "En stock"
+        stock = "Consultar stock" if "sin stock" in stock_texto or "agotado" in stock_texto else "En stock"
 
         imagen = response.css('img[src*="/catalogo/"]::attr(src)').get()
         if imagen:

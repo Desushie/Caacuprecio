@@ -230,8 +230,11 @@ auth_render_nav('login');
               <input type="email" class="form-control rounded-4" id="email" name="email" value="<?= e($email) ?>" autocomplete="email" required>
             </div>
             <div class="col-12">
-              <label for="password" class="form-label">Contraseña</label>
-              <div class="input-group auth-input-group">
+              <div class="d-flex justify-content-between align-items-center">
+                <label for="password" class="form-label mb-0">Contraseña</label>
+                <a href="olvide_password.php" class="small text-decoration-none">¿Olvidaste tu contraseña?</a>
+              </div>
+              <div class="input-group auth-input-group mt-2">
                 <input type="password" class="form-control rounded-start-4" id="password" name="password" autocomplete="current-password" required>
                 <button class="btn btn-outline-primary rounded-end-4" type="button" data-toggle-password="#password">
                   <i class="bi bi-eye"></i>

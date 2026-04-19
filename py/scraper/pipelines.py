@@ -31,7 +31,11 @@ class MySQLPipeline:
         url = self.clean_text(adapter.get("url"))
         categoria = self.clean_text(adapter.get("categoria")) or "Sin categoría"
         tienda = self.clean_text(adapter.get("tienda")) or self.default_store_name(spider)
-        stock_texto = self.clean_text(adapter.get("stock"))
+        
+        # Procesamos el stock real que viene del spider (1 o 0)
+        raw_stock = adapter.get("stock")
+        en_stock = self.parse_stock(raw_stock)
+
         imagen = self.clean_image(adapter.get("imagen"))
         marca = self.clean_text(adapter.get("marca"))
         descripcion = self.clean_text(adapter.get("descripcion"))
@@ -43,8 +47,6 @@ class MySQLPipeline:
         grupo_nombre = self.format_group_name(modelo_base)
         modelo_detalle = self.extract_variant(nombre, marca, modelo_base)
         modelo_key = self.normalize_text(modelo_detalle)
-
-        en_stock = self.parse_stock(stock_texto)
 
         categoria_id = self.get_or_create_categoria(categoria)
         tienda_id = self.get_or_create_tienda(tienda)
@@ -75,7 +77,7 @@ class MySQLPipeline:
                     pro_imagen = %s,
                     pro_en_stock = %s,
                     pro_fecha_scraping = NOW(),
-                    pro_activo = 1,
+                    pro_activo = 1,  -- Siempre activo para que no se oculte
                     tiendas_idtiendas = %s,
                     categorias_idcategorias = %s,
                     pro_grupo = %s,
@@ -113,7 +115,7 @@ class MySQLPipeline:
                     pro_url,
                     pro_en_stock,
                     pro_fecha_scraping,
-                    pro_activo,
+                    pro_activo,  -- Siempre activo para que no se oculte
                     tiendas_idtiendas,
                     categorias_idcategorias,
                     pro_grupo,
@@ -145,7 +147,7 @@ class MySQLPipeline:
             precio=precio,
             url=url,
             imagen=imagen,
-            stock_texto=stock_texto,
+            en_stock=en_stock,
         )
 
         return item
@@ -214,7 +216,9 @@ class MySQLPipeline:
         )
         return self.cursor.lastrowid
 
-    def upsert_producto_precio(self, producto_id, tienda_id, precio, url, imagen, stock_texto):
+    def upsert_producto_precio(self, producto_id, tienda_id, precio, url, imagen, en_stock):
+        estado = 'activo'  # Siempre activo en la tabla de precios también
+        
         self.cursor.execute(
             """
             SELECT proprecio_id, precio
@@ -239,7 +243,7 @@ class MySQLPipeline:
                     precio_anterior = %s,
                     proprecio_imagen = %s,
                     proprecio_stock = %s,
-                    prop_estado = 'activo',
+                    prop_estado = %s,
                     proprecio_fecha_actualizacion = NOW()
                 WHERE proprecio_id = %s
                 """,
@@ -247,7 +251,8 @@ class MySQLPipeline:
                     precio if precio is not None else 0,
                     precio_anterior,
                     imagen,
-                    stock_texto or None,
+                    en_stock,
+                    estado,
                     proprecio_id,
                 ),
             )
@@ -264,7 +269,7 @@ class MySQLPipeline:
                     proprecio_stock,
                     prop_estado,
                     proprecio_fecha_actualizacion
-                ) VALUES (%s, %s, %s, NULL, %s, %s, %s, 'activo', NOW())
+                ) VALUES (%s, %s, %s, NULL, %s, %s, %s, %s, NOW())
                 """,
                 (
                     producto_id,
@@ -272,14 +277,21 @@ class MySQLPipeline:
                     precio if precio is not None else 0,
                     url,
                     imagen,
-                    stock_texto or None,
+                    en_stock,
+                    estado,
                 ),
             )
 
-    def parse_stock(self, texto):
-        texto = (texto or "").strip().lower()
-        if not texto:
+    def parse_stock(self, valor):
+        if valor is None:
             return 1
+            
+        if isinstance(valor, (int, float)):
+            return 1 if valor > 0 else 0
+            
+        texto = str(valor).strip().lower()
+        if texto == "0": return 0
+        if texto == "1": return 1
 
         negativos = [
             "agotado",
@@ -287,6 +299,7 @@ class MySQLPipeline:
             "no disponible",
             "out of stock",
             "indisponible",
+            "consultar stock",
         ]
         for palabra in negativos:
             if palabra in texto:
@@ -626,8 +639,8 @@ class MySQLPipeline:
         return grupo.upper()
 
     def normalize_price(self, value):
-        if value is None or value == "":
-            return None
+        if value is None or value == "" or value == "Sobre consulta":
+            return 0
 
         if isinstance(value, (int, float)):
             return int(value)
@@ -644,7 +657,7 @@ class MySQLPipeline:
 
         digits = "".join(ch for ch in text if ch.isdigit())
         if not digits:
-            return None
+            return 0
 
         return int(digits)
 

@@ -71,7 +71,7 @@ function image_url(?string $url, string $name = 'Producto'): string
 
 function stock_label(mixed $value): string
 {
-    return ((int) $value) === 1 ? 'En stock' : 'Sin stock';
+    return ((int) $value) === 1 ? 'En stock' : 'Consultar stock';
 }
 
 function stock_badge_class(mixed $value): string

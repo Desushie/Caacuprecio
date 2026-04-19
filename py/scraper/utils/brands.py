@@ -177,6 +177,8 @@ def extract_brand(nombre: str) -> str:
         return ""
 
     nombre_norm = normalize_text(nombre)
+    if "selecciona" in nombre_norm or "selecciona" in nombre_norm:
+        return ""
 
     for brand, aliases in BRAND_ALIASES.items():
         for alias in aliases:

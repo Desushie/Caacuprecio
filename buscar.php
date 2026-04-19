@@ -435,9 +435,6 @@ render_navbar('home');
             </div>
           </div>
         <?php endif; ?>
-        <div class="col-12">
-        </div>
-        </div>
       </form>
     </div>
   </div>
@@ -451,7 +448,7 @@ render_navbar('home');
         <div class="glass-card p-4 search-filters-sidebar">
           <h3 class="h5 fw-bold mb-3">Filtros</h3>
 
-          <form method="get" action="buscar.php" class="d-grid gap-3">
+          <form method="get" action="buscar.php" class="d-grid gap-3 js-sidebar-filter-form">
             <input type="hidden" name="q" value="<?= e($q) ?>">
             <input type="hidden" name="orden" value="<?= e($sort) ?>">
 
@@ -641,6 +638,36 @@ render_navbar('home');
     </div>
   </div>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const topForm = document.querySelector('.js-smart-search-form');
+    const sideForm = document.querySelector('.js-sidebar-filter-form');
+
+    if (topForm && sideForm) {
+        // Función para copiar valores de un form al otro
+        const syncInputs = (sourceForm, targetForm) => {
+            return function(e) {
+                const name = e.target.name;
+                if (name) {
+                    const targetInput = targetForm.querySelector(`[name="${name}"]`);
+                    if (targetInput) {
+                        targetInput.value = e.target.value;
+                    }
+                }
+            };
+        };
+
+        // Sincronizar desde Top hacia Lateral
+        topForm.addEventListener('input', syncInputs(topForm, sideForm));
+        topForm.addEventListener('change', syncInputs(topForm, sideForm));
+
+        // Sincronizar desde Lateral hacia Top
+        sideForm.addEventListener('input', syncInputs(sideForm, topForm));
+        sideForm.addEventListener('change', syncInputs(sideForm, topForm));
+    }
+});
+</script>
 
 <script src="./js/search.js"></script>
 <?php render_footer(); ?>

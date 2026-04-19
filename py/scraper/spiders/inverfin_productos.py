@@ -439,22 +439,22 @@ class InverfinProductosSpider(scrapy.Spider):
         if shopify:
             variants = shopify.get("variants") or []
             if variants:
-                return "En stock" if any(bool(v.get("available")) for v in variants) else "Sin stock"
+                return "En stock" if any(bool(v.get("available")) for v in variants) else "Consultar stock"
 
         if jsonld:
             offers = jsonld.get("offers_data") or {}
             if isinstance(offers, dict):
                 av = str(offers.get("availability", "")).lower()
                 if av:
-                    return "En stock" if "instock" in av else "Sin stock"
+                    return "En stock" if "instock" in av else "Consultar stock"
             elif isinstance(offers, list):
                 vals = [str(x.get("availability", "")).lower() for x in offers if isinstance(x, dict)]
                 if vals:
-                    return "En stock" if any("instock" in x for x in vals) else "Sin stock"
+                    return "En stock" if any("instock" in x for x in vals) else "Consultar stock"
 
         low = body_text.lower()
         if any(x in low for x in ["sin stock", "agotado", "no disponible"]):
-            return "Sin stock"
+            return "Consultar stock"
         return "En stock"
 
     # ---------- JSON ----------

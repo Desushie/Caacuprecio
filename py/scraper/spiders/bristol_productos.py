@@ -75,7 +75,7 @@ class BristolProductosSpider(scrapy.Spider):
 
         stock_text = body_text.lower()
         if any(x in stock_text for x in ["sin stock", "agotado", "no disponible"]):
-            stock = "Sin stock"
+            stock = "Consultar stock"
         else:
             stock = "En stock"
 

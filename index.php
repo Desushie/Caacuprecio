@@ -568,11 +568,9 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
         <div>
           <h2 class="h5 fw-bold mb-1">Resultados en tiempo real</h2>
-          <p class="text-body-secondary mb-0">Escribí lo que buscás y encontrá productos al instante.</p>
         </div>
         <div class="small text-body-secondary" id="home-live-count">0 resultado(s) en vista rápida</div>
       </div>
-      <div class="small text-body-secondary mb-3" id="home-live-state">Empezá a escribir para buscar.</div>
       <div class="row g-4" id="home-live-results"></div>
     </div>
   </div>
@@ -815,7 +813,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
                 <div class="d-flex align-items-end justify-content-between mb-3 gap-2">
                   <div>
                     <div class="price-now"><?= gs($currentPrice) ?></div>
-                    <?php if ($oldPrice): ?><div class="price-old"><?= gs($oldPrice) ?></div><?php endif; ?>
                   </div>
                   <div class="text-end small text-body-secondary">
                     <div><span class="mini-badge <?= e(stock_badge_class($product['pro_en_stock'])) ?>"><?= e(stock_label($product['pro_en_stock'])) ?></span></div>
