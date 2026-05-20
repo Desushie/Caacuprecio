@@ -435,7 +435,7 @@ render_navbar('home');
           </div>
         <?php endif; ?>
 
-        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; z-index: 1030;">
+        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; width: auto !important; z-index: 1030;">
           <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
             <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
           </button>
@@ -674,29 +674,42 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-  const stickyContainer = document.querySelector('.search-sticky-container');
+  // Buscamos el contenedor pegajoso superior
+  let stickyContainer = document.querySelector('.search-sticky-container');
   const toggleBtn = document.getElementById('toggle-sticky-btn');
   
+  // FALLBACK SEGURO: Si no encuentra '.search-sticky-container', 
+  // usamos como contenedor al padre directo del formulario.
+  if (!stickyContainer) {
+    const topForm = document.querySelector('.js-smart-search-form');
+    if (topForm) {
+      stickyContainer = topForm.parentElement;
+      // Le agregamos la clase dinámicamente para que responda a tus estilos CSS
+      stickyContainer.classList.add('search-sticky-container');
+    }
+  }
+
   if (stickyContainer && toggleBtn) {
     const icon = toggleBtn.querySelector('i');
     
     toggleBtn.addEventListener('click', function() {
-      // Comprobamos el estado actual directamente en el estilo inline
-      if (stickyContainer.style.position === 'relative') {
-        // MODO FIJO POR DEFECTO (Sticky arriba)
-        stickyContainer.style.position = 'sticky';
-        icon.className = 'bi bi-pin-angle-fill'; // Icono clavado
-        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
-      } else {
-        // MODO DESPLAZABLE (Se mueve con el scroll)
+      // Comprobamos el estado actual leyendo directamente el CSS aplicado
+      const currentPosition = window.getComputedStyle(stickyContainer).position;
+      
+      if (currentPosition === 'sticky' || stickyContainer.style.position === 'sticky') {
+        // MODO DESPLAZABLE (Se mueve libremente con el scroll)
         stickyContainer.style.position = 'relative';
-        icon.className = 'bi bi-pin-angle'; // Icono desclavado
+        if (icon) icon.className = 'bi bi-pin-angle'; // Icono desclavado
         toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+      } else {
+        // MODO FIJO (Se queda clavado arriba)
+        stickyContainer.style.position = 'sticky';
+        stickyContainer.style.top = '0';
+        stickyContainer.style.zIndex = '1020';
+        if (icon) icon.className = 'bi bi-pin-angle-fill'; // Icono clavado
+        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
       }
     });
-  } else {
-    // Si falta algo en el HTML, esto te va a avisar en la consola de F12
-    console.warn("Falta agregar la clase .search-sticky-container o el id #toggle-sticky-btn en el HTML.");
   }
 });
 </script>
