@@ -116,11 +116,12 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 50;
 $offset = ($page - 1) * $perPage;
 
-$whereClauses = ["1=1"];
+// 1. Usamos un solo array consistente
+$whereClauses = [];
 $params = [];
 
 if ($q !== '') {
-    $where[] = '(p.pro_nombre LIKE :q_nombre OR p.pro_descripcion LIKE :q_descripcion OR p.pro_marca LIKE :q_marca)';
+    $whereClauses[] = '(p.pro_nombre LIKE :q_nombre OR p.pro_descripcion LIKE :q_descripcion OR p.pro_marca LIKE :q_marca)';
     $like = '%' . $q . '%';
     $params['q_nombre'] = $like;
     $params['q_descripcion'] = $like;
@@ -128,33 +129,26 @@ if ($q !== '') {
 }
 
 if ($tiendaId > 0) {
-    $where[] = 'p.tiendas_idtiendas = :tienda';
+    $whereClauses[] = 'p.tiendas_idtiendas = :tienda';
     $params['tienda'] = $tiendaId;
 }
 
-if ($tiendaFilter > 0) {
-    $whereClauses[] = "p.tiendas_idtiendas = :tienda";
-    $params['tienda'] = $tiendaFilter;
-}
-
 if ($categoriaId > 0) {
-    $where[] = 'p.categorias_idcategorias = :categoria';
+    $whereClauses[] = 'p.categorias_idcategorias = :categoria';
     $params['categoria'] = $categoriaId;
 }
 
 if ($estado === 'activos') {
-    $where[] = 'p.pro_activo = 1';
+    $whereClauses[] = 'p.pro_activo = 1';
 } elseif ($estado === 'inactivos') {
-    $where[] = 'p.pro_activo = 0';
+    $whereClauses[] = 'p.pro_activo = 0';
 }
 
-$whereSql = implode(' AND ', $where);
+// Si no hay filtros, aplicamos un fallback seguro para evitar romper el WHERE
+$whereSql = $whereClauses ? implode(' AND ', $whereClauses) : '1=1';
 
-$countSql = "
-    SELECT COUNT(*) 
-    FROM productos p
-    WHERE {$whereSql}
-";
+// Contamos el total para la paginación
+$countSql = "SELECT COUNT(*) FROM productos p WHERE {$whereSql}";
 $countStmt = $pdo->prepare($countSql);
 $countStmt->execute($params);
 $totalProducts = (int) $countStmt->fetchColumn();
@@ -165,6 +159,7 @@ if ($page > $totalPages) {
     $offset = ($page - 1) * $perPage;
 }
 
+// Consulta principal
 $sql = "
     SELECT
         p.*,
@@ -178,6 +173,18 @@ $sql = "
     LIMIT :limit OFFSET :offset
 ";
 
+$stmt = $pdo->prepare($sql);
+
+// 2. Vinculamos los filtros dinámicos
+foreach ($params as $key => $val) {
+    $stmt->bindValue(':' . $key, $val);
+}
+
+// 3. Forzamos LIMIT y OFFSET como enteros estrictos por compatibilidad PDO
+$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
+$products = $stmt->fetchAll();
 $stmt = $pdo->prepare($sql);
 
 foreach ($params as $key => $value) {
