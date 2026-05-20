@@ -445,7 +445,7 @@ render_navbar('home');
   </div>
 </div>
 
-<section class="page-section page-search-results py-5">
+<section class="page-section page-search-results pt-2 pb-5">
   <div class="container">
     <div class="row g-4">
 
