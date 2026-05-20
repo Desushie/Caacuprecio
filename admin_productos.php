@@ -26,6 +26,25 @@ function build_admin_productos_url(array $overrides = []): string {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_product') {
     $id = (int) ($_POST['idproductos'] ?? 0);
+    $tiendaIdInput = (int) ($_POST['tiendas_idtiendas'] ?? 0);
+    if (is_empresa()) {
+            $user = current_user();
+            $userStoreId = (int)($user['tiendas_idtiendas'] ?? 0);
+            
+            // Forzamos que el producto pertenezca a su tienda asignada
+            $tiendaIdInput = $userStoreId;
+
+            // Si está editando un producto existente, verificamos que realmente le pertenezca
+            if ($id > 0) {
+                $check = $pdo->prepare("SELECT tiendas_idtiendas FROM productos WHERE idproductos = :id");
+                $check->execute(['id' => $id]);
+                $prodStore = (int)$check->fetchColumn();
+                if ($prodStore !== $userStoreId) {
+                    die("Error: No tienes permisos para modificar este producto.");
+                }
+            }
+        }
+
 
     $stmt = $pdo->prepare("
         UPDATE productos
