@@ -116,7 +116,7 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 50;
 $offset = ($page - 1) * $perPage;
 
-$where = ['1=1'];
+$whereClauses = ["1=1"];
 $params = [];
 
 if ($q !== '') {
@@ -130,6 +130,11 @@ if ($q !== '') {
 if ($tiendaId > 0) {
     $where[] = 'p.tiendas_idtiendas = :tienda';
     $params['tienda'] = $tiendaId;
+}
+
+if ($tiendaFilter > 0) {
+    $whereClauses[] = "p.tiendas_idtiendas = :tienda";
+    $params['tienda'] = $tiendaFilter;
 }
 
 if ($categoriaId > 0) {
