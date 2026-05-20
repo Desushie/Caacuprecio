@@ -77,7 +77,9 @@ render_head('Panel administrador');
             <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-shop me-2"></i>Gestionar tiendas
             </a>
-
+            <a href="admin_usuarios.php" class="btn btn-outline-primary rounded-pill px-4">
+              <i class="bi bi-people me-2"></i>Gestionar usuarios
+            </a>
             <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-terminal me-2"></i>Importar datos
             </a>
