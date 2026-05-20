@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
-require_admin(); 
+require_admin(); // Solo administradores globales pueden gestionar usuarios
 
 $pdo = db();
 $error = '';
@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ACCIÓN: GUARDAR / EDITAR USUARIO
     if ($action === 'save_user') {
-        $id = (int)($_POST['idusuarios'] ?? 0);
+        $id = (int)($_POST['idusuario'] ?? 0); // Corregido a singular
         $nombre = trim((string)($_POST['usu_nombre'] ?? ''));
         $email = trim((string)($_POST['usu_email'] ?? ''));
         $tipo = (int)($_POST['usu_tipo'] ?? 0);
@@ -24,14 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 if ($id > 0) {
-                    // Actualizar usuario existente
+                    // Actualizar usuario existente (Tabla 'usuario' y columna 'idusuario')
                     $stmt = $pdo->prepare("
                         UPDATE usuario 
                         SET usu_nombre = :nombre, 
                             usu_email = :email, 
                             usu_tipo = :tipo, 
                             tiendas_idtiendas = :tienda 
-                        WHERE idusuarios = :id
+                        WHERE idusuario = :id
                     ");
                     $stmt->execute([
                         'nombre' => $nombre,
@@ -50,15 +50,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ACCIÓN: ELIMINAR USUARIO
     if ($action === 'delete_user') {
-        $id = (int)($_POST['idusuarios'] ?? 0);
+        $id = (int)($_POST['idusuario'] ?? 0); // Corregido a singular
         $currentUser = current_user();
 
         // Control de seguridad: No auto-eliminarse
-        if (isset($currentUser['idusuarios']) && (int)$currentUser['idusuarios'] === $id) {
+        if (isset($currentUser['idusuario']) && (int)$currentUser['idusuario'] === $id) {
             $error = 'No puedes eliminar tu propia cuenta de administrador en sesión.';
         } else {
             try {
-                $stmt = $pdo->prepare("DELETE FROM usuario WHERE idusuarios = :id");
+                // Corregido a tabla 'usuario' y columna 'idusuario'
+                $stmt = $pdo->prepare("DELETE FROM usuario WHERE idusuario = :id");
                 $stmt->execute(['id' => $id]);
                 $success = 'Usuario eliminado de forma permanente.';
             } catch (PDOException $e) {
@@ -69,12 +70,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // 2. CONSULTAS DE DATOS (GET)
-// Traer todos los usuarios con el nombre de su tienda correspondiente si tienen
+// Corregido: 'usuario u' e 'ORDER BY u.idusuario'
 $usuarios = $pdo->query("
     SELECT u.*, t.tie_nombre 
     FROM usuario u 
     LEFT JOIN tiendas t ON u.tiendas_idtiendas = t.idtiendas 
-    ORDER BY u.idusuarios DESC
+    ORDER BY u.idusuario DESC
 ")->fetchAll();
 
 // Traer la lista de tiendas para mapear en los modales de edición
@@ -126,7 +127,7 @@ render_head('Gestión de Usuarios');
             <?php if (!empty($usuarios)): ?>
               <?php foreach ($usuarios as $user): ?>
                 <tr>
-                  <td class="ps-4 fw-bold text-body-secondary"><?= (int)$user['idusuarios'] ?></td>
+                  <td class="ps-4 fw-bold text-body-secondary"><?= (int)$user['idusuario'] ?></td>
                   <td>
                     <div class="fw-semibold"><?= e($user['usu_nombre']) ?></div>
                   </td>
@@ -151,13 +152,13 @@ render_head('Gestión de Usuarios');
                   </td>
                   <td class="pe-4 text-end">
                     <div class="d-inline-flex gap-2">
-                      <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int)$user['idusuarios'] ?>">
+                      <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int)$user['idusuario'] ?>">
                         <i class="bi bi-pencil-fill me-1"></i> Editar
                       </button>
 
                       <form action="admin_usuarios.php" method="POST" onsubmit="return confirm('¿Estás completamente seguro de que deseas eliminar a <?= e($user['usu_nombre']) ?>? Esta acción no se puede deshacer.');">
                         <input type="hidden" name="action" value="delete_user">
-                        <input type="hidden" name="idusuarios" value="<?= (int)$user['idusuarios'] ?>">
+                        <input type="hidden" name="idusuario" value="<?= (int)$user['idusuario'] ?>">
                         <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
                           <i class="bi bi-trash3-fill"></i>
                         </button>
@@ -166,17 +167,17 @@ render_head('Gestión de Usuarios');
                   </td>
                 </tr>
 
-                <div class="modal fade admin-modal" id="editUserModal<?= (int)$user['idusuarios'] ?>" tabindex="-1" aria-hidden="true">
+                <div class="modal fade admin-modal" id="editUserModal<?= (int)$user['idusuario'] ?>" tabindex="-1" aria-hidden="true">
                   <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content text-start" style="background: var(--bg-card-strong); border: 1px solid var(--border-soft);">
                       <div class="modal-header border-bottom border-light-subtle">
-                        <h5 class="modal-title"><i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuario #<?= (int)$user['idusuarios'] ?></h5>
+                        <h5 class="modal-title"><i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuario #<?= (int)$user['idusuario'] ?></h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                       </div>
                       <form action="admin_usuarios.php" method="POST">
                         <div class="modal-body py-4">
                           <input type="hidden" name="action" value="save_user">
-                          <input type="hidden" name="idusuarios" value="<?= (int)$user['idusuarios'] ?>">
+                          <input type="hidden" name="idusuario" value="<?= (int)$user['idusuario'] ?>">
 
                           <div class="mb-3">
                             <label class="form-label small text-body-secondary fw-semibold">Nombre del Usuario</label>
@@ -190,14 +191,14 @@ render_head('Gestión de Usuarios');
 
                           <div class="mb-3">
                             <label class="form-label small text-body-secondary fw-semibold">Rol del Sistema</label>
-                            <select name="usu_tipo" class="form-select js-role-select" data-user-id="<?= (int)$user['idusuarios'] ?>" required>
+                            <select name="usu_tipo" class="form-select js-role-select" data-user-id="<?= (int)$user['idusuario'] ?>" required>
                               <option value="0" <?= (int)$user['usu_tipo'] === 0 ? 'selected' : '' ?>>Usuario Regular</option>
                               <option value="2" <?= (int)$user['usu_tipo'] === 2 ? 'selected' : '' ?>>Empresa / Encargado</option>
                               <option value="1" <?= (int)$user['usu_tipo'] === 1 ? 'selected' : '' ?>>Administrador Global</option>
                             </select>
                           </div>
 
-                          <div class="mb-2 js-store-wrapper-<?= (int)$user['idusuarios'] ?>" style="<?= (int)$user['usu_tipo'] === 2 ? '' : 'display: none;' ?>">
+                          <div class="mb-2 js-store-wrapper-<?= (int)$user['idusuario'] ?>" style="<?= (int)$user['usu_tipo'] === 2 ? '' : 'display: none;' ?>">
                             <label class="form-label small text-body-secondary fw-semibold text-info"><i class="bi bi-shop me-1"></i>Asignar a Tienda/Empresa</label>
                             <select name="tiendas_idtiendas" class="form-select border-info-subtle">
                               <option value="">-- Seleccionar Tienda --</option>
