@@ -7,20 +7,6 @@ $user = current_user();
 $isEmpresa = is_empresa();
 $myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
-// 🔴 AGREGA ESTO TEMPORALMENTE PARA DIAGNÓSTICO:
-if ($isEmpresa) {
-    echo "<pre style='background:#111; color:#00ff00; padding:20px; margin:20px; border-radius:8px; border:2px solid #ef4444; z-index:99999; position:relative;'>";
-    echo "=== DIAGNÓSTICO DE SESIÓN DE EMPRESA ===\n";
-    echo "ID de tienda detectado (\$myStoreId): " . $myStoreId . "\n\n";
-    echo "Datos completos del usuario en sesión:\n";
-    print_r($user);
-    echo "</pre>";
-    die(); // Detiene la ejecución aquí para que puedas leerlo
-}
-
-// Opcional para depurar: Si te sigue fallando, quitá las barras de la línea de abajo para ver qué detecta el sistema:
-// var_dump($isEmpresa, $myStoreId); die();
-
 function build_admin_productos_url(array $overrides = []): string {
     global $isEmpresa;
     

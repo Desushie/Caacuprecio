@@ -101,6 +101,7 @@ function auth_store_user_session(array $user): void
         'usu_nombre' => $user['usu_nombre'],
         'usu_email' => $user['usu_email'],
         'usu_tipo' => (int) $user['usu_tipo'],
+        'tiendas_idtiendas' => (int) $user['tiendas_idtiendas'],
     ];
 }
 
