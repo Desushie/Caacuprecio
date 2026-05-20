@@ -97,7 +97,7 @@ $promedioPrecio = (float) $stmtPrecio->fetchColumn();
 $ratingPromedio = 0.0;
 $totalReviews = 0;
 if ($hasReviews && $storeId > 0) {
-    $sqlRev = "SELECT AVG(rev_calificacion), COUNT(*) FROM tienda_reviews WHERE tiendas_idtiendas = :storeId";
+    $sqlRev = "SELECT AVG(rev_puntaje), COUNT(*) FROM tienda_reviews WHERE tiendas_idtiendas = :storeId";
     $stmtRev = $pdo->prepare($sqlRev);
     $stmtRev->execute([':storeId' => $storeId]);
     $rowRev = $stmtRev->fetch(PDO::FETCH_NUM);
