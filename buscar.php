@@ -331,7 +331,7 @@ render_navbar('home');
       data-count-target="#results-live-count"
       data-state-target="#results-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form pb-4" method="get" action="buscar.php" autocomplete="off">
+      <form class="row g-2 align-items-center js-smart-search-form position-relative pb-4" method="get" action="buscar.php" autocomplete="off">
         <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
         <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
         <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
