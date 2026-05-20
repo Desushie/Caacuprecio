@@ -331,7 +331,7 @@ render_navbar('home');
       data-count-target="#results-live-count"
       data-state-target="#results-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form position-relative" method="get" action="buscar.php" autocomplete="off">
+      <form class="row g-2 align-items-center js-smart-search-form pb-4" method="get" action="buscar.php" autocomplete="off">
         <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
         <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
         <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
@@ -435,7 +435,7 @@ render_navbar('home');
           </div>
         <?php endif; ?>
 
-        <div class="position-absolute bottom-0" style="right: 15px; left: auto !important; z-index: 1030; mb-2">
+        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; z-index: 1030;">
           <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
             <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
           </button>
@@ -681,21 +681,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const icon = toggleBtn.querySelector('i');
     
     toggleBtn.addEventListener('click', function() {
-      // Alternamos el estado de posicionamiento
-      const isDetached = stickyContainer.classList.toggle('position-relative');
-      
-      if (isDetached) {
-        // MODO DESPLAZABLE (Libre con scroll)
-        stickyContainer.style.position = 'relative';
-        icon.className = 'bi bi-pin-angle'; // Icono desclavado
-        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
-      } else {
+      // Comprobamos el estado actual directamente en el estilo inline
+      if (stickyContainer.style.position === 'relative') {
         // MODO FIJO POR DEFECTO (Sticky arriba)
         stickyContainer.style.position = 'sticky';
         icon.className = 'bi bi-pin-angle-fill'; // Icono clavado
         toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+      } else {
+        // MODO DESPLAZABLE (Se mueve con el scroll)
+        stickyContainer.style.position = 'relative';
+        icon.className = 'bi bi-pin-angle'; // Icono desclavado
+        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
       }
     });
+  } else {
+    // Si falta algo en el HTML, esto te va a avisar en la consola de F12
+    console.warn("Falta agregar la clase .search-sticky-container o el id #toggle-sticky-btn en el HTML.");
   }
 });
 </script>
