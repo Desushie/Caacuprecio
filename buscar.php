@@ -388,11 +388,6 @@ render_navbar('home');
             <i class="bi bi-search"></i>
           </button> 
         </div>
-        <div class="col-lg-1 d-grid">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary rounded-pill" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle-fill"></i> 
-          </button>
-        </div>
 
         <?php if ($recentSearches || $popularSearches): ?>
           <div class="col-12">
@@ -439,6 +434,11 @@ render_navbar('home');
             </div>
           </div>
         <?php endif; ?>
+                <div class="col-lg-1 d-grid">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary rounded-pill" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle-fill"></i> 
+          </button>
+        </div>
       </form>
     </div>
   </div>
