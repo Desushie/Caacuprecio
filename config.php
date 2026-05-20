@@ -397,7 +397,7 @@ function render_navbar(string $current = 'home'): void
         echo ' <span class="badge rounded-pill text-bg-primary ms-1">' . $favCount . '</span>';
     }
     echo '</a></li>';
-    if ($user && is_admin()) {
+    if ($user && is_admin() || is_empresa()) {
         echo '        <li class="nav-item"><a class="nav-link ' . ($current === 'admin' ? 'active' : '') . '" href="./admin.php"><i class="bi bi-gear me-1"></i>Admin</a></li>';
     }
     if ($user) {
