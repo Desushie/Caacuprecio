@@ -13,9 +13,11 @@ if ($isEmpresa) {
 }
 
 function build_admin_productos_url(array $overrides = []): string {
+    global $isEmpresa;
+    
     $params = [
         'q' => $_GET['q'] ?? '',
-        'tienda' => $_GET['tienda'] ?? 0,
+        'tienda' => $isEmpresa ? 0 : ($_GET['tienda'] ?? 0), // Limpia la URL para las empresas
         'categoria' => $_GET['categoria'] ?? 0,
         'estado' => $_GET['estado'] ?? '',
         'page' => $_GET['page'] ?? 1,
@@ -32,16 +34,14 @@ function build_admin_productos_url(array $overrides = []): string {
     return 'admin_productos.php' . ($params ? '?' . http_build_query($params) : '');
 }
 
+// PROCESAMIENTO DEL FORMULARIO (GUARDAR / EDITAR)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_product') {
     $id = (int) ($_POST['idproductos'] ?? 0);
     $tiendaIdInput = (int) ($_POST['tiendas_idtiendas'] ?? 0);
 
-    if (is_empresa()) {
-        $user = current_user();
-        $userStoreId = (int)($user['tiendas_idtiendas'] ?? 0);
-        
+    if ($isEmpresa) {
         // 1. Forzar que el producto pertenezca a SU propia tienda pase lo que pase
-        $tiendaIdInput = $userStoreId;
+        $tiendaIdInput = $myStoreId;
 
         // 2. Si es una edición, verificar primero si ese producto realmente le pertenece
         if ($id > 0) {
@@ -49,14 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $check->execute([$id]);
             $ownerStoreId = (int) $check->fetchColumn();
 
-            if ($ownerStoreId !== $userStoreId) {
+            if ($ownerStoreId !== $myStoreId) {
                 // Intento de alteración de datos ajenos
                 header("Location: admin_productos.php?error=no_autorizado");
                 exit;
             }
         }
     }
-
 
     $stmt = $pdo->prepare("
         UPDATE productos
@@ -88,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'url' => trim((string) ($_POST['pro_url'] ?? '')),
         'stock' => (int) ($_POST['pro_en_stock'] ?? 0),
         'activo' => (int) ($_POST['pro_activo'] ?? 1),
-        'tienda' => (int) ($_POST['tiendas_idtiendas'] ?? 0),
+        'tienda' => $tiendaIdInput, // MODIFICADO: Ahora usa correctamente la variable validada y blindada
         'categoria' => ($_POST['categorias_idcategorias'] ?? '') !== ''
             ? (int) $_POST['categorias_idcategorias']
             : null,
@@ -96,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     $redirectParams = [
         'q' => $_POST['return_q'] ?? '',
-        'tienda' => $_POST['return_tienda'] ?? 0,
+        'tienda' => $isEmpresa ? 0 : ($_POST['return_tienda'] ?? 0),
         'categoria' => $_POST['return_categoria'] ?? 0,
         'estado' => $_POST['return_estado'] ?? '',
         'page' => $_POST['return_page'] ?? 1,
@@ -109,13 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
+// LOGICA DE FILTRADO Y BUSQUEDA (CRAWLING / VISUALIZACIÓN)
 $q = trim($_GET['q'] ?? '');
-if (is_empresa()) {
-    $user = current_user();
-    $tiendaId = (int)($user['tiendas_idtiendas'] ?? 0);
-} else {
-    $tiendaId = (int) ($_GET['tienda'] ?? 0);
-}
+$tiendaId = $isEmpresa ? $myStoreId : (int)($_GET['tienda'] ?? 0);
 $categoriaId = (int) ($_GET['categoria'] ?? 0);
 $estado = $_GET['estado'] ?? '';
 
@@ -123,7 +118,6 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 50;
 $offset = ($page - 1) * $perPage;
 
-// 1. Usamos un solo array consistente
 $whereClauses = [];
 $params = [];
 
@@ -151,10 +145,9 @@ if ($estado === 'activos') {
     $whereClauses[] = 'p.pro_activo = 0';
 }
 
-// Si no hay filtros, aplicamos un fallback seguro para evitar romper el WHERE
 $whereSql = $whereClauses ? implode(' AND ', $whereClauses) : '1=1';
 
-// Contamos el total para la paginación
+// Contamos los registros totales
 $countSql = "SELECT COUNT(*) FROM productos p WHERE {$whereSql}";
 $countStmt = $pdo->prepare($countSql);
 $countStmt->execute($params);
@@ -166,7 +159,7 @@ if ($page > $totalPages) {
     $offset = ($page - 1) * $perPage;
 }
 
-// Consulta principal
+// Consulta principal simplificada (Se eliminó la duplicación crítica de código)
 $sql = "
     SELECT
         p.*,
@@ -182,18 +175,6 @@ $sql = "
 
 $stmt = $pdo->prepare($sql);
 
-// 2. Vinculamos los filtros dinámicos
-foreach ($params as $key => $val) {
-    $stmt->bindValue(':' . $key, $val);
-}
-
-// 3. Forzamos LIMIT y OFFSET como enteros estrictos por compatibilidad PDO
-$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$products = $stmt->fetchAll();
-$stmt = $pdo->prepare($sql);
-
 foreach ($params as $key => $value) {
     if (is_int($value)) {
         $stmt->bindValue(':' . $key, $value, PDO::PARAM_INT);
@@ -205,9 +186,9 @@ foreach ($params as $key => $value) {
 $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
-
 $products = $stmt->fetchAll();
 
+// Listados auxiliares para combos
 $stores = $pdo->query('SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_nombre ASC')->fetchAll();
 $categories = $pdo->query('SELECT idcategorias, cat_nombre FROM categorias ORDER BY cat_nombre ASC')->fetchAll();
 
@@ -232,7 +213,9 @@ render_head('Administrar productos');
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
           <div class="admin-kicker mb-2">Productos</div>
-          <h1 class="display-6 fw-bold mb-3">Gestión visual de productos</h1>
+          <h1 class="display-6 fw-bold mb-3">
+            <?= $isEmpresa ? 'Mis productos en catálogo' : 'Gestión visual de productos' ?>
+          </h1>
           <p class="text-body-secondary mb-0">
             Buscá, filtrá y editá productos desde esta sección.
           </p>
@@ -253,9 +236,17 @@ render_head('Administrar productos');
       </div>
     <?php endif; ?>
 
+    <?php if (isset($_GET['error']) && $_GET['error'] === 'no_autorizado'): ?>
+      <div class="container mb-3">
+        <div class="alert alert-danger rounded-4 shadow-sm border-0">
+          Error: No tenés permisos para modificar este producto.
+        </div>
+      </div>
+    <?php endif; ?>
+
     <div class="admin-panel p-4 mb-4 admin-filter-bar">
       <form class="row g-3" method="get">
-        <div class="col-lg-4">
+        <div class="<?= $isEmpresa ? 'col-lg-6' : 'col-lg-4' ?>">
           <input
             type="text"
             name="q"
@@ -265,18 +256,20 @@ render_head('Administrar productos');
           >
         </div>
 
-        <div class="col-sm-6 col-lg-3">
-          <select name="tienda" class="form-select">
-            <option value="0">Todas las tiendas</option>
-            <?php foreach ($stores as $store): ?>
-              <option value="<?= (int) $store['idtiendas'] ?>" <?= $tiendaId === (int) $store['idtiendas'] ? 'selected' : '' ?>>
-                <?= e($store['tie_nombre']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
+        <?php if (!$isEmpresa): ?>
+          <div class="col-sm-6 col-lg-3">
+            <select name="tienda" class="form-select">
+              <option value="0">Todas las tiendas</option>
+              <?php foreach ($stores as $store): ?>
+                <option value="<?= (int) $store['idtiendas'] ?>" <?= $tiendaId === (int) $store['idtiendas'] ? 'selected' : '' ?>>
+                  <?= e($store['tie_nombre']) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        <?php endif; ?>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-sm-6 <?= $isEmpresa ? 'col-lg-4' : 'col-lg-3' ?>">
           <select name="categoria" class="form-select">
             <option value="0">Todas las categorías</option>
             <?php foreach ($categories as $cat): ?>
@@ -486,13 +479,18 @@ render_head('Administrar productos');
 
                     <div class="col-md-4">
                       <label class="form-label">Tienda</label>
-                      <select name="tiendas_idtiendas" class="form-select" required>
-                        <?php foreach ($stores as $store): ?>
-                          <option value="<?= (int) $store['idtiendas'] ?>" <?= (int) $product['tiendas_idtiendas'] === (int) $store['idtiendas'] ? 'selected' : '' ?>>
-                            <?= e($store['tie_nombre']) ?>
-                          </option>
-                        <?php endforeach; ?>
-                      </select>
+                      <?php if ($isEmpresa): ?>
+                        <input type="text" class="form-control" value="<?= e($product['tie_nombre']) ?>" readonly>
+                        <input type="hidden" name="tiendas_idtiendas" value="<?= (int) $myStoreId ?>">
+                      <?php else: ?>
+                        <select name="tiendas_idtiendas" class="form-select" required>
+                          <?php foreach ($stores as $store): ?>
+                            <option value="<?= (int) $store['idtiendas'] ?>" <?= (int) $product['tiendas_idtiendas'] === (int) $store['idtiendas'] ? 'selected' : '' ?>>
+                              <?= e($store['tie_nombre']) ?>
+                            </option>
+                          <?php endforeach; ?>
+                        </select>
+                      <?php endif; ?>
                     </div>
 
                     <div class="col-md-4">
