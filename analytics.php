@@ -191,7 +191,7 @@ foreach ($catDistribution as $cd) {
 $topFavorites = [];
 if ($hasFavoritos) {
     $sqlFav = "
-        SELECT p.pro_nombre, COUNT(f.idfavorito) as total_favs
+        SELECT p.pro_nombre, COUNT(*) as total_favs
         FROM favoritos f
         INNER JOIN productos p ON p.idproductos = f.productos_idproductos
         WHERE 1=1
