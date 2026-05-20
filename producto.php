@@ -698,7 +698,7 @@ render_navbar('producto');
 
     <div class="row g-4 align-items-start">
       <div class="col-lg-5">
-        <div class="detail-card glass-card p-3 p-lg-4 sticky-lg-top detail-sticky">
+        <div class="detail-card glass-card p-3 p-lg-4 mb-4">
           <div class="product-gallery-main" id="productGallery">
             <?php foreach ($galleryImages as $idx => $img): ?>
               <div class="product-gallery-slide <?= $idx === 0 ? 'active' : '' ?>">
@@ -729,6 +729,69 @@ render_navbar('producto');
             </div>
           <?php endif; ?>
         </div>
+
+        <div class="detail-card glass-card p-4 mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h2 class="h4 fw-bold mb-0">Histórico de precios</h2>
+            <span class="text-body-secondary small"><?= (int) ($historyStats['count'] ?? 0) ?> registro(s)</span>
+          </div>
+
+          <?php if (!empty($historyChartDatasets)): ?>
+            <div class="row g-2 mb-4">
+              <div class="col-4">
+                <div class="history-stat-card h-100 p-2 text-center">
+                  <div class="history-stat-label mb-1" style="font-size: 0.75rem;">Mínimo</div>
+                  <div class="history-stat-value" style="font-size: 0.95rem;"><?= $historyStats['min'] !== null ? gs($historyStats['min']) : 'Sin datos' ?></div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="history-stat-card h-100 p-2 text-center">
+                  <div class="history-stat-label mb-1" style="font-size: 0.75rem;">Máximo</div>
+                  <div class="history-stat-value" style="font-size: 0.95rem;"><?= $historyStats['max'] !== null ? gs($historyStats['max']) : 'Sin datos' ?></div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="history-stat-card h-100 p-2 text-center">
+                  <div class="history-stat-label mb-1" style="font-size: 0.75rem;">Último</div>
+                  <div class="history-stat-value" style="font-size: 0.95rem;"><?= $historyStats['latest'] !== null ? gs($historyStats['latest']) : 'Sin datos' ?></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="history-chart-wrap mb-4" style="min-height: 260px;">
+              <canvas id="priceHistoryChart" class="history-chart-canvas" style="height: 260px !important;"></canvas>
+            </div>
+
+            <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+              <table class="table align-middle mb-0 custom-table table-sm" style="font-size: 0.85rem;">
+                <thead>
+                  <tr>
+                    <th>Mes</th>
+                    <th>Tienda</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($history as $entry): ?>
+                    <tr>
+                      <td><?= e($entry['month_label'] ?? date('m/Y', strtotime((string) $entry['his_fecha']))) ?></td>
+                      <td><?= e($entry['tie_nombre'] ?? 'Sin tienda') ?></td>
+                      <td><?= gs($entry['his_precio']) ?></td>
+                      <td>
+                        <span class="mini-badge <?= e(stock_badge_class($entry['his_en_stock'])) ?>">
+                          <?= e(stock_label($entry['his_en_stock'])) ?>
+                        </span>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php else: ?>
+            <div class="empty-state">No hay historial de precio para este producto todavía.</div>
+          <?php endif; ?>
+        </div>
       </div>
 
       <div class="col-lg-7">
@@ -753,7 +816,6 @@ render_navbar('producto');
               <div class="price-now detail-price"><?= $minPrice !== null ? gs($minPrice) : 'Consultar' ?></div>
             </div>
             <div class="text-body-secondary small text-md-end">
-
               <div>Actualizado: <?= e(date('d/m/Y H:i', strtotime((string) $product['pro_fecha_scraping']))) ?></div>
             </div>
           </div>
@@ -984,72 +1046,6 @@ render_navbar('producto');
           <?php endif; ?>
         </div>
 
-        <div class="detail-card glass-card p-4 mb-4">
-          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h2 class="h4 fw-bold mb-0">Histórico mensual de precios</h2>
-            <span class="text-body-secondary small"><?= (int) ($historyStats['count'] ?? 0) ?> registro(s)</span>
-          </div>
-
-          <?php if (!empty($historyChartDatasets)): ?>
-            <div class="row g-3 mb-4">
-              <div class="col-md-4">
-                <div class="history-stat-card h-100">
-                  <div class="history-stat-label mb-1">Precio más bajo</div>
-                  <div class="history-stat-value"><?= $historyStats['min'] !== null ? gs($historyStats['min']) : 'Sin datos' ?></div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="history-stat-card h-100">
-                  <div class="history-stat-label mb-1">Precio más alto</div>
-                  <div class="history-stat-value"><?= $historyStats['max'] !== null ? gs($historyStats['max']) : 'Sin datos' ?></div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="history-stat-card h-100">
-                  <div class="history-stat-label mb-1">Último precio registrado</div>
-                  <div class="history-stat-value"><?= $historyStats['latest'] !== null ? gs($historyStats['latest']) : 'Sin datos' ?></div>
-                  <?php if (!empty($historyStats['latestDate'])): ?>
-                    <div class="small text-body-secondary mt-1"><?= e(date('d/m/Y H:i', strtotime((string) $historyStats['latestDate']))) ?></div>
-                  <?php endif; ?>
-                </div>
-              </div>
-            </div>
-
-            <div class="history-chart-wrap mb-4">
-              <canvas id="priceHistoryChart" class="history-chart-canvas"></canvas>
-            </div>
-
-            <div class="table-responsive">
-              <table class="table align-middle mb-0 custom-table">
-                <thead>
-                  <tr>
-                    <th>Mes</th>
-                    <th>Tienda</th>
-                    <th>Precio</th>
-                    <th>Stock</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <?php foreach ($history as $entry): ?>
-                    <tr>
-                      <td><?= e($entry['month_label'] ?? date('m/Y', strtotime((string) $entry['his_fecha']))) ?></td>
-                      <td><?= e($entry['tie_nombre'] ?? 'Sin tienda') ?></td>
-                      <td><?= gs($entry['his_precio']) ?></td>
-                      <td>
-                        <span class="mini-badge <?= e(stock_badge_class($entry['his_en_stock'])) ?>">
-                          <?= e(stock_label($entry['his_en_stock'])) ?>
-                        </span>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          <?php else: ?>
-            <div class="empty-state">No hay historial de precio para este producto todavía.</div>
-          <?php endif; ?>
-        </div>
-
         <div class="detail-card glass-card p-4">
           <h2 class="h4 fw-bold mb-3">Más productos de esta tienda</h2>
           <div class="row g-3">
@@ -1246,8 +1242,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const historyCanvas = document.getElementById('priceHistoryChart');
   if (historyCanvas && window.priceHistoryDatasets && window.priceHistoryDatasets.length && window.Chart) {
+    
+    // Adaptación estética de datasets para el gráfico de líneas suavizadas
+    window.priceHistoryDatasets.forEach(dataset => {
+      dataset.type = 'line';
+      dataset.tension = 0.35;                   // Curvas suaves y armoniosas
+      dataset.borderWidth = 3;                  // Grosor definido
+      dataset.pointRadius = 4;                  // Puntos claros
+      dataset.pointHoverRadius = 6;             // Animación al pasar el puntero
+      dataset.pointBackgroundColor = '#ffffff'; // Efecto "hollow" impecable
+      dataset.spanGaps = true;
+    });
+
     new Chart(historyCanvas, {
-      type: 'bar',
+      type: 'line', // Cambiado de 'bar' a 'line'
       data: {
         labels: Array.isArray(window.priceHistoryLabels) ? window.priceHistoryLabels : [],
         datasets: window.priceHistoryDatasets
@@ -1263,15 +1271,19 @@ document.addEventListener('DOMContentLoaded', function () {
           x: {
             ticks: {
               maxRotation: 0,
-              autoSkip: true
+              autoSkip: true,
+              color: 'rgba(255, 255, 255, 0.65)',
+              font: { family: 'system-ui', size: 10 }
             },
             grid: {
-              display: false
+              display: false // Remueve líneas verticales redundantes
             }
           },
           y: {
             beginAtZero: false,
             ticks: {
+              color: 'rgba(255, 255, 255, 0.65)',
+              font: { family: 'system-ui', size: 10 },
               callback: function(value) {
                 try {
                   return 'Gs. ' + Number(value).toLocaleString('es-PY');
@@ -1279,18 +1291,34 @@ document.addEventListener('DOMContentLoaded', function () {
                   return value;
                 }
               }
+            },
+            grid: {
+              color: 'rgba(255, 255, 255, 0.06)', // Cuadrícula horizontal tenue
+              borderDash: [4, 4]                  // Estilo punteado elegante
             }
           }
         },
         plugins: {
           legend: {
-            position: 'bottom'
+            position: 'bottom',
+            labels: {
+              color: 'rgba(255, 255, 255, 0.8)',
+              font: { family: 'system-ui', size: 11 },
+              usePointStyle: true, // Indicadores circulares en lugar de rectángulos
+              boxWidth: 7,
+              padding: 12
+            }
           },
           tooltip: {
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: 'rgba(15, 23, 42, 0.96)', // Tooltip flotante oscuro estilizado
+            titleFont: { weight: 'bold', family: 'system-ui', size: 12 },
+            bodyFont: { family: 'system-ui', size: 12 },
             callbacks: {
               label: function(context) {
                 const value = context.parsed.y;
-                return context.dataset.label + ': Gs. ' + Number(value).toLocaleString('es-PY');
+                return ' ' + context.dataset.label + ': Gs. ' + Number(value).toLocaleString('es-PY');
               }
             }
           }

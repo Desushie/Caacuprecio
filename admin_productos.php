@@ -416,122 +416,126 @@ render_head('Administrar productos');
   <?php foreach ($products as $product): ?>
     <div class="modal fade admin-modal" id="productModal<?= (int) $product['idproductos'] ?>" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-          <form method="post">
-            <input type="hidden" name="action" value="save_product">
-            <input type="hidden" name="idproductos" value="<?= (int) $product['idproductos'] ?>">
-            <input type="hidden" name="return_q" value="<?= e($q) ?>">
-            <input type="hidden" name="return_tienda" value="<?= $isEmpresa ? 0 : (int)($_GET['tienda'] ?? 0) ?>">
-            <input type="hidden" name="return_categoria" value="<?= (int) $categoriaId ?>">
-            <input type="hidden" name="return_estado" value="<?= e($estado) ?>">
-            <input type="hidden" name="return_page" value="<?= (int) $page ?>">
+        
+        <form method="post" class="modal-content">
+          <input type="hidden" name="action" value="save_product">
+          <input type="hidden" name="idproductos" value="<?= (int) $product['idproductos'] ?>">
+          <input type="hidden" name="return_q" value="<?= e($q) ?>">
+          <input type="hidden" name="return_tienda" value="<?= $isEmpresa ? 0 : (int)($_GET['tienda'] ?? 0) ?>">
+          <input type="hidden" name="return_categoria" value="<?= (int) $categoriaId ?>">
+          <input type="hidden" name="return_estado" value="<?= e($estado) ?>">
+          <input type="hidden" name="return_page" value="<?= (int) $page ?>">
 
-            <div class="modal-header">
-              <div>
-                <div class="admin-kicker mb-1">Editar producto</div>
-                <h5 class="modal-title mb-0"><?= e($product['pro_nombre']) ?></h5>
-              </div>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          <div class="modal-header">
+            <div>
+              <div class="admin-kicker mb-1">Editar producto</div>
+              <h5 class="modal-title mb-0"><?= e($product['pro_nombre']) ?></h5>
             </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
 
-            <div class="modal-body">
-              <div class="row g-4">
-                <div class="col-lg-8">
-                  <div class="row g-3">
-                    <div class="col-12">
-                      <label class="form-label">Nombre</label>
-                      <input type="text" name="pro_nombre" class="form-control" value="<?= e($product['pro_nombre']) ?>" required>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label">Marca</label>
-                      <input type="text" name="pro_marca" class="form-control" value="<?= e($product['pro_marca']) ?>">
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label">Imagen (URL)</label>
-                      <input type="text" name="pro_imagen" class="form-control js-image-input" value="<?= e($product['pro_imagen']) ?>">
-                    </div>
-                    <div class="col-12">
-                      <label class="form-label">Descripción</label>
-                      <textarea name="pro_descripcion" class="form-control" rows="5"><?= e($product['pro_descripcion']) ?></textarea>
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">Precio</label>
-                      <input type="number" step="0.01" name="pro_precio" class="form-control" value="<?= e((string) $product['pro_precio']) ?>" required>
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">Precio anterior</label>
-                      <input type="number" step="0.01" name="pro_precio_anterior" class="form-control" value="<?= e((string) $product['pro_precio_anterior']) ?>">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label">URL del producto</label>
-                      <input type="text" name="pro_url" class="form-control" value="<?= e($product['pro_url']) ?>">
-                    </div>
+          <div class="modal-body">
+            <div class="row g-4">
+              
+              <div class="col-12 col-lg-8">
+                <div class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label">Nombre</label>
+                    <input type="text" name="pro_nombre" class="form-control" value="<?= e($product['pro_nombre']) ?>" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Marca</label>
+                    <input type="text" name="pro_marca" class="form-control" value="<?= e($product['pro_marca']) ?>">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Imagen (URL)</label>
+                    <input type="text" name="pro_imagen" class="form-control js-image-input" value="<?= e($product['pro_imagen']) ?>">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Descripción</label>
+                    <textarea name="pro_descripcion" class="form-control" rows="4"><?= e($product['pro_descripcion']) ?></textarea>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Precio</label>
+                    <input type="number" step="0.01" name="pro_precio" class="form-control" value="<?= e((string) $product['pro_precio']) ?>" required>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Precio anterior</label>
+                    <input type="number" step="0.01" name="pro_precio_anterior" class="form-control" value="<?= e((string) $product['pro_precio_anterior']) ?>">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">URL del producto</label>
+                    <input type="text" name="pro_url" class="form-control" value="<?= e($product['pro_url']) ?>">
+                  </div>
 
-                    <div class="col-md-4">
-                      <label class="form-label">Tienda</label>
-                      <?php if ($isEmpresa): ?>
-                        <input type="text" class="form-control" value="<?= e($product['tie_nombre']) ?>" readonly>
-                        <input type="hidden" name="tiendas_idtiendas" value="<?= (int) $myStoreId ?>">
-                      <?php else: ?>
-                        <select name="tiendas_idtiendas" class="form-select" required>
-                          <?php foreach ($stores as $store): ?>
-                            <option value="<?= (int) $store['idtiendas'] ?>" <?= (int) $product['tiendas_idtiendas'] === (int) $store['idtiendas'] ? 'selected' : '' ?>>
-                              <?= e($store['tie_nombre']) ?>
-                            </option>
-                          <?php endforeach; ?>
-                        </select>
-                      <?php endif; ?>
-                    </div>
-
-                    <div class="col-md-4">
-                      <label class="form-label">Categoría</label>
-                      <select name="categorias_idcategorias" class="form-select">
-                        <option value="">Sin categoría</option>
-                        <?php foreach ($categories as $cat): ?>
-                          <option value="<?= (int) $cat['idcategorias'] ?>" <?= (int) $product['categorias_idcategorias'] === (int) $cat['idcategorias'] ? 'selected' : '' ?>>
-                            <?= e($cat['cat_nombre']) ?>
+                  <div class="col-md-4">
+                    <label class="form-label">Tienda</label>
+                    <?php if ($isEmpresa): ?>
+                      <input type="text" class="form-control" value="<?= e($product['tie_nombre']) ?>" readonly>
+                      <input type="hidden" name="tiendas_idtiendas" value="<?= (int) $myStoreId ?>">
+                    <?php else: ?>
+                      <select name="tiendas_idtiendas" class="form-select" required>
+                        <?php foreach ($stores as $store): ?>
+                          <option value="<?= (int) $store['idtiendas'] ?>" <?= (int) $product['tiendas_idtiendas'] === (int) $store['idtiendas'] ? 'selected' : '' ?>>
+                            <?= e($store['tie_nombre']) ?>
                           </option>
                         <?php endforeach; ?>
                       </select>
-                    </div>
-                    <div class="col-md-2">
-                      <label class="form-label">Stock</label>
-                      <select name="pro_en_stock" class="form-select">
-                        <option value="1" <?= (int) $product['pro_en_stock'] === 1 ? 'selected' : '' ?>>Sí</option>
-                        <option value="0" <?= (int) $product['pro_en_stock'] === 0 ? 'selected' : '' ?>>No</option>
-                      </select>
-                    </div>
-                    <div class="col-md-2">
-                      <label class="form-label">Activo</label>
-                      <select name="pro_activo" class="form-select">
-                        <option value="1" <?= (int) $product['pro_activo'] === 1 ? 'selected' : '' ?>>Sí</option>
-                        <option value="0" <?= (int) $product['pro_activo'] === 0 ? 'selected' : '' ?>>No</option>
-                      </select>
-                    </div>
+                    <?php endif; ?>
                   </div>
-                </div>
 
-                <div class="col-lg-4">
-                  <div class="preview-box mb-3">
-                    <img
-                      src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>"
-                      alt="<?= e($product['pro_nombre']) ?>"
-                      class="js-image-preview"
-                    >
+                  <div class="col-md-4">
+                    <label class="form-label">Categoría</label>
+                    <select name="categorias_idcategorias" class="form-select">
+                      <option value="">Sin categoría</option>
+                      <?php foreach ($categories as $cat): ?>
+                        <option value="<?= (int) $cat['idcategorias'] ?>" <?= (int) $product['categorias_idcategorias'] === (int) $cat['idcategorias'] ? 'selected' : '' ?>>
+                          <?= e($cat['cat_nombre']) ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
                   </div>
-                  <div class="small text-body-secondary">
-                    Usá una URL de imagen válida para previsualizar cómo quedará la ficha del producto.
+
+                  <div class="col-6 col-md-2">
+                    <label class="form-label">Stock</label>
+                    <select name="pro_en_stock" class="form-select">
+                      <option value="1" <?= (int) $product['pro_en_stock'] === 1 ? 'selected' : '' ?>>Sí</option>
+                      <option value="0" <?= (int) $product['pro_en_stock'] === 0 ? 'selected' : '' ?>>No</option>
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label">Activo</label>
+                    <select name="pro_activo" class="form-select">
+                      <option value="1" <?= (int) $product['pro_activo'] === 1 ? 'selected' : '' ?>>Sí</option>
+                      <option value="0" <?= (int) $product['pro_activo'] === 0 ? 'selected' : '' ?>>No</option>
+                    </select>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
-              <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar cambios</button>
+              <div class="col-12 col-lg-4 text-center">
+                <div class="preview-box mb-2" style="max-height: 240px; overflow: hidden; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.15); padding: 10px;">
+                  <img
+                    src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>"
+                    alt="<?= e($product['pro_nombre']) ?>"
+                    class="js-image-preview img-fluid"
+                    style="max-height: 220px; object-fit: contain;"
+                  >
+                </div>
+                <div class="small text-body-secondary">
+                  Vista previa de la ficha actual.
+                </div>
+              </div>
+
             </div>
-          </form>
-        </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar cambios</button>
+          </div>
+        </form>
+
       </div>
     </div>
   <?php endforeach; ?>

@@ -1,15 +1,10 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-// Si ya está logueado, lo mandamos al inicio
-if (is_logged_in()) {
-    header('Location: index.php');
-    exit;
-}
-
 $pdo = db();
 $msg = '';
 $msgType = '';
+$emailPrellenado = $_GET['email'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -131,7 +126,7 @@ render_navbar('login');
       <form method="post" action="olvide_password.php" class="row g-3">
         <div class="col-12">
           <label for="email" class="form-label">Correo electrónico</label>
-          <input type="email" class="form-control rounded-4" id="email" name="email" required>
+          <input type="email" class="form-control rounded-4" id="email" name="email" required value="<?= e($emailPrellenado) ?>">
         </div>
         <div class="col-12 d-grid mt-4">
           <button class="btn btn-primary btn-lg rounded-4" type="submit">
@@ -141,7 +136,7 @@ render_navbar('login');
       </form>
       
       <div class="text-center mt-4">
-        <a href="login.php" class="text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Volver al inicio de sesión</a>
+        <a href="login.php" class="text-decoration-none small"><i class="bi bi-arrow-left me-1"></i> Volver al Inicio</a>
       </div>
     </div>
 
