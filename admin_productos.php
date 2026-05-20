@@ -7,6 +7,11 @@ $user = current_user();
 $isEmpresa = is_empresa();
 $myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
+$tiendaFilter = (int)($_GET['tienda'] ?? 0);
+if ($isEmpresa) {
+    $tiendaFilter = $myStoreId;
+}
+
 function build_admin_productos_url(array $overrides = []): string {
     $params = [
         'q' => $_GET['q'] ?? '',
@@ -28,25 +33,22 @@ function build_admin_productos_url(array $overrides = []): string {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_product') {
-    $id = (int) ($_POST['idproductos'] ?? 0);
-    $tiendaIdInput = (int) ($_POST['tiendas_idtiendas'] ?? 0);
-    if (is_empresa()) {
-            $user = current_user();
-            $userStoreId = (int)($user['tiendas_idtiendas'] ?? 0);
-            
-            // Forzamos que el producto pertenezca a su tienda asignada
-            $tiendaIdInput = $userStoreId;
+    $id = (int)($_POST['idproductos'] ?? 0);
+    $tiendaIdInput = (int)($_POST['tiendas_idtiendas'] ?? 0);
 
-            // Si está editando un producto existente, verificamos que realmente le pertenezca
-            if ($id > 0) {
-                $check = $pdo->prepare("SELECT tiendas_idtiendas FROM productos WHERE idproductos = :id");
-                $check->execute(['id' => $id]);
-                $prodStore = (int)$check->fetchColumn();
-                if ($prodStore !== $userStoreId) {
-                    die("Error: No tienes permisos para modificar este producto.");
-                }
+    if ($isEmpresa) {
+        // Blindaje absoluto: Una empresa no puede guardar productos asignándolos a otro ID
+        $tiendaIdInput = $myStoreId;
+
+        // Si está editando, verificar que el producto realmente le pertenezca
+        if ($id > 0) {
+            $check = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE idproductos = ? AND tiendas_idtiendas = ?");
+            $check->execute([$id, $myStoreId]);
+            if ((int)$check->fetchColumn() === 0) {
+                die("Operación denegada. Este producto no pertenece a tu comercio.");
             }
         }
+    }
 
 
     $stmt = $pdo->prepare("
