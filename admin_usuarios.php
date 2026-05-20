@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
-require_admin(); // Solo administradores globales pueden gestionar usuarios
+require_admin(); 
 
 $pdo = db();
 $error = '';
@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($id > 0) {
                     // Actualizar usuario existente
                     $stmt = $pdo->prepare("
-                        UPDATE usuarios 
+                        UPDATE usuario 
                         SET usu_nombre = :nombre, 
                             usu_email = :email, 
                             usu_tipo = :tipo, 
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'No puedes eliminar tu propia cuenta de administrador en sesión.';
         } else {
             try {
-                $stmt = $pdo->prepare("DELETE FROM usuarios WHERE idusuarios = :id");
+                $stmt = $pdo->prepare("DELETE FROM usuario WHERE idusuarios = :id");
                 $stmt->execute(['id' => $id]);
                 $success = 'Usuario eliminado de forma permanente.';
             } catch (PDOException $e) {
@@ -72,14 +72,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Traer todos los usuarios con el nombre de su tienda correspondiente si tienen
 $usuarios = $pdo->query("
     SELECT u.*, t.tie_nombre 
-    FROM usuarios u 
+    FROM usuario u 
     LEFT JOIN tiendas t ON u.tiendas_idtiendas = t.idtiendas 
     ORDER BY u.idusuarios DESC
 ")->fetchAll();
 
 // Traer la lista de tiendas para mapear en los modales de edición
 $tiendas = $pdo->query("SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_nombre ASC")->fetchAll();
+
+render_head('Gestión de Usuarios');
 ?>
+<link rel="stylesheet" href="./css/admin.css">
+<?php render_navbar('admin'); ?>
 
 <section class="admin-shell">
   <div class="container py-4">
@@ -201,7 +205,7 @@ $tiendas = $pdo->query("SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_n
                                 <option value="<?= (int)$tienda['idtiendas'] ?>" <?= (int)$user['tiendas_idtiendas'] === (int)$tienda['idtiendas'] ? 'selected' : '' ?>>
                                   <?= e($tienda['tie_nombre']) ?>
                                 </option>
-                              <?php endphp; ?>
+                              <?php endforeach; ?>
                             </select>
                             <div class="small text-muted mt-1">El usuario solo podrá gestionar los productos y ver estadísticas de la tienda seleccionada.</div>
                           </div>
@@ -237,7 +241,6 @@ document.querySelectorAll('.js-role-select').forEach(function(selectEl) {
     const storeWrapper = document.querySelector('.js-store-wrapper-' + userId);
     if (!storeWrapper) return;
 
-    // Si el rol seleccionado es Empresa (valor "2"), mostramos el selector de tiendas
     if (this.value === "2") {
       storeWrapper.style.display = "block";
     } else {
