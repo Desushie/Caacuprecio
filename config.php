@@ -58,6 +58,22 @@ function require_admin(): void
     }
 }
 
+// Verifica si el usuario actual tiene el rol de Empresa (tipo 2)
+function is_empresa(): bool
+{
+    $user = current_user();
+    return isset($user['usu_tipo']) && (int)$user['usu_tipo'] === 2;
+}
+
+// Bloquea el acceso si el usuario no es Administrador ni Empresa
+function require_admin_or_empresa(): void
+{
+    if (!is_admin() && !is_empresa()) {
+        header('Location: index.php');
+        exit;
+    }
+}
+
 function image_url(?string $url, string $name = 'Producto'): string
 {
     $url = trim((string) $url);
