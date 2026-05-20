@@ -30,613 +30,372 @@ $recentSearches = [];
 $currentUserId = function_exists('current_user_id') ? current_user_id() : 0;
 
 if (!function_exists('cp_search_table_exists')) {
-    function cp_search_table_exists(PDO $pdo): bool
-    {
-        static $exists = null;
-
-        if ($exists !== null) {
-            return $exists;
-        }
-
+    function cp_search_table_exists(PDO $pdo, string $table): bool {
         try {
-            $stmt = $pdo->query("SHOW TABLES LIKE 'busquedas'");
-            $exists = (bool) $stmt->fetchColumn();
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table");
+            $stmt->execute([':table' => $table]);
+            return ((int) $stmt->fetchColumn()) > 0;
         } catch (Throwable $e) {
-            $exists = false;
-        }
-
-        return $exists;
-    }
-}
-
-if (!function_exists('cp_session_search_history')) {
-    function cp_session_search_history(?string $term = null, int $limit = 8): array
-    {
-        $history = $_SESSION['search_history'] ?? [];
-        $history = array_values(array_filter(array_map(
-            static fn ($value) => trim((string) $value),
-            is_array($history) ? $history : []
-        )));
-
-        if ($term !== null && $term !== '') {
-            $history = array_values(array_filter(
-                $history,
-                static fn ($value) => mb_strtolower($value) !== mb_strtolower($term)
-            ));
-            array_unshift($history, $term);
-        }
-
-        $history = array_slice($history, 0, $limit);
-        $_SESSION['search_history'] = $history;
-
-        return $history;
-    }
-}
-
-if (!function_exists('cp_record_search')) {
-    function cp_record_search(PDO $pdo, string $term, int $userId = 0): void
-    {
-        $term = trim($term);
-        if ($term === '' || !cp_search_table_exists($pdo)) {
-            return;
-        }
-
-        try {
-            $update = $pdo->prepare("
-                UPDATE busquedas
-                SET bus_total = COALESCE(bus_total, 0) + 1,
-                    bus_ultima_fecha = NOW(),
-                    bus_usuario_id = CASE
-                        WHEN (bus_usuario_id IS NULL OR bus_usuario_id = 0) AND :usuario_id > 0 THEN :usuario_id
-                        ELSE bus_usuario_id
-                    END
-                WHERE bus_normalizado = :termino
-                LIMIT 1
-            ");
-            $normalizedTerm = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $term) ?? $term), 'UTF-8');
-            $update->execute([
-                ':termino' => $normalizedTerm,
-                ':usuario_id' => $userId,
-            ]);
-
-            if ($update->rowCount() === 0) {
-                $insert = $pdo->prepare("
-                    INSERT INTO busquedas (bus_termino, bus_normalizado, bus_usuario_id, bus_total, bus_ultima_fecha)
-                    VALUES (:termino_visible, :termino, :usuario_id, 1, NOW())
-                ");
-                $insert->execute([
-                    ':termino_visible' => $term,
-                    ':termino' => $normalizedTerm,
-                    ':usuario_id' => $userId > 0 ? $userId : null,
-                ]);
-            }
-        } catch (Throwable $e) {
-            // Ignorar si la tabla todavía no existe o tiene otra estructura.
+            return false;
         }
     }
 }
 
-if (!function_exists('cp_get_popular_searches')) {
-    function cp_get_popular_searches(PDO $pdo, int $limit = 8): array
-    {
-        if (!cp_search_table_exists($pdo)) {
-            return [];
-        }
-
-        try {
-            $stmt = $pdo->prepare("
-                SELECT bus_termino AS termino, bus_total AS total, bus_ultima_fecha AS ultima_busqueda
-                FROM busquedas
-                WHERE bus_termino IS NOT NULL
-                  AND TRIM(bus_termino) <> ''
-                ORDER BY bus_total DESC, bus_ultima_fecha DESC
-                LIMIT :limit
-            ");
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-
-            return $stmt->fetchAll();
-        } catch (Throwable $e) {
-            return [];
-        }
-    }
+if (cp_search_table_exists($pdo, 'busquedas_populares')) {
+    $popularSearches = $pdo->query("SELECT termino, total FROM busquedas_populares ORDER BY total DESC LIMIT 5")->fetchAll();
+} elseif (cp_search_table_exists($pdo, 'busquedas')) {
+    $popularSearches = $pdo->query("SELECT bus_termino AS termino, COUNT(*) AS total FROM busquedas GROUP BY bus_termino ORDER BY total DESC LIMIT 5")->fetchAll();
 }
 
-
-if (!function_exists('cp_clear_session_search_history')) {
-    function cp_clear_session_search_history(): void
-    {
-        unset($_SESSION['search_history']);
-    }
-}
-
-if (!function_exists('cp_redirect_without_clear_history')) {
-    function cp_redirect_without_clear_history(string $fallback = 'buscar.php'): void
-    {
-        header('Location: ' . $fallback);
-        exit;
-    }
-}
-if (isset($_GET['clear_history']) && (string) $_GET['clear_history'] === '1') {
-    cp_clear_session_search_history();
-    cp_redirect_without_clear_history('buscar.php');
-}
-
-if ($q !== '') {
-    $recentSearches = cp_session_search_history($q, 8);
-    cp_record_search($pdo, $q, $currentUserId);
+if (function_exists('get_recent_searches')) {
+    $recentSearches = get_recent_searches();
 } else {
-    $recentSearches = cp_session_search_history(null, 8);
+    $recentSearches = $_SESSION['recent_searches'] ?? [];
 }
 
-$popularSearches = cp_get_popular_searches($pdo, 8);
+if (isset($_GET['clear_history']) && $_GET['clear_history'] === '1') {
+    if (function_exists('clear_recent_searches')) {
+        clear_recent_searches();
+    } else {
+        $_SESSION['recent_searches'] = [];
+    }
+    header('Location: buscar.php' . ($q !== '' ? '?q=' . urlencode($q) : ''));
+    exit;
+}
 
-$marcas = $pdo->query("
-    SELECT DISTINCT pro_marca
-    FROM productos
-    WHERE pro_activo = 1
-      AND pro_marca IS NOT NULL
-      AND TRIM(pro_marca) <> ''
-    ORDER BY pro_marca ASC
-")->fetchAll();
+if ($q !== '' && function_exists('track_search_term')) {
+    track_search_term($q);
+}
 
-/* =========================
-   WHERE DINÁMICO
-   ========================= */
+// CONSTRUCCIÓN DE LA CONSULTA CON FILTROS
 $where = ['p.pro_activo = 1'];
 $params = [];
 
 if ($q !== '') {
-    $where[] = '(
-        p.pro_nombre LIKE :q_nombre
-        OR p.pro_descripcion LIKE :q_descripcion
-        OR p.pro_marca LIKE :q_marca
-        OR t.tie_nombre LIKE :q_tienda
-        OR c.cat_nombre LIKE :q_categoria
-        OR COALESCE(NULLIF(TRIM(p.pro_grupo), ""), p.pro_nombre) LIKE :q_grupo
-    )';
-
-    $likeQ = '%' . $q . '%';
-    $params[':q_nombre'] = $likeQ;
-    $params[':q_descripcion'] = $likeQ;
-    $params[':q_marca'] = $likeQ;
-    $params[':q_tienda'] = $likeQ;
-    $params[':q_categoria'] = $likeQ;
-    $params[':q_grupo'] = $likeQ;
+    $where[] = '(p.pro_nombre LIKE :q OR p.pro_descripcion LIKE :q OR p.pro_marca LIKE :q OR p.pro_modelo LIKE :q)';
+    $params[':q'] = '%' . $q . '%';
 }
-
 if ($categoriaId > 0) {
     $where[] = 'p.categorias_idcategorias = :categoria';
     $params[':categoria'] = $categoriaId;
 }
-
 if ($tiendaId > 0) {
     $where[] = 'p.tiendas_idtiendas = :tienda';
     $params[':tienda'] = $tiendaId;
 }
-
 if ($marca !== '') {
-    $where[] = 'p.pro_marca = :marca_filtro';
-    $params[':marca_filtro'] = $marca;
+    $where[] = 'p.pro_marca = :marca';
+    $params[':marca'] = $marca;
 }
-
-if ($precioMin !== '' && is_numeric($precioMin)) {
+if ($precioMin !== '') {
     $where[] = 'p.pro_precio >= :precio_min';
     $params[':precio_min'] = (float) $precioMin;
 }
-
-if ($precioMax !== '' && is_numeric($precioMax)) {
+if ($precioMax !== '') {
     $where[] = 'p.pro_precio <= :precio_max';
     $params[':precio_max'] = (float) $precioMax;
 }
 
 $whereSql = implode(' AND ', $where);
 
-/* =========================
-   CONTEO TOTAL AGRUPADO
-   ========================= */
-$countSql = "
-    SELECT COUNT(*)
-    FROM (
-        SELECT COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo
-        FROM productos p
-        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-        LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
-        WHERE {$whereSql}
-        GROUP BY COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre)
-    ) grouped
-";
+// Marcas disponibles para el filtro lateral
+$marcasStmt = $pdo->prepare("SELECT DISTINCT pro_marca FROM productos p WHERE $whereSql AND pro_marca IS NOT NULL AND pro_marca <> '' ORDER BY pro_marca ASC");
+$marcasStmt->execute($params);
+$marcasDisponibles = array_column($marcasStmt->fetchAll(), 'pro_marca');
 
-$countStmt = $pdo->prepare($countSql);
+$orderBy = 'p.pro_fecha_scraping DESC';
+if ($sort === 'precio_asc') {
+    $orderBy = 'p.pro_precio ASC';
+} elseif ($sort === 'precio_desc') {
+    $orderBy = 'p.pro_precio DESC';
+} elseif ($sort === 'nombre_asc') {
+    $orderBy = 'p.pro_nombre ASC';
+}
+
+$countStmt = $pdo->prepare("SELECT COUNT(*) FROM productos p WHERE $whereSql");
 $countStmt->execute($params);
-
 $totalProducts = (int) $countStmt->fetchColumn();
 $totalPages = max(1, (int) ceil($totalProducts / $perPage));
 $page = min($page, $totalPages);
-$offset = ($page - 1) * $perPage;
 
-/* =========================
-   ORDEN
-   ========================= */
-$orderBy = match ($sort) {
-    'precio_asc'  => 'precio_min ASC, total_ofertas DESC, nombre ASC',
-    'precio_desc' => 'precio_min DESC, total_ofertas DESC, nombre ASC',
-    'nombre_asc'  => 'nombre ASC',
-    'nombre_desc' => 'nombre DESC',
-    default       => 'precio_min ASC, total_ofertas DESC, nombre ASC',
+$productsStmt = $pdo->prepare("
+    SELECT p.*, t.tie_nombre, t.tie_logo, c.cat_nombre
+    FROM productos p
+    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+    LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+    WHERE $whereSql
+    ORDER BY $orderBy
+    LIMIT $perPage OFFSET $offset
+");
+foreach ($params as $key => $val) {
+    $productsStmt->bindValue($key, $val);
+}
+$productsStmt->execute();
+$products = $productsStmt->fetchAll();
+
+$buildUrl = function($targetPage) use ($q, $categoriaId, $tiendaId, $marca, $precioMin, $precioMax, $sort) {
+    return 'buscar.php?' . http_build_query([
+        'q' => $q,
+        'categoria' => $categoriaId,
+        'tienda' => $tiendaId,
+        'marca' => $marca,
+        'precio_min' => $precioMin,
+        'precio_max' => $precioMax,
+        'orden' => $sort,
+        'page' => $targetPage
+    ]);
 };
 
-/* =========================
-   CONSULTA PRODUCTOS AGRUPADOS
-   ========================= */
-$sql = "
-    SELECT
-        grupo,
-        MIN(idproductos) AS id_representante,
-        MIN(pro_nombre) AS nombre,
-        MAX(pro_marca) AS marca,
-        MIN(pro_precio) AS precio_min,
-        MAX(pro_imagen) AS imagen,
-        MAX(cat_nombre) AS cat_nombre,
-        SUM(CASE WHEN pro_en_stock = 1 THEN 1 ELSE 0 END) AS ofertas_stock,
-        COUNT(*) AS total_ofertas,
-        MAX(pro_fecha_scraping) AS pro_fecha_scraping
-    FROM (
-        SELECT
-            p.idproductos,
-            COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo,
-            p.pro_nombre,
-            p.pro_marca,
-            p.pro_precio,
-            p.pro_imagen,
-            p.pro_en_stock,
-            p.pro_fecha_scraping,
-            c.cat_nombre
-        FROM productos p
-        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-        LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
-        WHERE {$whereSql}
-    ) base
-    GROUP BY grupo
-    ORDER BY {$orderBy}
-    LIMIT :limit OFFSET :offset
-";
-
-$stmt = $pdo->prepare($sql);
-
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value);
-}
-$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-
-$products = $stmt->fetchAll();
-
-render_head('Buscar productos');
-render_navbar('home');
+render_head('Buscar Productos');
+render_navbar('buscar');
 ?>
+
+<div class="site-bg" aria-hidden="true">
+  <span class="bg-orb orb-1"></span>
+  <span class="bg-orb orb-2"></span>
+  <span class="bg-orb orb-3"></span>
+  <span class="bg-grid"></span>
+</div>
+
+<style>
+  .search-sticky-container {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    background: var(--bg-main);
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-soft);
+    transition: all 0.3s ease;
+  }
+</style>
 
 <div class="search-sticky-container">
   <div class="container">
-    <div
-      class="search-bar glass-card p-3 p-lg-3"
-      data-search-root
-      data-search-endpoint="buscar_api.php"
-      data-search-results-page="buscar.php"
-      data-search-history-endpoint="guardar_busqueda.php"
-      data-search-mode="pro"
-      data-search-context="home"
-      data-live-target="#results-live-results"
-      data-count-target="#results-live-count"
-      data-state-target="#results-live-state"
-    >
-      <form class="row g-2 align-items-center js-smart-search-form position-relative" method="get" action="buscar.php" autocomplete="off">
-        <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
-        <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
-        <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
-        <input type="hidden" name="precio_max" value="<?= e($precioMax) ?>" data-search-filter="precio_max">
-
-        <div class="col-lg-5 position-relative">
-          <label for="global-search-results" class="visually-hidden">Buscar productos</label>
-          <input
-            id="global-search-results"
-            type="text"
-            name="q"
-            class="form-control js-smart-search-input"
-            placeholder="Buscá por producto, marca, tienda o categoría"
-            value="<?= e($q) ?>"
-            autocomplete="off"
-            data-search-input
-            data-live-delay="320"
-            data-min-length="2"
-            aria-autocomplete="list"
-            aria-expanded="false"
-            aria-controls="global-search-results-suggestions"
-          >
-          <div
-            id="global-search-results-suggestions"
-            class="search-suggest-dropdown search-suggestions-panel"
-            data-search-dropdown
-            data-search-suggest
-            data-search-suggestions
-            role="listbox"
-            aria-label="Sugerencias de búsqueda"
-          ></div>
+    <form class="js-smart-search-form position-relative w-100 row g-2 align-items-center" action="buscar.php" method="GET">
+      
+      <div class="col-lg-5">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-body-secondary"><i class="bi bi-search"></i></span>
+          <input type="search" name="q" class="form-control border-start-0" placeholder="¿Qué estás buscando hoy?" value="<?= e($q) ?>" autocomplete="off">
         </div>
+      </div>
 
-        <div class="col-sm-6 col-lg-3">
-          <select name="categoria" class="form-select js-smart-search-category" data-search-category>
-            <option value="0">Todas las categorías</option>
-            <?php foreach ($categorias as $categoria): ?>
-              <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
-                <?= e($categoria['cat_nombre']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
+      <div class="col-sm-6 col-lg-3">
+        <select name="categoria" class="form-select">
+          <option value="0">Todas las categorías</option>
+          <?php foreach ($categorias as $cat): ?>
+            <option value="<?= (int) $cat['idcategorias'] ?>" <?= $categoriaId === (int) $cat['idcategorias'] ? 'selected' : '' ?>><?= e($cat['cat_nombre']) ?></option>
+          <?php endphp ?>
+        </select>
+      </div>
 
-        <div class="col-sm-6 col-lg-3">
-          <select name="orden" class="form-select" data-search-order data-search-sort>
-            <?php foreach (active_sort_options() as $value => $label): ?>
-              <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="col-lg-1 d-grid">
-          <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
-            <i class="bi bi-search"></i>
-          </button> 
-        </div>
+      <div class="col-sm-6 col-lg-3">
+        <select name="orden" class="form-select" data-search-order data-search-sort>
+          <?php foreach (active_sort_options() as $value => $label): ?>
+            <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
 
-        <?php if ($recentSearches || $popularSearches): ?>
-          <div class="col-12">
-            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2 pb-4">
-              <?php if ($recentSearches): ?>
-                <div class="search-chip-row">
-                  <span class="search-chip-label">
-                    <i class="bi bi-clock-history me-1"></i>Historial
-                  </span>
+      <div class="col-lg-1 d-grid">
+        <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
+          <i class="bi bi-search"></i>
+        </button> 
+      </div>
 
-                  <?php foreach ($recentSearches as $term): ?>
-                    <a
-                      class="search-chip"
-                      href="buscar.php?q=<?= rawurlencode($term) ?>"
-                      data-search-chip="history"
-                      data-search-term="<?= e($term) ?>"
-                    ><?= e($term) ?></a>
-                  <?php endforeach; ?>
+      <?php if ($recentSearches || $popularSearches): ?>
+        <div class="col-12">
+          <div class="search-discovery-stack d-flex flex-column gap-2 pt-2 pb-4">
+            <?php if ($recentSearches): ?>
+              <div class="search-chip-row">
+                <span class="search-chip-label">
+                  <i class="bi bi-clock-history me-1"></i>Historial
+                </span>
+                <?php foreach ($recentSearches as $term): ?>
+                  <a class="search-chip" href="buscar.php?q=<?= rawurlencode($term) ?>" data-search-chip="history" data-search-term="<?= e($term) ?>"><?= e($term) ?></a>
+                <?php endforeach; ?>
+                <a class="search-chip search-chip-clear search-chip-clear-danger" href="buscar.php?clear_history=1" title="Limpiar historial">
+                  <i class="bi bi-trash3 me-1"></i>Limpiar todo
+                </a>
+              </div>
+            <?php endif; ?>
 
-                  <a class="search-chip search-chip-clear search-chip-clear-danger"
-                    href="buscar.php?clear_history=1"
-                    title="Limpiar historial">
-                    <i class="bi bi-trash3 me-1"></i>Limpiar todo
+            <?php if ($popularSearches): ?>
+              <div class="search-chip-row">
+                <span class="search-chip-label"><i class="bi bi-fire me-1"></i>Más buscados</span>
+                <?php foreach ($popularSearches as $item): ?>
+                  <a class="search-chip search-chip-hot" href="buscar.php?q=<?= rawurlencode((string) $item['termino']) ?>" data-search-chip="popular" data-search-term="<?= e((string) $item['termino']) ?>">
+                    <?= e((string) $item['termino']) ?>
+                    <small class="search-chip-hot-count"><?= number_format((int) ($item['total'] ?? 0), 0, ',', '.') ?></small>
                   </a>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($popularSearches): ?>
-                <div class="search-chip-row">
-                  <span class="search-chip-label"><i class="bi bi-fire me-1"></i>Más buscados</span>
-                  <?php foreach ($popularSearches as $item): ?>
-                    <a
-                      class="search-chip search-chip-hot"
-                      href="buscar.php?q=<?= rawurlencode((string) $item['termino']) ?>"
-                      data-search-chip="popular"
-                      data-search-term="<?= e((string) $item['termino']) ?>"
-                    >
-                      <?= e((string) $item['termino']) ?>
-                      <small class="search-chip-hot-count"><?= number_format((int) ($item['total'] ?? 0), 0, ',', '.') ?></small>
-                    </a>
-                  <?php endforeach; ?>
-                </div>
-              <?php endif; ?>
-            </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
           </div>
-        <?php endif; ?>
-
-        <div class="position-absolute bottom-0" style="right: 8px; left: auto; z-index: 1030;">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
-          </button>
         </div>
-      </form>
-    </div>
+      <?php endif; ?>
+
+      <div class="position-absolute bottom-0" style="right: 10px !important; left: auto !important; bottom: 6px !important; z-index: 1030;">
+        <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+          <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
+        </button>
+      </div>
+
+    </form>
   </div>
 </div>
 
-<section class="page-section page-search-results py-5">
-  <div class="container">
+<section class="page-section py-5 position-relative">
+  <div class="container position-relative z-1">
     <div class="row g-4">
-
-      <aside class="col-lg-3">
-        <div class="glass-card p-4 search-filters-sidebar">
-          <h3 class="h5 fw-bold mb-3">Filtros</h3>
-
-          <form method="get" action="buscar.php" class="d-grid gap-3 js-sidebar-filter-form">
+      
+      <div class="col-lg-3">
+        <div class="filter-sidebar glass-card p-4 rounded-4 position-sticky" style="top: 100px;">
+          <h5 class="fw-bold mb-4 text-white d-flex align-items-center">
+            <i class="bi bi-sliders2 me-2 text-primary"></i> Filtros avanzados
+          </h5>
+          
+          <form class="js-sidebar-filter-form d-flex flex-column gap-4" action="buscar.php" method="GET">
             <input type="hidden" name="q" value="<?= e($q) ?>">
+            <input type="hidden" name="categoria" value="<?= $categoriaId ?>">
             <input type="hidden" name="orden" value="<?= e($sort) ?>">
 
             <div>
-              <label class="form-label">Categoría</label>
-              <select name="categoria" class="form-select">
-                <option value="0">Todas</option>
-                <?php foreach ($categorias as $categoria): ?>
-                  <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
-                    <?= e($categoria['cat_nombre']) ?>
-                  </option>
+              <label class="form-label text-body-secondary small fw-semibold text-uppercase mb-2">Tienda</label>
+              <select name="tienda" class="form-select rounded-3">
+                <option value="0">Todas las tiendas</option>
+                <?php foreach ($tiendas as $tie): ?>
+                  <option value="<?= (int) $tie['idtiendas'] ?>" <?= $tiendaId === (int) $tie['idtiendas'] ? 'selected' : '' ?>><?= e($tie['tie_nombre']) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
 
             <div>
-              <label class="form-label">Tienda</label>
-              <select name="tienda" class="form-select">
-                <option value="0">Todas</option>
-                <?php foreach ($tiendas as $tienda): ?>
-                  <option value="<?= (int) $tienda['idtiendas'] ?>" <?= $tiendaId === (int) $tienda['idtiendas'] ? 'selected' : '' ?>>
-                    <?= e($tienda['tie_nombre']) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-
-            <div>
-              <label class="form-label">Marca</label>
-              <select name="marca" class="form-select">
-                <option value="">Todas</option>
-                <?php foreach ($marcas as $m): ?>
-                  <option value="<?= e($m['pro_marca']) ?>" <?= $marca === $m['pro_marca'] ? 'selected' : '' ?>>
-                    <?= e($m['pro_marca']) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-
-            <div class="row g-2">
-              <div class="col-6">
-                <label class="form-label">Precio mín.</label>
-                <input type="number" step="0.01" name="precio_min" class="form-control" value="<?= e($precioMin) ?>" placeholder="0">
-              </div>
-              <div class="col-6">
-                <label class="form-label">Precio máx.</label>
-                <input type="number" step="0.01" name="precio_max" class="form-control" value="<?= e($precioMax) ?>" placeholder="9999999">
+              <label class="form-label text-body-secondary small fw-semibold text-uppercase mb-2">Rango de Precios</label>
+              <div class="d-flex gap-2 align-items-center">
+                <input type="number" name="precio_min" class="form-control rounded-3" placeholder="Mín" value="<?= e($precioMin) ?>" min="0">
+                <span class="text-body-secondary small">-</span>
+                <input type="number" name="precio_max" class="form-control rounded-3" placeholder="Máx" value="<?= e($precioMax) ?>" min="0">
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary rounded-pill">Aplicar filtros</button>
+            <?php if (!empty($marcasDisponibles)): ?>
+              <div>
+                <label class="form-label text-body-secondary small fw-semibold text-uppercase mb-2">Marca</label>
+                <select name="marca" class="form-select rounded-3">
+                  <option value="">Todas las marcas</option>
+                  <?php foreach ($marcasDisponibles as $m): ?>
+                    <option value="<?= e($m) ?>" <?= $marca === $m ? 'selected' : '' ?>><?= e($m) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+            <?php endif; ?>
 
-            <a href="buscar.php?q=<?= rawurlencode($q) ?>&orden=<?= rawurlencode($sort) ?>" class="btn btn-outline-secondary rounded-pill">
-              Limpiar filtros
-            </a>
+            <div class="d-grid gap-2 pt-2">
+              <button type="submit" class="btn btn-primary rounded-pill fw-medium">Aplicar filtros</button>
+              <?php if ($tiendaId > 0 || $marca !== '' || $precioMin !== '' || $precioMax !== ''): ?>
+                <a href="buscar.php?q=<?= urlencode($q) ?>&categoria=<?= $categoriaId ?>&orden=<?= urlencode($sort) ?>" class="btn btn-outline-secondary rounded-pill fw-medium btn-sm">Limpiar filtros</a>
+              <?php endif; ?>
+            </div>
           </form>
         </div>
-      </aside>
+      </div>
 
       <div class="col-lg-9">
-        <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
           <div>
-            <h2 class="mb-2">
-              <?= $q !== '' ? 'Resultados para: "' . e($q) . '"' : 'Todos los productos' ?>
+            <h2 class="h4 fw-bold mb-1 text-white">
+              <?php if ($q !== ''): ?>
+                Resultados para "<?= e($q) ?>"
+              <?php else: ?>
+                Explorando productos
+              <?php endif; ?>
             </h2>
-          </div>
-          <div class="small text-body-secondary">
-            <?= number_format($totalProducts, 0, ',', '.') ?> resultado(s)
+            <p class="text-body-secondary small mb-0">Se encontraron <?= number_format($totalProducts, 0, ',', '.') ?> productos</p>
           </div>
         </div>
 
-        <div class="row g-4">
-          <?php if ($products): ?>
-            <?php foreach ($products as $product): ?>
-              <div class="col-md-6 col-xl-3">
-                <article class="custom-card product-card h-100 p-3 fancy-hover">
-                  <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset d-block">
-                    <div class="product-thumb-wrap mb-3">
-                      <img class="offer-thumb" src="<?= e(image_url($product['imagen'] ?? null, $product['nombre'] ?? 'Producto')) ?>" alt="<?= e($product['nombre'] ?? 'Producto') ?>">
-                    </div>
-                  </a>
-
-                  <div class="d-flex align-items-start gap-2 mb-2 flex-wrap">
-                    <span class="badge soft-badge category-badge">
-                      <?= e($product['cat_nombre'] ?? 'Sin categoría') ?>
-                    </span>
-
-                    <span class="mini-badge <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'badge-stock-ok' : 'badge-stock-no' ?>">
-                      <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'En stock' : 'Sin stock' ?>
-                    </span>
-                  </div>
-
-                  <h3 class="h6 fw-bold mb-2">
-                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset stretched-link-sibling">
-                      <?= e($product['grupo'] ?: $product['nombre']) ?>
+        <?php if ($products): ?>
+          <div class="row g-3">
+            <?php foreach ($products as $item): ?>
+              <div class="col-sm-6 col-md-4">
+                <div class="product-card glass-card h-100 rounded-4 overflow-hidden position-relative fancy-hover">
+                  
+                  <?php if ($favoritesEnabled): ?>
+                    <?php $isFav = $userLogged ? is_favorite_product((int)$item['idproductos']) : false; ?>
+                    <a href="<?= $userLogged ? e(favorite_toggle_url((int)$item['idproductos'], $_SERVER['REQUEST_URI'])) : 'login.php' ?>" 
+                       class="favorite-badge btn btn-sm <?= $userLogged && $isFav ? 'btn-danger' : 'btn-dark bg-opacity-50' ?> rounded-circle position-absolute top-0 end-0 m-3 z-1"
+                       title="<?= $userLogged && $isFav ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>">
+                      <i class="bi <?= $userLogged && $isFav ? 'bi-heart-fill' : 'bi-heart' ?>"></i>
                     </a>
-                  </h3>
-
-                  <?php if (!empty($product['marca'])): ?>
-                    <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['marca']) ?></strong></div>
                   <?php endif; ?>
 
-                  <div class="product-price-row d-flex align-items-end justify-content-between mb-3 gap-2 flex-wrap">
-                    <div class="product-price-main">
-                      <div class="price-now"><?= gs($product['precio_min']) ?></div>
-                      <div class="small text-body-secondary">Desde</div>
-                    </div>
+                  <div class="product-card-img-wrap position-relative p-3 text-center bg-white bg-opacity-5">
+                    <img src="<?= e(image_url($item['pro_imagen'], $item['pro_nombre'])) ?>" alt="<?= e($item['pro_nombre']) ?>" class="img-fluid product-card-thumb">
+                    <span class="store-tag badge bg-dark bg-opacity-75 text-white position-absolute bottom-0 start-0 m-3 px-2 py-1 small rounded-pill">
+                      <?= e($item['tie_nombre']) ?>
+                    </span>
+                  </div>
 
-                    <div class="product-price-meta text-end small text-body-secondary">
-                      <div><?= (int) ($product['total_ofertas'] ?? 0) ?> oferta(s)</div>
-                      <div><?= !empty($product['pro_fecha_scraping']) ? e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) : '' ?></div>
+                  <div class="product-card-body p-4 d-flex flex-column justify-content-between">
+                    <div>
+                      <span class="text-primary small fw-semibold text-uppercase d-block mb-1"><?= e($item['cat_nombre'] ?? 'General') ?></span>
+                      <h3 class="h6 text-white fw-bold product-card-title mb-2">
+                        <a href="producto.php?<?= !empty($item['pro_grupo']) ? 'grupo=' . urlencode(trim($item['pro_grupo'])) : 'id=' . (int)$item['idproductos'] ?>&q=<?= urlencode($q) ?>" class="text-reset text-decoration-none card-stretched-link">
+                          <?= e($item['pro_nombre']) ?>
+                        </a>
+                      </h3>
+                      <?php if (!empty($item['pro_marca'])): ?>
+                        <span class="badge badge-neutral mb-3"><?= e($item['pro_marca']) ?></span>
+                      <?php endif; ?>
+                    </div>
+                    
+                    <div class="pt-3 border-top border-secondary border-opacity-10 d-flex justify-content-between align-items-center">
+                      <div>
+                        <span class="price-caption d-block small text-body-secondary">Precio actual</span>
+                        <span class="price-now fw-bold text-white fs-5"><?= gs($item['pro_precio']) ?></span>
+                      </div>
+                      <span class="mini-badge <?= e(stock_badge_class($item['pro_en_stock'])) ?>">
+                        <?= e(stock_label($item['pro_en_stock'])) ?>
+                      </span>
                     </div>
                   </div>
 
-                  <div class="product-meta d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-3">
-                    <div class="small text-body-secondary position-relative z-2">
-                      Mejor precio agrupado
-                    </div>
-                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="btn btn-sm btn-outline-primary rounded-pill position-relative z-2">
-                      Ver ofertas
-                    </a>
-                  </div>
-                </article>
+                </div>
               </div>
             <?php endforeach; ?>
-          <?php else: ?>
-            <div class="col-12">
-              <div class="empty-state">No se encontraron productos con los filtros actuales.</div>
-            </div>
-          <?php endif; ?>
-        </div>
+          </div>
 
-        <?php if ($totalPages > 1): ?>
-          <?php
-          $visiblePages = 5;
-          $half = (int) floor($visiblePages / 2);
-
-          $startPage = max(1, $page - $half);
-          $endPage = min($totalPages, $startPage + $visiblePages - 1);
-
-          if (($endPage - $startPage + 1) < $visiblePages) {
-              $startPage = max(1, $endPage - $visiblePages + 1);
-          }
-
-          $buildUrl = function (int $p) use ($q, $categoriaId, $tiendaId, $marca, $precioMin, $precioMax, $sort): string {
-              return '?' . http_build_query([
-                  'q' => $q,
-                  'categoria' => $categoriaId,
-                  'tienda' => $tiendaId,
-                  'marca' => $marca,
-                  'precio_min' => $precioMin,
-                  'precio_max' => $precioMax,
-                  'orden' => $sort,
-                  'page' => $p
-              ]);
-          };
-          ?>
-
-          <nav class="mt-4" aria-label="Paginación">
-            <ul class="pagination justify-content-center flex-wrap gap-2">
-              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page > 1 ? e($buildUrl(1)) : '#' ?>" title="Ir al inicio">«</a>
-              </li>
-
-              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page > 1 ? e($buildUrl($page - 1)) : '#' ?>" title="Página anterior">‹</a>
-              </li>
-
-              <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                  <a class="page-link rounded-pill" href="<?= e($buildUrl($i)) ?>"><?= $i ?></a>
+          <?php if ($totalPages > 1): ?>
+            <nav aria-label="Navegación de resultados" class="mt-5">
+              <ul class="pagination justify-content-center custom-pagination gap-1">
+                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                  <a class="page-link rounded-pill" href="<?= $page > 1 ? e($buildUrl(1)) : '#' ?>" title="Ir al inicio">«</a>
                 </li>
-              <?php endfor; ?>
+                <?php
+                $startPage = max(1, $page - 2);
+                $endPage = min($totalPages, $page + 2);
+                for ($i = $startPage; $i <= $endPage; $i++):
+                ?>
+                  <li class="page-item <?= $page === $i ? 'active' : '' ?>">
+                    <a class="page-link rounded-circle" href="<?= e($buildUrl($i)) ?>"><?= $i ?></a>
+                  </li>
+                <?php endfor; ?>
+                <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                  <a class="page-link rounded-pill" href="<?= $page < $totalPages ? e($buildUrl($totalPages)) : '#' ?>" title="Ir al final">»</a>
+                </li>
+              </ul>
+            </nav>
+          <?php endif; ?>
 
-              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page < $totalPages ? e($buildUrl($page + 1)) : '#' ?>" title="Página siguiente">›</a>
-              </li>
-
-              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page < $totalPages ? e($buildUrl($totalPages)) : '#' ?>" title="Ir al final">»</a>
-              </li>
-            </ul>
-          </nav>
+        <?php else: ?>
+          <div class="empty-state py-5 glass-card rounded-4 text-center">
+            <i class="bi bi-search display-4 text-body-secondary mb-3 d-block"></i>
+            <h4 class="text-white fw-bold">No se encontraron productos</h4>
+            <p class="text-body-secondary mb-0">Probá modificando los criterios de búsqueda o limpiando los filtros avanzados.</p>
+          </div>
         <?php endif; ?>
       </div>
 
@@ -650,7 +409,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const sideForm = document.querySelector('.js-sidebar-filter-form');
 
     if (topForm && sideForm) {
-        // Función para copiar valores de un form al otro
         const syncInputs = (sourceForm, targetForm) => {
             return function(e) {
                 const name = e.target.name;
@@ -663,11 +421,8 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         };
 
-        // Sincronizar desde Top hacia Lateral
         topForm.addEventListener('input', syncInputs(topForm, sideForm));
         topForm.addEventListener('change', syncInputs(topForm, sideForm));
-
-        // Sincronizar desde Lateral hacia Top
         sideForm.addEventListener('input', syncInputs(sideForm, topForm));
         sideForm.addEventListener('change', syncInputs(sideForm, topForm));
     }
@@ -681,18 +436,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const icon = toggleBtn.querySelector('i');
     
     toggleBtn.addEventListener('click', function() {
-      // Alternamos el estado de posicionamiento
       const isDetached = stickyContainer.classList.toggle('position-relative');
       
       if (isDetached) {
-        // MODO DESPLAZABLE (Libre con scroll)
         stickyContainer.style.position = 'relative';
-        icon.className = 'bi bi-pin-angle'; // Icono desclavado
+        icon.className = 'bi bi-pin-angle';
         toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
       } else {
-        // MODO FIJO POR DEFECTO (Sticky arriba)
         stickyContainer.style.position = 'sticky';
-        icon.className = 'bi bi-pin-angle-fill'; // Icono clavado
+        icon.className = 'bi bi-pin-angle-fill';
         toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
       }
     });
@@ -700,5 +452,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="./js/search.js"></script>
-<?php render_footer(); ?>
+<?php 
+render_footer(); 
+?>
