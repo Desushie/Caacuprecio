@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
-require_admin();
+require_admin_or_empresa();
 
 $pdo = db();
 
