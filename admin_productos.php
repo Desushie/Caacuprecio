@@ -7,17 +7,15 @@ $user = current_user();
 $isEmpresa = is_empresa();
 $myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
-$tiendaFilter = (int)($_GET['tienda'] ?? 0);
-if ($isEmpresa) {
-    $tiendaFilter = $myStoreId;
-}
+// Opcional para depurar: Si te sigue fallando, quitá las barras de la línea de abajo para ver qué detecta el sistema:
+// var_dump($isEmpresa, $myStoreId); die();
 
 function build_admin_productos_url(array $overrides = []): string {
     global $isEmpresa;
     
     $params = [
         'q' => $_GET['q'] ?? '',
-        'tienda' => $isEmpresa ? 0 : ($_GET['tienda'] ?? 0), // Limpia la URL para las empresas
+        'tienda' => $isEmpresa ? 0 : ($_GET['tienda'] ?? 0), 
         'categoria' => $_GET['categoria'] ?? 0,
         'estado' => $_GET['estado'] ?? '',
         'page' => $_GET['page'] ?? 1,
@@ -40,17 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $tiendaIdInput = (int) ($_POST['tiendas_idtiendas'] ?? 0);
 
     if ($isEmpresa) {
-        // 1. Forzar que el producto pertenezca a SU propia tienda pase lo que pase
         $tiendaIdInput = $myStoreId;
 
-        // 2. Si es una edición, verificar primero si ese producto realmente le pertenece
         if ($id > 0) {
             $check = $pdo->prepare("SELECT tiendas_idtiendas FROM productos WHERE idproductos = ?");
             $check->execute([$id]);
             $ownerStoreId = (int) $check->fetchColumn();
 
             if ($ownerStoreId !== $myStoreId) {
-                // Intento de alteración de datos ajenos
                 header("Location: admin_productos.php?error=no_autorizado");
                 exit;
             }
@@ -87,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'url' => trim((string) ($_POST['pro_url'] ?? '')),
         'stock' => (int) ($_POST['pro_en_stock'] ?? 0),
         'activo' => (int) ($_POST['pro_activo'] ?? 1),
-        'tienda' => $tiendaIdInput, // MODIFICADO: Ahora usa correctamente la variable validada y blindada
+        'tienda' => $tiendaIdInput,
         'categoria' => ($_POST['categorias_idcategorias'] ?? '') !== ''
             ? (int) $_POST['categorias_idcategorias']
             : null,
@@ -108,9 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
-// LOGICA DE FILTRADO Y BUSQUEDA (CRAWLING / VISUALIZACIÓN)
+// LÓGICA DE FILTRADO Y BUSQUEDA (CORREGIDA)
 $q = trim($_GET['q'] ?? '');
-$tiendaId = $isEmpresa ? $myStoreId : (int)($_GET['tienda'] ?? 0);
 $categoriaId = (int) ($_GET['categoria'] ?? 0);
 $estado = $_GET['estado'] ?? '';
 
@@ -129,9 +123,18 @@ if ($q !== '') {
     $params['q_marca'] = $like;
 }
 
-if ($tiendaId > 0) {
+// SOLUCIÓN AQUÍ: Forzado estricto de la cláusula WHERE según el rol
+if ($isEmpresa) {
+    // Si es empresa, ignoramos el GET de la URL y filtramos de forma obligatoria por su ID de tienda
     $whereClauses[] = 'p.tiendas_idtiendas = :tienda';
-    $params['tienda'] = $tiendaId;
+    $params['tienda'] = $myStoreId;
+} else {
+    // Si es administrador global, permitimos filtrar por la tienda elegida en el combo (si seleccionó una)
+    $tiendaSelect = (int)($_GET['tienda'] ?? 0);
+    if ($tiendaSelect > 0) {
+        $whereClauses[] = 'p.tiendas_idtiendas = :tienda';
+        $params['tienda'] = $tiendaSelect;
+    }
 }
 
 if ($categoriaId > 0) {
@@ -147,7 +150,7 @@ if ($estado === 'activos') {
 
 $whereSql = $whereClauses ? implode(' AND ', $whereClauses) : '1=1';
 
-// Contamos los registros totales
+// Contamos los registros totales bajo las condiciones del rol
 $countSql = "SELECT COUNT(*) FROM productos p WHERE {$whereSql}";
 $countStmt = $pdo->prepare($countSql);
 $countStmt->execute($params);
@@ -159,7 +162,7 @@ if ($page > $totalPages) {
     $offset = ($page - 1) * $perPage;
 }
 
-// Consulta principal simplificada (Se eliminó la duplicación crítica de código)
+// Consulta de productos
 $sql = "
     SELECT
         p.*,
@@ -261,7 +264,7 @@ render_head('Administrar productos');
             <select name="tienda" class="form-select">
               <option value="0">Todas las tiendas</option>
               <?php foreach ($stores as $store): ?>
-                <option value="<?= (int) $store['idtiendas'] ?>" <?= $tiendaId === (int) $store['idtiendas'] ? 'selected' : '' ?>>
+                <option value="<?= (int) $store['idtiendas'] ?>" <?= (int)($_GET['tienda'] ?? 0) === (int) $store['idtiendas'] ? 'selected' : '' ?>>
                   <?= e($store['tie_nombre']) ?>
                 </option>
               <?php endforeach; ?>
@@ -390,11 +393,9 @@ render_head('Administrar productos');
           <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
             <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => 1])) ?>">Primera</a>
           </li>
-
           <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
             <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => max(1, $page - 1)])) ?>">Anterior</a>
           </li>
-
           <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
             <li class="page-item <?= $i === $page ? 'active' : '' ?>">
               <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => $i])) ?>">
@@ -402,11 +403,9 @@ render_head('Administrar productos');
               </a>
             </li>
           <?php endfor; ?>
-
           <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
             <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => min($totalPages, $page + 1)])) ?>">Siguiente</a>
           </li>
-
           <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
             <a class="page-link rounded-pill" href="<?= e(build_admin_productos_url(['page' => $totalPages])) ?>">Última</a>
           </li>
@@ -425,7 +424,7 @@ render_head('Administrar productos');
             <input type="hidden" name="action" value="save_product">
             <input type="hidden" name="idproductos" value="<?= (int) $product['idproductos'] ?>">
             <input type="hidden" name="return_q" value="<?= e($q) ?>">
-            <input type="hidden" name="return_tienda" value="<?= (int) $tiendaId ?>">
+            <input type="hidden" name="return_tienda" value="<?= $isEmpresa ? 0 : (int)($_GET['tienda'] ?? 0) ?>">
             <input type="hidden" name="return_categoria" value="<?= (int) $categoriaId ?>">
             <input type="hidden" name="return_estado" value="<?= e($estado) ?>">
             <input type="hidden" name="return_page" value="<?= (int) $page ?>">
@@ -446,32 +445,26 @@ render_head('Administrar productos');
                       <label class="form-label">Nombre</label>
                       <input type="text" name="pro_nombre" class="form-control" value="<?= e($product['pro_nombre']) ?>" required>
                     </div>
-
                     <div class="col-md-6">
                       <label class="form-label">Marca</label>
                       <input type="text" name="pro_marca" class="form-control" value="<?= e($product['pro_marca']) ?>">
                     </div>
-
                     <div class="col-md-6">
                       <label class="form-label">Imagen (URL)</label>
                       <input type="text" name="pro_imagen" class="form-control js-image-input" value="<?= e($product['pro_imagen']) ?>">
                     </div>
-
                     <div class="col-12">
                       <label class="form-label">Descripción</label>
                       <textarea name="pro_descripcion" class="form-control" rows="5"><?= e($product['pro_descripcion']) ?></textarea>
                     </div>
-
                     <div class="col-md-4">
                       <label class="form-label">Precio</label>
                       <input type="number" step="0.01" name="pro_precio" class="form-control" value="<?= e((string) $product['pro_precio']) ?>" required>
                     </div>
-
                     <div class="col-md-4">
                       <label class="form-label">Precio anterior</label>
                       <input type="number" step="0.01" name="pro_precio_anterior" class="form-control" value="<?= e((string) $product['pro_precio_anterior']) ?>">
                     </div>
-
                     <div class="col-md-4">
                       <label class="form-label">URL del producto</label>
                       <input type="text" name="pro_url" class="form-control" value="<?= e($product['pro_url']) ?>">
@@ -504,7 +497,6 @@ render_head('Administrar productos');
                         <?php endforeach; ?>
                       </select>
                     </div>
-
                     <div class="col-md-2">
                       <label class="form-label">Stock</label>
                       <select name="pro_en_stock" class="form-select">
@@ -512,7 +504,6 @@ render_head('Administrar productos');
                         <option value="0" <?= (int) $product['pro_en_stock'] === 0 ? 'selected' : '' ?>>No</option>
                       </select>
                     </div>
-
                     <div class="col-md-2">
                       <label class="form-label">Activo</label>
                       <select name="pro_activo" class="form-select">
