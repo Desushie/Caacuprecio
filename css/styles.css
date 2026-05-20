@@ -984,7 +984,7 @@ body.theme-light .suggestion-modal textarea {
   position: sticky;
   top: 0;                   /* Se pega al borde superior de la pantalla */
   z-index: 1020;            /* Se posiciona por encima del contenido, pero por debajo de los modales */
-  background: var(--bg-main); /* Evita que el contenido de abajo se transparente al pasar por detrás */
+  background-color: var(--bs-body-bg) !important;
   padding-top: 0.4rem;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--border-soft); /* Opcional: una línea sutil para separarlo del contenido al hacer scroll */
