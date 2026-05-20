@@ -33,19 +33,26 @@ function build_admin_productos_url(array $overrides = []): string {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_product') {
-    $id = (int)($_POST['idproductos'] ?? 0);
-    $tiendaIdInput = (int)($_POST['tiendas_idtiendas'] ?? 0);
+    $id = (int) ($_POST['idproductos'] ?? 0);
+    $tiendaIdInput = (int) ($_POST['tiendas_idtiendas'] ?? 0);
 
-    if ($isEmpresa) {
-        // Blindaje absoluto: Una empresa no puede guardar productos asignándolos a otro ID
-        $tiendaIdInput = $myStoreId;
+    if (is_empresa()) {
+        $user = current_user();
+        $userStoreId = (int)($user['tiendas_idtiendas'] ?? 0);
+        
+        // 1. Forzar que el producto pertenezca a SU propia tienda pase lo que pase
+        $tiendaIdInput = $userStoreId;
 
-        // Si está editando, verificar que el producto realmente le pertenezca
+        // 2. Si es una edición, verificar primero si ese producto realmente le pertenece
         if ($id > 0) {
-            $check = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE idproductos = ? AND tiendas_idtiendas = ?");
-            $check->execute([$id, $myStoreId]);
-            if ((int)$check->fetchColumn() === 0) {
-                die("Operación denegada. Este producto no pertenece a tu comercio.");
+            $check = $pdo->prepare("SELECT tiendas_idtiendas FROM productos WHERE idproductos = ?");
+            $check->execute([$id]);
+            $ownerStoreId = (int) $check->fetchColumn();
+
+            if ($ownerStoreId !== $userStoreId) {
+                // Intento de alteración de datos ajenos
+                header("Location: admin_productos.php?error=no_autorizado");
+                exit;
             }
         }
     }
