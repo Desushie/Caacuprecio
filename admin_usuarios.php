@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ACCIÓN: GUARDAR / EDITAR USUARIO
     if ($action === 'save_user') {
-        $id = (int)($_POST['idusuario'] ?? 0); // Corregido a singular
+        $id = (int)($_POST['idusuario'] ?? 0);
         $nombre = trim((string)($_POST['usu_nombre'] ?? ''));
         $email = trim((string)($_POST['usu_email'] ?? ''));
         $tipo = (int)($_POST['usu_tipo'] ?? 0);
@@ -24,7 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 if ($id > 0) {
-                    // Actualizar usuario existente (Tabla 'usuario' y columna 'idusuario')
                     $stmt = $pdo->prepare("
                         UPDATE usuario 
                         SET usu_nombre = :nombre, 
@@ -50,15 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ACCIÓN: ELIMINAR USUARIO
     if ($action === 'delete_user') {
-        $id = (int)($_POST['idusuario'] ?? 0); // Corregido a singular
+        $id = (int)($_POST['idusuario'] ?? 0);
         $currentUser = current_user();
 
-        // Control de seguridad: No auto-eliminarse
         if (isset($currentUser['idusuario']) && (int)$currentUser['idusuario'] === $id) {
             $error = 'No puedes eliminar tu propia cuenta de administrador en sesión.';
         } else {
             try {
-                // Corregido a tabla 'usuario' y columna 'idusuario'
                 $stmt = $pdo->prepare("DELETE FROM usuario WHERE idusuario = :id");
                 $stmt->execute(['id' => $id]);
                 $success = 'Usuario eliminado de forma permanente.';
@@ -70,7 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // 2. CONSULTAS DE DATOS (GET)
-// Corregido: 'usuario u' e 'ORDER BY u.idusuario'
 $usuarios = $pdo->query("
     SELECT u.*, t.tie_nombre 
     FROM usuario u 
@@ -78,7 +74,6 @@ $usuarios = $pdo->query("
     ORDER BY u.idusuario DESC
 ")->fetchAll();
 
-// Traer la lista de tiendas para mapear en los modales de edición
 $tiendas = $pdo->query("SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_nombre ASC")->fetchAll();
 
 render_head('Gestión de Usuarios');
@@ -110,7 +105,7 @@ render_head('Gestión de Usuarios');
       </div>
     </div>
 
-    <div class="card admin-hero p-0 border-0 shadow-sm overflow-hidden">
+    <div class="card admin-hero p-0 border-0 shadow-sm overflow-hidden mb-4">
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0 text-start" style="color: var(--text-main);">
           <thead class="table-dark" style="background-color: var(--bg-elevated);">
@@ -166,61 +161,6 @@ render_head('Gestión de Usuarios');
                     </div>
                   </td>
                 </tr>
-
-                <div class="modal fade admin-modal" id="editUserModal<?= (int)$user['idusuario'] ?>" tabindex="-1" aria-hidden="true">
-                  <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content text-start" style="background: var(--bg-card-strong); border: 1px solid var(--border-soft);">
-                      <div class="modal-header border-bottom border-light-subtle">
-                        <h5 class="modal-title"><i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuario #<?= (int)$user['idusuario'] ?></h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                      </div>
-                      <form action="admin_usuarios.php" method="POST">
-                        <div class="modal-body py-4">
-                          <input type="hidden" name="action" value="save_user">
-                          <input type="hidden" name="idusuario" value="<?= (int)$user['idusuario'] ?>">
-
-                          <div class="mb-3">
-                            <label class="form-label small text-body-secondary fw-semibold">Nombre del Usuario</label>
-                            <input type="text" name="usu_nombre" class="form-control" value="<?= e($user['usu_nombre']) ?>" required>
-                          </div>
-
-                          <div class="mb-3">
-                            <label class="form-label small text-body-secondary fw-semibold">Correo Electrónico</label>
-                            <input type="email" name="usu_email" class="form-control" value="<?= e($user['usu_email']) ?>" required>
-                          </div>
-
-                          <div class="mb-3">
-                            <label class="form-label small text-body-secondary fw-semibold">Rol del Sistema</label>
-                            <select name="usu_tipo" class="form-select js-role-select" data-user-id="<?= (int)$user['idusuario'] ?>" required>
-                              <option value="0" <?= (int)$user['usu_tipo'] === 0 ? 'selected' : '' ?>>Usuario Regular</option>
-                              <option value="2" <?= (int)$user['usu_tipo'] === 2 ? 'selected' : '' ?>>Empresa / Encargado</option>
-                              <option value="1" <?= (int)$user['usu_tipo'] === 1 ? 'selected' : '' ?>>Administrador Global</option>
-                            </select>
-                          </div>
-
-                          <div class="mb-2 js-store-wrapper-<?= (int)$user['idusuario'] ?>" style="<?= (int)$user['usu_tipo'] === 2 ? '' : 'display: none;' ?>">
-                            <label class="form-label small text-body-secondary fw-semibold text-info"><i class="bi bi-shop me-1"></i>Asignar a Tienda/Empresa</label>
-                            <select name="tiendas_idtiendas" class="form-select border-info-subtle">
-                              <option value="">-- Seleccionar Tienda --</option>
-                              <?php foreach ($tiendas as $tienda): ?>
-                                <option value="<?= (int)$tienda['idtiendas'] ?>" <?= (int)$user['tiendas_idtiendas'] === (int)$tienda['idtiendas'] ? 'selected' : '' ?>>
-                                  <?= e($tienda['tie_nombre']) ?>
-                                </option>
-                              <?php endforeach; ?>
-                            </select>
-                            <div class="small text-muted mt-1">El usuario solo podrá gestionar los productos y ver estadísticas de la tienda seleccionada.</div>
-                          </div>
-
-                        </div>
-                        <div class="modal-footer border-top border-light-subtle">
-                          <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
-                          <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar Cambios</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-
               <?php endforeach; ?>
             <?php else: ?>
               <tr>
@@ -231,6 +171,64 @@ render_head('Gestión de Usuarios');
         </table>
       </div>
     </div>
+
+    <?php if (!empty($usuarios)): ?>
+      <?php foreach ($usuarios as $user): ?>
+        <div class="modal fade admin-modal" id="editUserModal<?= (int)$user['idusuario'] ?>" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-start" style="background: var(--bg-card-strong); border: 1px solid var(--border-soft);">
+              <div class="modal-header border-bottom border-light-subtle">
+                <h5 class="modal-title"><i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuario #<?= (int)$user['idusuario'] ?></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <form action="admin_usuarios.php" method="POST">
+                <div class="modal-body py-4">
+                  <input type="hidden" name="action" value="save_user">
+                  <input type="hidden" name="idusuario" value="<?= (int)$user['idusuario'] ?>">
+
+                  <div class="mb-3">
+                    <label class="form-label small text-body-secondary fw-semibold">Nombre del Usuario</label>
+                    <input type="text" name="usu_nombre" class="form-control" value="<?= e($user['usu_nombre']) ?>" required>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label small text-body-secondary fw-semibold">Correo Electrónico</label>
+                    <input type="email" name="usu_email" class="form-control" value="<?= e($user['usu_email']) ?>" required>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label small text-body-secondary fw-semibold">Rol del Sistema</label>
+                    <select name="usu_tipo" class="form-select js-role-select" data-user-id="<?= (int)$user['idusuario'] ?>" required>
+                      <option value="0" <?= (int)$user['usu_tipo'] === 0 ? 'selected' : '' ?>>Usuario Regular</option>
+                      <option value="2" <?= (int)$user['usu_tipo'] === 2 ? 'selected' : '' ?>>Empresa / Encargado</option>
+                      <option value="1" <?= (int)$user['usu_tipo'] === 1 ? 'selected' : '' ?>>Administrador Global</option>
+                    </select>
+                  </div>
+
+                  <div class="mb-2 js-store-wrapper-<?= (int)$user['idusuario'] ?>" style="<?= (int)$user['usu_tipo'] === 2 ? '' : 'display: none;' ?>">
+                    <label class="form-label small text-body-secondary fw-semibold text-info"><i class="bi bi-shop me-1"></i>Asignar a Tienda/Empresa</label>
+                    <select name="tiendas_idtiendas" class="form-select border-info-subtle">
+                      <option value="">-- Seleccionar Tienda --</option>
+                      <?php foreach ($tiendas as $tienda): ?>
+                        <option value="<?= (int)$tienda['idtiendas'] ?>" <?= (int)$user['tiendas_idtiendas'] === (int)$tienda['idtiendas'] ? 'selected' : '' ?>>
+                          <?= e($tienda['tie_nombre']) ?>
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                    <div class="small text-muted mt-1">El usuario solo podrá gestionar los productos y ver estadísticas de la tienda seleccionada.</div>
+                  </div>
+
+                </div>
+                <div class="modal-footer border-top border-light-subtle">
+                  <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar Cambios</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
 
   </div>
 </section>
