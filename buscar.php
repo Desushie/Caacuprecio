@@ -317,7 +317,7 @@ render_head('Buscar productos');
 render_navbar('home');
 ?>
 
-<div class="search-sticky-bar">
+<div class="search-sticky-container">
   <div class="container">
     <div
       class="search-bar glass-card p-3 p-lg-3"
