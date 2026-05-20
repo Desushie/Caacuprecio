@@ -113,9 +113,13 @@ render_head('Panel de Administración');
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
           <div class="admin-kicker mb-2">Panel</div>
-          <h1 class="display-6 fw-bold mb-3">Gestión del Sistema</h1>
+          <h1 class="display-6 fw-bold mb-3">
+            <?= $isEmpresa ? 'Panel de Empresa' : 'Gestión del Sistema' ?>
+          </h1>
           <p class="text-body-secondary mb-4">
-            Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.
+            <?= $isEmpresa 
+              ? 'Administrá tus productos, precios y visualizá el rendimiento de tu tienda de forma organizada.' 
+              : 'Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.' ?>
           </p>
 
           <div class="d-flex flex-wrap gap-3">
@@ -123,47 +127,49 @@ render_head('Panel de Administración');
               <i class="bi bi-box-seam me-2"></i>Gestionar productos
             </a>
 
-            <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-shop me-2"></i>Gestionar tiendas
-            </a>
-            <a href="admin_usuarios.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-people me-2"></i>Gestionar usuarios
-            </a>
-            <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-terminal me-2"></i>Importar datos
-            </a>
-
             <a href="analytics.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-bar-chart-line me-2"></i>Analíticas
             </a>
 
-            <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4 position-relative">
-              <i class="bi bi-flag me-2"></i>Reseñas reportadas
-              <?php if ($pendingReviewReports > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                  <?= number_format($pendingReviewReports, 0, ',', '.') ?>
-                  <span class="visually-hidden">reportes de reseñas pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
-            <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
-              <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
-              <?php if ($pendingProductReports > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
-                  <?= number_format($pendingProductReports, 0, ',', '.') ?>
-                  <span class="visually-hidden">reportes de productos pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
-            <a href="admin_sugerencias.php" class="btn btn-outline-info rounded-pill px-4 position-relative">
-              <i class="bi bi-lightbulb me-2"></i>Sugerencias
-              <?php if ($pendingSuggestions > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
-                  <?= number_format($pendingSuggestions, 0, ',', '.') ?>
-                  <span class="visually-hidden">sugerencias pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
+            <?php if (!$isEmpresa): ?>
+              <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-shop me-2"></i>Gestionar tiendas
+              </a>
+              <a href="admin_usuarios.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-people me-2"></i>Gestionar usuarios
+              </a>
+              <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-terminal me-2"></i>Importar datos
+              </a>
+
+              <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4 position-relative">
+                <i class="bi bi-flag me-2"></i>Reseñas reportadas
+                <?php if ($pendingReviewReports > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    <?= number_format($pendingReviewReports, 0, ',', '.') ?>
+                    <span class="visually-hidden">reportes de reseñas pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+              <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
+                <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
+                <?php if ($pendingProductReports > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+                    <?= number_format($pendingProductReports, 0, ',', '.') ?>
+                    <span class="visually-hidden">reportes de productos pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+              <a href="admin_sugerencias.php" class="btn btn-outline-info rounded-pill px-4 position-relative">
+                <i class="bi bi-lightbulb me-2"></i>Sugerencias
+                <?php if ($pendingSuggestions > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
+                    <?= number_format($pendingSuggestions, 0, ',', '.') ?>
+                    <span class="visually-hidden">sugerencias pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+            <?php endif; ?>
           </div>
         </div>
 
@@ -187,27 +193,31 @@ render_head('Panel de Administración');
     </div>
 
     <div class="row g-4 mb-4">
-      <div class="col-sm-6 col-xl-3">
+      <div class="<?= $isEmpresa ? 'col-sm-6' : 'col-sm-6 col-xl-3' ?>">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Productos</div>
+          <div class="admin-stat-label"><?= $isEmpresa ? 'Mis Productos' : 'Productos' ?></div>
           <div class="admin-stat-value"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
         </div>
       </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Tiendas</div>
-          <div class="admin-stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
+
+      <?php if (!$isEmpresa): ?>
+        <div class="col-sm-6 col-xl-3">
+          <div class="admin-panel admin-stat p-4 h-100">
+            <div class="admin-stat-label">Tiendas</div>
+            <div class="admin-stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
+          </div>
         </div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Categorías</div>
-          <div class="admin-stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
+        <div class="col-sm-6 col-xl-3">
+          <div class="admin-panel admin-stat p-4 h-100">
+            <div class="admin-stat-label">Categorías</div>
+            <div class="admin-stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
+          </div>
         </div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
+      <?php endif; ?>
+
+      <div class="<?= $isEmpresa ? 'col-sm-6' : 'col-sm-6 col-xl-3' ?>">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Favoritos</div>
+          <div class="admin-stat-label"><?= $isEmpresa ? 'Favoritos Recibidos' : 'Favoritos' ?></div>
           <div class="admin-stat-value"><?= number_format($stats['favoritos'], 0, ',', '.') ?></div>
         </div>
       </div>
@@ -219,7 +229,9 @@ render_head('Panel de Administración');
           <div class="admin-toolbar mb-3">
             <div>
               <div class="admin-kicker">Actividad</div>
-              <h2 class="h4 fw-bold mb-0">Productos actualizados recientemente</h2>
+              <h2 class="h4 fw-bold mb-0">
+                <?= $isEmpresa ? 'Tus productos actualizados recientemente' : 'Productos actualizados recientemente' ?>
+              </h2>
             </div>
             <a href="admin_productos.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todos</a>
           </div>
@@ -246,7 +258,7 @@ render_head('Panel de Administración');
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">Aún no hay productos recientes.</div>
+            <div class="admin-empty">Aún no registrás productos en este comercio.</div>
           <?php endif; ?>
         </div>
       </div>
@@ -255,10 +267,14 @@ render_head('Panel de Administración');
         <div class="admin-panel p-4 h-100">
           <div class="admin-toolbar mb-3">
             <div>
-              <div class="admin-kicker">Tiendas</div>
-              <h2 class="h4 fw-bold mb-0">Tiendas agregadas recientemente</h2>
+              <div class="admin-kicker"><?= $isEmpresa ? 'Tu Comercio' : 'Tiendas' ?></div>
+              <h2 class="h4 fw-bold mb-0">
+                <?= $isEmpresa ? 'Información de tu tienda' : 'Tiendas agregadas recientemente' ?>
+              </h2>
             </div>
-            <a href="admin_tiendas.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todas</a>
+            <?php if (!$isEmpresa): ?>
+              <a href="admin_tiendas.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todas</a>
+            <?php endif; ?>
           </div>
 
           <?php if ($latestStores): ?>
@@ -275,19 +291,19 @@ render_head('Panel de Administración');
                     </div>
                     <div class="small text-body-secondary mt-1"><?= number_format((int) $store['total_productos'], 0, ',', '.') ?> productos</div>
                   </div>
-                  <div class="admin-store-action">
-                    <a href="admin_tiendas.php?edit=<?= (int) $store['idtiendas'] ?>" class="btn btn-sm btn-outline-primary rounded-pill px-3">Editar</a>
-                  </div>
+                  <?php if (!$isEmpresa): ?>
+                    <div class="admin-store-action">
+                      <a href="admin_tiendas.php?edit=<?= (int) $store['idtiendas'] ?>" class="btn btn-sm btn-outline-primary rounded-pill px-3">Editar</a>
+                    </div>
+                  <?php endif; ?>
                 </div>
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">Aún no hay tiendas registradas.</div>
+            <div class="admin-empty">No se encontró ninguna tienda vinculada a tu cuenta.</div>
           <?php endif; ?>
         </div>
       </div>
     </div>
   </div>
 </section>
-
-<?php render_footer(); ?>

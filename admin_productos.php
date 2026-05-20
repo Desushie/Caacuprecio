@@ -3,6 +3,9 @@ require_once __DIR__ . '/config.php';
 require_admin_or_empresa();
 
 $pdo = db();
+$user = current_user();
+$isEmpresa = is_empresa();
+$myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
 function build_admin_productos_url(array $overrides = []): string {
     $params = [
