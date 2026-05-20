@@ -7,49 +7,95 @@ $user = current_user();
 $isEmpresa = is_empresa();
 $myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
-$stats = [
-    'productos' => (int) $pdo->query('SELECT COUNT(*) FROM productos')->fetchColumn(),
-    'tiendas' => (int) $pdo->query('SELECT COUNT(*) FROM tiendas')->fetchColumn(),
-    'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
-    'favoritos' => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
-];
+// 1. CONSULTAS ADAPTADAS SEGÚN EL ROL
+if ($isEmpresa) {
+    // Estadísticas exclusivas de su tienda
+    $stmtProd = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = :store_id");
+    $stmtProd->execute(['store_id' => $myStoreId]);
+    
+    $stmtFav = $pdo->prepare("
+        SELECT COUNT(*) FROM favoritos f 
+        INNER JOIN productos p ON f.productos_idproductos = p.idproductos 
+        WHERE p.tiendas_idtiendas = :store_id
+    ");
+    $stmtFav->execute(['store_id' => $myStoreId]);
 
-$pendingReviewReports = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM tienda_review_reportes
-    WHERE rep_estado = 'pendiente'
-")->fetchColumn();
+    $stats = [
+        'productos'  => (int)$stmtProd->fetchColumn(),
+        'tiendas'    => 1, // Solo la suya
+        'categorias' => (int)$pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
+        'favoritos'  => (int)$stmtFav->fetchColumn(),
+    ];
 
-$pendingProductReports = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM producto_reportes
-    WHERE rep_estado = 'pendiente'
-")->fetchColumn();
+    // Reportes de productos pertenecientes solo a su tienda
+    $stmtRepProd = $pdo->prepare("
+        SELECT COUNT(*) FROM producto_reportes pr
+        INNER JOIN productos p ON pr.productos_idproductos = p.idproductos
+        WHERE pr.rep_estado = 'pendiente' AND p.tiendas_idtiendas = :store_id
+    ");
+    $stmtRepProd->execute(['store_id' => $myStoreId]);
+    $pendingProductReports = (int)$stmtRepProd->fetchColumn();
 
-$pendingSuggestions = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM sugerencias
-    WHERE sug_estado = 'pendiente'
-")->fetchColumn();
+    // Reportes de reseñas de su tienda
+    $stmtRepRev = $pdo->prepare("
+        SELECT COUNT(*) FROM tienda_review_reportes trr
+        INNER JOIN tienda_reviews tr ON trr.reviews_idreview = tr.idreview
+        WHERE trr.rep_estado = 'pendiente' AND tr.tiendas_idtiendas = :store_id
+    ");
+    $stmtRepRev->execute(['store_id' => $myStoreId]);
+    $pendingReviewReports = (int)$stmtRepRev->fetchColumn();
 
-$latestProducts = $pdo->query("
-    SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
-    FROM productos p
-    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-    ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC
-    LIMIT 6
-")->fetchAll();
+    $pendingSuggestions = 0; // Las sugerencias de la app son globales (solo Admin)
 
-$latestStores = $pdo->query("
-    SELECT t.idtiendas, t.tie_nombre, t.tie_logo, t.tie_ubicacion, COUNT(p.idproductos) AS total_productos
-    FROM tiendas t
-    LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas
-    GROUP BY t.idtiendas, t.tie_nombre, t.tie_logo, t.tie_ubicacion
-    ORDER BY t.idtiendas DESC
-    LIMIT 6
-")->fetchAll();
+    // Últimos productos de SU tienda
+    $stmtLastProd = $pdo->prepare("
+        SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        WHERE p.tiendas_idtiendas = :store_id
+        ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC LIMIT 6
+    ");
+    $stmtLastProd->execute(['store_id' => $myStoreId]);
+    $latestProducts = $stmtLastProd->fetchAll();
 
-render_head('Panel administrador');
+    // Datos de su propia tienda
+    $stmtMyStore = $pdo->prepare("
+        SELECT t.idtiendas, t.tie_nombre, t.tie_ubicacion, t.tie_logo,
+               (SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = t.idtiendas) as total_productos
+        FROM tiendas t
+        WHERE t.idtiendas = :store_id
+    ");
+    $stmtMyStore->execute(['store_id' => $myStoreId]);
+    $latestStores = $stmtMyStore->fetchAll();
+
+} else {
+    // CONSULTAS ORIGINALES GLOBALES (Para el Administrador del Sistema)
+    $stats = [
+        'productos'  => (int) $pdo->query('SELECT COUNT(*) FROM productos')->fetchColumn(),
+        'tiendas'    => (int) $pdo->query('SELECT COUNT(*) FROM tiendas')->fetchColumn(),
+        'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
+        'favoritos'  => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
+    ];
+
+    $pendingReviewReports = (int) $pdo->query("SELECT COUNT(*) FROM tienda_review_reportes WHERE rep_estado = 'pendiente'")->fetchColumn();
+    $pendingProductReports = (int) $pdo->query("SELECT COUNT(*) FROM producto_reportes WHERE rep_estado = 'pendiente'")->fetchColumn();
+    $pendingSuggestions = (int) $pdo->query("SELECT COUNT(*) FROM sugerencias WHERE sug_estado = 'pendiente'")->fetchColumn();
+
+    $latestProducts = $pdo->query("
+        SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC LIMIT 6
+    ")->fetchAll();
+
+    $latestStores = $pdo->query("
+        SELECT t.idtiendas, t.tie_nombre, t.tie_ubicacion, t.tie_logo,
+               (SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = t.idtiendas) as total_productos
+        FROM tiendas t ORDER BY t.idtiendas DESC LIMIT 5
+    ")->fetchAll();
+}
+
+render_head('Panel de Administración');
 ?>
 <link rel="stylesheet" href="./css/admin.css">
 <?php render_navbar('admin'); ?>
