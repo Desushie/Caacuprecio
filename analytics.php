@@ -9,10 +9,8 @@ $myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
 // CONTROL SEGURO DE FILTRO POR TIENDA
 if ($isEmpresa) {
-    // Si es empresa, se fuerza obligatoriamente su tienda asignada
     $storeId = $myStoreId;
 } else {
-    // Si es administrador, se permite elegir del combo de tiendas
     $storeId = max(0, (int) ($_GET['tienda'] ?? 0));
 }
 
@@ -72,8 +70,6 @@ if ($hasProductClicks) {
     if ($storeId > 0) {
         $sqlClicks .= " AND p.tiendas_idtiendas = :storeId";
     }
-    // Filtro de fechas si la tabla tiene columna de tiempo (ej. creado_en o fecha)
-    // Si tu tabla usa otra columna de fecha en los clicks, podés añadir el filtro acá.
     
     $stmtClicks = $pdo->prepare($sqlClicks);
     if ($storeId > 0) $stmtClicks->bindValue(':storeId', $storeId, PDO::PARAM_INT);
@@ -93,14 +89,15 @@ $promedioPrecio = (float) $stmtPrecio->fetchColumn();
 
 
 // ==========================================
-// 2. DATOS PARA GRÁFICOS (TOP 10 PRODUCTOS MÁS POPULARES)
+// 2. DATOS PARA GRÁFICOS (TOP 10 PRODUCTOS)
 // ==========================================
 $topProductsLabels = [];
 $topProductsData = [];
 
 if ($hasProductClicks) {
+    // 🌟 CORRECCIÓN AQUÍ: Se usa pc.productos_idproductos en vez de pc.id inexistente
     $sqlTopProd = "
-        SELECT p.pro_nombre, COUNT(pc.id) as total_clicks
+        SELECT p.pro_nombre, COUNT(pc.productos_idproductos) as total_clicks
         FROM producto_clicks pc
         INNER JOIN productos p ON p.idproductos = pc.productos_idproductos
         WHERE 1=1
@@ -289,7 +286,6 @@ render_head('Métricas y Analytics');
 </section>
 
 <script>
-  // Paleta de colores consistente con el diseño estético de la app
   function buildPalette(total) {
     const base = [
       '#7c3aed', '#22d3ee', '#f97316', '#22c55e', '#ef4444',
@@ -302,20 +298,18 @@ render_head('Métricas y Analytics');
     return colors;
   }
 
-  // Gráfico de Productos Más Populares
-  <?php if (!empty($topProductsData)): ?>
-  const ctxProd = document.getElementById('chartTopProducts');
-  if (ctxProd) {
-    const labelsProd = <?= json_encode($topProductsLabels, JSON_UNESCAPED_SLASHES) ?>;
-    const dataProd = <?= json_encode($topProductsData) ?>;
-    
-    new Chart(ctxProd, {
+  // 🌟 FUNCIÓN NATIVA RESTAURADA (Para compatibilidad con gráficos horizontales estilizados)
+  function makeBarChart(canvasId, labels, data, label) {
+    const el = document.getElementById(canvasId);
+    if (!el || !labels.length) return;
+
+    new Chart(el, {
       type: 'bar',
       data: {
-        labels: labelsProd,
+        labels: labels,
         datasets: [{
-          label: 'Cantidad de Clicks',
-          data: dataProd,
+          label: label,
+          data: data,
           backgroundColor: '#7c3aed',
           borderRadius: 6
         }]
@@ -327,6 +321,7 @@ render_head('Métricas y Analytics');
         plugins: {
           legend: { display: false }
         },
+        disabledCanvas: true,
         scales: {
           x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9fb2d1' } },
           y: { grid: { display: false }, ticks: { color: '#9fb2d1' } }
@@ -334,9 +329,13 @@ render_head('Métricas y Analytics');
       }
     });
   }
+
+  // Renderizado del Gráfico de Productos
+  <?php if (!empty($topProductsData)): ?>
+    makeBarChart('chartTopProducts', <?= json_encode($topProductsLabels, JSON_UNESCAPED_SLASHES) ?>, <?= json_encode($topProductsData) ?>, 'Cantidad de Clicks');
   <?php endif; ?>
 
-  // Gráfico de Categorías (Doughnut / Pie moderno)
+  // Gráfico de Categorías (Doughnut)
   <?php if (!empty($catData)): ?>
   const ctxCat = document.getElementById('chartCategories');
   if (ctxCat) {
