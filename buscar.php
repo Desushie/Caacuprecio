@@ -383,22 +383,15 @@ render_navbar('home');
             <?php endforeach; ?>
           </select>
         </div>
-        
-        <div class="col-lg-1 d-grid position-relative mb-3 mb-lg-0">
+        <div class="col-lg-1 d-grid">
           <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
             <i class="bi bi-search"></i>
           </button> 
-          
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-outline-secondary position-absolute rounded-3 p-0 d-flex align-items-center justify-content-center toggle-pin-btn" 
-                  style="bottom: -28px; right: 12px; width: 28px; height: 28px; z-index: 10; background: var(--bg-card); border-color: var(--border-soft);" 
-                  title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
-          </button>
         </div>
 
         <?php if ($recentSearches || $popularSearches): ?>
           <div class="col-12">
-            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2">
+            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2 pb-4">
               <?php if ($recentSearches): ?>
                 <div class="search-chip-row">
                   <span class="search-chip-label">
@@ -441,7 +434,13 @@ render_navbar('home');
             </div>
           </div>
         <?php endif; ?>
-      </form>
+
+        <div class="position-absolute bottom-0 end-0 mb-2 me-2" style="z-index: 1030;">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
+          </button>
+        </div>
+        </form>
     </div>
   </div>
 </div>
