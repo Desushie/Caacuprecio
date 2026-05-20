@@ -331,7 +331,7 @@ render_navbar('home');
       data-count-target="#results-live-count"
       data-state-target="#results-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form position-relative pb-2" method="get" action="buscar.php" autocomplete="off">
+      <form class="row g-2 align-items-center js-smart-search-form position-relative pb-4" method="get" action="buscar.php" autocomplete="off">
         <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
         <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
         <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
@@ -435,7 +435,7 @@ render_navbar('home');
           </div>
         <?php endif; ?>
 
-        <div class="position-absolute" style="right: 15px; bottom: 10px; left: auto !important; width: auto !important; z-index: 1030;">
+        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; width: auto !important; z-index: 1030;">
           <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
             <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
           </button>
@@ -445,7 +445,7 @@ render_navbar('home');
   </div>
 </div>
 
-<section class="page-section page-search-results pt-2 pb-5">
+<section class="page-section page-search-results py-5">
   <div class="container">
     <div class="row g-4">
 
