@@ -43,6 +43,10 @@ function cp_table_exists(PDO $pdo, string $table): bool
 }
 
 $hasProductClicks = cp_table_exists($pdo, 'producto_clicks');
+$hasFavoritos = cp_table_exists($pdo, 'favoritos');
+$hasReviews = cp_table_exists($pdo, 'tienda_reviews');
+$hasBusquedas = cp_table_exists($pdo, 'busquedas');
+$hasHistorial = cp_table_exists($pdo, 'historial_precios');
 
 // ==========================================
 // 1. OBTENCIÓN DE ESTADÍSTICAS GENERALES
@@ -70,7 +74,6 @@ if ($hasProductClicks) {
     if ($storeId > 0) {
         $sqlClicks .= " AND p.tiendas_idtiendas = :storeId";
     }
-    
     $stmtClicks = $pdo->prepare($sqlClicks);
     if ($storeId > 0) $stmtClicks->bindValue(':storeId', $storeId, PDO::PARAM_INT);
     $stmtClicks->execute();
@@ -89,13 +92,48 @@ $promedioPrecio = (float) $stmtPrecio->fetchColumn();
 
 
 // ==========================================
+// METRICA NUEVA A: REPUTACIÓN Y REVIEWS
+// ==========================================
+$ratingPromedio = 0.0;
+$totalReviews = 0;
+if ($hasReviews && $storeId > 0) {
+    $sqlRev = "SELECT AVG(rev_calificacion), COUNT(*) FROM tienda_reviews WHERE tiendas_idtiendas = :storeId";
+    $stmtRev = $pdo->prepare($sqlRev);
+    $stmtRev->execute([':storeId' => $storeId]);
+    $rowRev = $stmtRev->fetch(PDO::FETCH_NUM);
+    $ratingPromedio = $rowRev[0] ? round((float)$rowRev[0], 1) : 0.0;
+    $totalReviews = (int)$rowRev[1];
+}
+
+
+// ==========================================
+// METRICA NUEVA B: CAMBIOS DE PRECIOS RECIENTES
+// ==========================================
+$totalCambiosPrecio = 0;
+if ($hasHistorial) {
+    $sqlHist = "
+        SELECT COUNT(*) 
+        FROM historial_precios hp
+        INNER JOIN productos p ON p.idproductos = hp.productos_idproductos
+        WHERE 1=1
+    ";
+    if ($storeId > 0) {
+        $sqlHist .= " AND p.tiendas_idtiendas = :storeId";
+    }
+    $stmtHist = $pdo->prepare($sqlHist);
+    if ($storeId > 0) $stmtHist->bindValue(':storeId', $storeId, PDO::PARAM_INT);
+    $stmtHist->execute();
+    $totalCambiosPrecio = (int) $stmtHist->fetchColumn();
+}
+
+
+// ==========================================
 // 2. DATOS PARA GRÁFICOS (TOP 10 PRODUCTOS)
 // ==========================================
 $topProductsLabels = [];
 $topProductsData = [];
 
 if ($hasProductClicks) {
-    // 🌟 CORRECCIÓN AQUÍ: Se usa pc.productos_idproductos en vez de pc.id inexistente
     $sqlTopProd = "
         SELECT p.pro_nombre, COUNT(pc.productos_idproductos) as total_clicks
         FROM producto_clicks pc
@@ -147,6 +185,38 @@ foreach ($catDistribution as $cd) {
 }
 
 
+// ==========================================
+// METRICA NUEVA C: TOP FAVORITOS (LISTA DE DESEOS)
+// ==========================================
+$topFavorites = [];
+if ($hasFavoritos) {
+    $sqlFav = "
+        SELECT p.pro_nombre, COUNT(f.idfavorito) as total_favs
+        FROM favoritos f
+        INNER JOIN productos p ON p.idproductos = f.productos_idproductos
+        WHERE 1=1
+    ";
+    if ($storeId > 0) {
+        $sqlFav .= " AND p.tiendas_idtiendas = :storeId";
+    }
+    $sqlFav .= " GROUP BY p.idproductos ORDER BY total_favs DESC LIMIT 5";
+    $stmtFav = $pdo->prepare($sqlFav);
+    if ($storeId > 0) $stmtFav->bindValue(':storeId', $storeId, PDO::PARAM_INT);
+    $stmtFav->execute();
+    $topFavorites = $stmtFav->fetchAll();
+}
+
+
+// ==========================================
+// METRICA NUEVA D: TÉRMINOS MÁS BUSCADOS (TERMÓMETRO DE MERCADO)
+// ==========================================
+$topSearches = [];
+if ($hasBusquedas) {
+    $sqlSearch = "SELECT bus_termino, bus_total FROM busquedas ORDER BY bus_total DESC LIMIT 5";
+    $topSearches = $pdo->query($sqlSearch)->fetchAll();
+}
+
+
 // Listado de tiendas auxiliar (solo para combo de Administradores)
 $stores = [];
 if (!$isEmpresa) {
@@ -157,7 +227,7 @@ if (!$isEmpresa) {
     $myStoreName = $stmtMyStore->fetchColumn() ?: 'Mi Tienda';
 }
 
-render_head('Métricas y Analytics');
+render_head('Métricas Avanzadas y Analytics');
 ?>
 <link rel="stylesheet" href="./css/admin.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -176,12 +246,12 @@ render_head('Métricas y Analytics');
     <div class="admin-hero p-4 p-lg-5 mb-4">
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
-          <div class="admin-kicker mb-2">Analytics</div>
+          <div class="admin-kicker mb-2">Business Intelligence</div>
           <h1 class="display-6 fw-bold mb-3">
             <?= $isEmpresa ? 'Rendimiento de ' . e($myStoreName) : 'Panel General de Métricas' ?>
           </h1>
           <p class="text-body-secondary mb-0">
-            Monitoreá el interés de los usuarios, clicks salientes hacia tu e-commerce y la composición de categorías.
+            Análisis detallado de intenciones de compra, reputación comercial, clicks e indexación de tendencias en Caacupé.
           </p>
         </div>
       </div>
@@ -224,41 +294,51 @@ render_head('Métricas y Analytics');
       </form>
     </div>
 
-    <div class="row g-4 mb-5">
-      <div class="col-md-4">
-        <div class="admin-panel p-4 h-100 d-flex align-items-center gap-3">
-          <div class="fs-1 text-primary"><i class="bi bi-box-seam"></i></div>
+    <div class="row g-4 mb-4">
+      <div class="col-md-3">
+        <div class="admin-panel p-3 h-100 d-flex align-items-center gap-3">
+          <div class="fs-2 text-primary"><i class="bi bi-box-seam"></i></div>
           <div>
-            <div class="text-body-secondary small text-uppercase">Productos Activos</div>
-            <h3 class="fw-bold mb-0"><?= number_format($totalProductosActivos, 0, ',', '.') ?></h3>
+            <div class="text-body-secondary small text-uppercase" style="font-size:0.75rem;">Productos Activos</div>
+            <h4 class="fw-bold mb-0"><?= number_format($totalProductosActivos, 0, ',', '.') ?></h4>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
-        <div class="admin-panel p-4 h-100 d-flex align-items-center gap-3">
-          <div class="fs-1 text-success"><i class="bi bi-cursor-fill"></i></div>
+      <div class="col-md-3">
+        <div class="admin-panel p-3 h-100 d-flex align-items-center gap-3">
+          <div class="fs-2 text-success"><i class="bi bi-cursor-fill"></i></div>
           <div>
-            <div class="text-body-secondary small text-uppercase">Clicks Salientes</div>
-            <h3 class="fw-bold mb-0"><?= number_format($totalClicks, 0, ',', '.') ?></h3>
+            <div class="text-body-secondary small text-uppercase" style="font-size:0.75rem;">Clicks Salientes</div>
+            <h4 class="fw-bold mb-0"><?= number_format($totalClicks, 0, ',', '.') ?></h4>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
-        <div class="admin-panel p-4 h-100 d-flex align-items-center gap-3">
-          <div class="fs-1 text-warning"><i class="bi bi-tags"></i></div>
+      <div class="col-md-3">
+        <div class="admin-panel p-3 h-100 d-flex align-items-center gap-3">
+          <div class="fs-2 text-warning"><i class="bi bi-star-fill"></i></div>
           <div>
-            <div class="text-body-secondary small text-uppercase">Precio Promedio</div>
-            <h3 class="fw-bold mb-0"><?= gs($promedioPrecio) ?></h3>
+            <div class="text-body-secondary small text-uppercase" style="font-size:0.75rem;">Reputación Ficha</div>
+            <h4 class="fw-bold mb-0"><?= $storeId > 0 ? $ratingPromedio . ' / 5' : 'N/A' ?></h4>
+            <small class="text-body-secondary" style="font-size:0.7rem;">(<?= $totalReviews ?> opiniones)</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="admin-panel p-3 h-100 d-flex align-items-center gap-3">
+          <div class="fs-2 text-info"><i class="bi bi-graph-down-arrow"></i></div>
+          <div>
+            <div class="text-body-secondary small text-uppercase" style="font-size:0.75rem;">Ajustes de Precios</div>
+            <h4 class="fw-bold mb-0"><?= number_format($totalCambiosPrecio, 0, ',', '.') ?></h4>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="row g-4">
+    <div class="row g-4 mb-4">
       <div class="col-lg-7">
         <div class="admin-panel p-4">
           <h5 class="fw-bold mb-4"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Top 10 Productos con más Clicks al Sitio</h5>
-          <div style="height: 380px; position: relative;">
+          <div style="height: 340px; position: relative;">
             <?php if (!empty($topProductsData)): ?>
               <canvas id="chartTopProducts"></canvas>
             <?php else: ?>
@@ -271,13 +351,83 @@ render_head('Métricas y Analytics');
       <div class="col-lg-5">
         <div class="admin-panel p-4">
           <h5 class="fw-bold mb-4"><i class="bi bi-pie-chart me-2 text-success"></i>Distribución de Stock por Categoría</h5>
-          <div style="height: 380px; position: relative;">
+          <div style="height: 340px; position: relative;">
             <?php if (!empty($catData)): ?>
               <canvas id="chartCategories"></canvas>
             <?php else: ?>
               <div class="admin-empty position-absolute top-50 start-50 translate-middle w-100">No hay datos de categorías disponibles.</div>
             <?php endif; ?>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="admin-panel p-4 h-100">
+          <h5 class="fw-bold mb-3 text-uppercase small text-primary tracking-wider">
+            <i class="bi bi-heart-fill text-danger me-2"></i>Productos más Deseados (Favoritos)
+          </h5>
+          <p class="small text-body-secondary mb-3">Muestra qué artículos de la tienda tienen los usuarios guardados en sus listas personales.</p>
+          
+          <?php if (!empty($topFavorites)): ?>
+            <div class="table-responsive">
+              <table class="table table-dark table-hover align-middle mb-0" style="--bs-table-bg: transparent;">
+                <thead>
+                  <tr class="text-body-secondary small">
+                    <th>Producto</th>
+                    <th class="text-end">Guardados</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($topFavorites as $fav): ?>
+                    <tr>
+                      <td class="text-truncate" style="max-width: 280px;"><?= e($fav['pro_nombre']) ?></td>
+                      <td class="text-end fw-bold text-danger">
+                        <i class="bi bi-heart me-1"></i><?= number_format((int)$fav['total_favs'], 0, ',', '.') ?>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php else: ?>
+            <div class="admin-empty py-4">Ningún artículo fue añadido a favoritos todavía.</div>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="admin-panel p-4 h-100">
+          <h5 class="fw-bold mb-3 text-uppercase small text-info tracking-wider">
+            <i class="bi bi-lightning-charge-fill text-warning me-2"></i>Tendencias de Búsqueda en Caacupé
+          </h5>
+          <p class="small text-body-secondary mb-3">Termómetro global de palabras más ingresadas en la plataforma. ¡Ideal para reponer inventario estratégico!</p>
+          
+          <?php if (!empty($topSearches)): ?>
+            <div class="table-responsive">
+              <table class="table table-dark table-hover align-middle mb-0" style="--bs-table-bg: transparent;">
+                <thead>
+                  <tr class="text-body-secondary small">
+                    <th>Término buscado</th>
+                    <th class="text-end">Frecuencia Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($topSearches as $search): ?>
+                    <tr>
+                      <td><span class="badge bg-secondary-subtle text-secondary-emphasis px-2 py-1 fs-6 fw-normal">"<?= e($search['bus_termino']) ?>"</span></td>
+                      <td class="text-end fw-bold text-info">
+                        <?= number_format((int)$search['bus_total'], 0, ',', '.') ?> búsquedas
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php else: ?>
+            <div class="admin-empty py-4">No se registran términos buscados en la base de datos.</div>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -298,7 +448,6 @@ render_head('Métricas y Analytics');
     return colors;
   }
 
-  // 🌟 FUNCIÓN NATIVA RESTAURADA (Para compatibilidad con gráficos horizontales estilizados)
   function makeBarChart(canvasId, labels, data, label) {
     const el = document.getElementById(canvasId);
     if (!el || !labels.length) return;
@@ -330,12 +479,11 @@ render_head('Métricas y Analytics');
     });
   }
 
-  // Renderizado del Gráfico de Productos
+  // Renderizado de Gráficos
   <?php if (!empty($topProductsData)): ?>
     makeBarChart('chartTopProducts', <?= json_encode($topProductsLabels, JSON_UNESCAPED_SLASHES) ?>, <?= json_encode($topProductsData) ?>, 'Cantidad de Clicks');
   <?php endif; ?>
 
-  // Gráfico de Categorías (Doughnut)
   <?php if (!empty($catData)): ?>
   const ctxCat = document.getElementById('chartCategories');
   if (ctxCat) {
