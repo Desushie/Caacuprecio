@@ -37,10 +37,16 @@ function h(?string $value): string
 $hasProductClicks = cp_table_exists($pdo, 'producto_clicks');
 $hasProductViews = cp_table_exists($pdo, 'productos_vistos');
 
-$storeId = max(0, (int) ($_GET['tienda'] ?? 0));
 $dateFrom = trim((string) ($_GET['desde'] ?? ''));
 $dateTo = trim((string) ($_GET['hasta'] ?? ''));
 
+// Si es empresa, forzamos su tienda; si es administrador, le permitimos filtrar de la URL
+if (is_empresa()) {
+    $user = current_user();
+    $storeId = (int)($user['tiendas_idtiendas'] ?? 0);
+} else {
+    $storeId = max(0, (int) ($_GET['tienda'] ?? 0));
+}
 $stores = $pdo->query("
     SELECT idtiendas, tie_nombre
     FROM tiendas
