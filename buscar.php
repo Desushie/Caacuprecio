@@ -383,10 +383,14 @@ render_navbar('home');
             <?php endforeach; ?>
           </select>
         </div>
-
         <div class="col-lg-1 d-grid">
           <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
             <i class="bi bi-search"></i>
+          </button> 
+        </div>
+        <div class="col-lg-1 d-grid">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary rounded-pill" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle-fill"></i> 
           </button>
         </div>
 
