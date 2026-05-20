@@ -98,7 +98,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 }
 
 $q = trim($_GET['q'] ?? '');
-$tiendaId = (int) ($_GET['tienda'] ?? 0);
+if (is_empresa()) {
+    $user = current_user();
+    $tiendaId = (int)($user['tiendas_idtiendas'] ?? 0);
+} else {
+    $tiendaId = (int) ($_GET['tienda'] ?? 0);
+}
 $categoriaId = (int) ($_GET['categoria'] ?? 0);
 $estado = $_GET['estado'] ?? '';
 
