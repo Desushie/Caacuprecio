@@ -45,6 +45,11 @@ if ($isEmpresa) {
     $stmtRepRev->execute(['store_id' => $myStoreId]);
     $pendingReviewReports = (int)$stmtRepRev->fetchColumn();
 
+    // Calificación promedio de la tienda
+    $stmtRating = $pdo->prepare("SELECT AVG(rev_puntaje) FROM tienda_reviews WHERE tiendas_idtiendas = :store_id AND rev_activo = 1");
+    $stmtRating->execute(['store_id' => $myStoreId]);
+    $ratingPromedio = number_format((float)($stmtRating->fetchColumn() ?: 0), 1, ',', '.');
+
     $pendingSuggestions = 0; // Las sugerencias de la app son globales (solo Admin)
 
     // Últimos productos de SU tienda
@@ -187,7 +192,7 @@ render_head('Panel de Administración');
             <?php else: ?>
               <div class="admin-side-item">
                 <strong><i class="bi bi-star me-2 text-warning"></i>Reputación</strong>
-                <span class="text-body-secondary small">Tu tienda tiene <?= $pendingReviewReports ?> reportes en reseñas que requieren atención.</span>
+                <span class="text-body-secondary small">Tu tienda tiene actualmente <?= $ratingPromedio ?> estrellas de reputación.</span>
               </div>
               <div class="admin-side-item">
                 <strong><i class="bi bi-graph-up-arrow me-2 text-success"></i>Interés de compra</strong>
