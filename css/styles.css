@@ -1071,3 +1071,24 @@ body.theme-light .icon-wrap {
 body.theme-light .icon-wrap i.bi {
   color: #070b16 !important;
 }
+
+/* Bloqueamos el fondo y el borde con los colores originales oscuros */
+body.theme-light .footer-suggestion-card {
+  background: rgba(14, 20, 35, 0.72) !important; /* Variable --bg-card en modo oscuro */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important; /* Variable --border-soft en modo oscuro */
+  backdrop-filter: blur(12px);
+}
+
+/* Forzamos a que los títulos y textos internos sigan siendo claros/legibles */
+body.theme-light .footer-suggestion-card strong {
+  color: #edf3ff !important; /* Variable --text-main en modo oscuro */
+}
+
+body.theme-light .footer-suggestion-card .small {
+  color: #9fb2d1 !important; /* Variable --text-soft en modo oscuro */
+}
+
+/* Como esta tarjeta vuelve a ser oscura, el ícono dentro del botón principal debe seguir siendo blanco */
+body.theme-light .footer-suggestion-card .btn-primary i.bi {
+  color: #ffffff !important;
+}
