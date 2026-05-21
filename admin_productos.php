@@ -269,7 +269,7 @@ render_head('Administrar productos');
           </div>
         <?php endif; ?>
 
-        <div class="col-sm-6 <?= $isEmpresa ? 'col-lg-4' : 'col-lg-3' ?>">
+        <div class="col-sm-6 <?= $isEmpresa ? 'col-lg-3' : 'col-lg-2' ?>">
           <select name="categoria" class="form-select">
             <option value="0">Todas las categorías</option>
             <?php foreach ($categories as $cat): ?>
@@ -280,7 +280,7 @@ render_head('Administrar productos');
           </select>
         </div>
 
-        <div class="col-sm-6 col-lg-1">
+        <div class="col-sm-6 col-lg-2">
           <select name="estado" class="form-select">
             <option value="">Todos</option>
             <option value="activos" <?= $estado === 'activos' ? 'selected' : '' ?>>Act.</option>
