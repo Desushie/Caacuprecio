@@ -23,29 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'El nombre y el correo electrónico son obligatorios.';
         } else {
             try {
-                $sql = "SELECT u.*, t.tie_nombre 
-                        FROM usuario u 
-                        LEFT JOIN tiendas t ON u.tiendas_idtiendas = t.idtiendas";
-                
-                // Si el usuario escribió algo en el buscador, agregamos el filtro WHERE
-                if ($search !== '') {
-                    $sql .= " WHERE u.usu_nombre LIKE :search OR u.usu_email LIKE :search";
-                }
-                
-                $sql .= " ORDER BY u.idusuario DESC"; // Ordenamos por los más recientes
-                
-                $stmt = $pdo->prepare($sql);
-                
-                if ($search !== '') {
-                    $stmt->bindValue(':search', '%' . $search . '%');
-                }
-                
-                $stmt->execute();
-                $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
+                $stmt = $pdo->prepare("UPDATE usuario SET usu_nombre = :nombre, usu_email = :email, usu_tipo = :tipo, tiendas_idtiendas = :tienda WHERE idusuario = :id");
+                $stmt->execute([
+                    ':nombre' => $nombre,
+                    ':email'  => $email,
+                    ':tipo'   => $tipo,
+                    ':tienda' => $tienda_id,
+                    ':id'     => $id
+                ]);
+                $success = 'Usuario actualizado correctamente.';
             } catch (PDOException $e) {
-                $error = 'Error al cargar los usuarios: ' . $e->getMessage();
-                $usuarios = []; // Evitamos que rompa el foreach de abajo si falla
+                $error = 'Error al actualizar el usuario: ' . $e->getMessage();
             }
         }
     }
@@ -70,12 +58,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // 2. CONSULTAS DE DATOS (GET)
-$usuarios = $pdo->query("
-    SELECT u.*, t.tie_nombre 
-    FROM usuario u 
-    LEFT JOIN tiendas t ON u.tiendas_idtiendas = t.idtiendas 
-    ORDER BY u.idusuario DESC
-")->fetchAll();
+$where = [];
+$params = [];
+
+if ($search !== '') {
+    $where[] = "(u.usu_nombre LIKE :q OR u.usu_email LIKE :q)";
+    $params[':q'] = '%' . $search . '%';
+}
+
+$whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+$sql = "SELECT u.*, t.tie_nombre 
+        FROM usuario u 
+        LEFT JOIN tiendas t ON u.tiendas_idtiendas = t.idtiendas 
+        $whereSql
+        ORDER BY u.idusuario DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$usuarios = $stmt->fetchAll();
 
 $tiendas = $pdo->query("SELECT idtiendas, tie_nombre FROM tiendas ORDER BY tie_nombre ASC")->fetchAll();
 
@@ -84,91 +85,94 @@ render_head('Gestión de Usuarios');
 <link rel="stylesheet" href="./css/admin.css">
 <?php render_navbar('admin'); ?>
 
+<div class="site-bg" aria-hidden="true">
+  <span class="bg-orb orb-1"></span>
+  <span class="bg-orb orb-2"></span>
+  <span class="bg-orb orb-3"></span>
+  <span class="bg-grid"></span>
+</div>
+
 <section class="admin-shell">
-  <div class="container py-4">
+  <div class="container position-relative z-1 py-4">
     
     <?php if ($error !== ''): ?>
-      <div class="alert alert-danger alert-dismissible fade show rounded-pill px-4" role="alert">
+      <div class="alert alert-danger alert-dismissible fade show rounded-4 shadow-sm border-0 mb-4" role="alert">
         <i class="bi bi-exclamation-triangle-fill me-2"></i> <?= e($error) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
     <?php endif; ?>
 
     <?php if ($success !== ''): ?>
-      <div class="alert alert-success alert-dismissible fade show rounded-pill px-4" role="alert">
+      <div class="alert alert-success alert-dismissible fade show rounded-4 shadow-sm border-0 mb-4" role="alert">
         <i class="bi bi-check-circle-fill me-2"></i> <?= e($success) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
     <?php endif; ?>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <div>
-        <h2 class="h3 mb-1">Gestión de Usuarios</h2>
-        <p class="text-body-secondary small mb-0">Modifica roles, asigna empresas o remueve accesos a la plataforma.</p>
+    <div class="admin-hero p-4 p-lg-5 mb-4">
+      <div class="row g-4 align-items-center">
+        <div class="col-lg-8">
+          <div class="admin-kicker mb-2">Accesos</div>
+          <h1 class="display-6 fw-bold mb-3">Gestión de usuarios</h1>
+          <p class="text-body-secondary mb-0">
+            Administrá los roles del sistema, asigná empresas a encargados de tiendas o remové accesos a la plataforma.
+          </p>
+        </div>
+        <div class="col-lg-4 text-lg-end">
+          <span class="badge bg-dark-subtle text-secondary fs-6 px-3 py-2 rounded-pill">
+            <?= number_format(count($usuarios), 0, ',', '.') ?> usuario(s) <?= $search !== '' ? 'filtrado(s)' : 'registrado(s)' ?>
+          </span>
+        </div>
       </div>
     </div>
-    <div class="row mb-4 justify-content-between align-items-center gap-3">
-      <div class="col-12 col-md-6 col-lg-5">
-        <form method="GET" action="admin_usuarios.php" class="position-relative">
+
+    <div class="admin-panel p-4 mb-4 admin-filter-bar">
+      <form method="GET" action="admin_usuarios.php" class="row g-3 align-items-center">
+        <div class="col-lg-10">
           <div class="input-group">
-            <input 
-              type="text" 
-              name="search_user" 
-              class="form-control rounded-start-pill px-3" 
-              placeholder="Buscar por nombre o correo..." 
+            <span class="input-group-text bg-transparent border-end-0 text-body-secondary">
+              <i class="bi bi-search"></i>
+            </span>
+            <input
+              type="text"
+              name="search_user"
+              class="form-control border-start-0 ps-0"
+              placeholder="Buscar por nombre o correo electrónico..."
               value="<?= e($search) ?>"
               autocomplete="off"
             >
-            
-            <?php if ($search !== ''): ?>
-              <a href="admin_usuarios.php" class="btn btn-outline-secondary d-flex align-items-center border-end-0 px-3" title="Limpiar búsqueda">
-                <i class="bi bi-x-lg"></i>
-              </a>
-            <?php endif; ?>
-            
-            <button class="btn btn-primary rounded-end-pill px-4 d-flex align-items-center" type="submit">
-              <i class="bi bi-search me-2"></i>Buscar
-            </button>
           </div>
-        </form>
-      </div>
-      
-      <div class="col-auto">
         </div>
+        <div class="col-lg-2 d-grid">
+          <button class="btn btn-primary rounded-pill px-4" type="submit">Filtrar</button>
+        </div>
+      </form>
     </div>
 
-    <?php if ($search !== '' && empty($usuarios)): ?>
-      <div class="alert alert-info rounded-3 text-center p-4 mb-4">
-        <i class="bi bi-person-x d-block display-6 mb-2"></i>
-        No se encontraron usuarios que coincidan con "<strong><?= e($search) ?></strong>".
-        <div class="mt-2">
-          <a href="admin_usuarios.php" class="btn btn-sm btn-secondary rounded-pill px-3">Ver todos los usuarios</a>
-        </div>
-      </div>
-    <?php endif; ?>
-
-    <div class="card admin-hero p-0 border-0 shadow-sm overflow-hidden mb-4">
+    <div class="admin-table-card overflow-hidden mb-4">
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0 text-start" style="color: var(--text-main);">
-          <thead class="table-dark" style="background-color: var(--bg-elevated);">
+        <table class="table admin-table align-middle mb-0">
+          <thead>
             <tr>
-              <th class="ps-4">ID</th>
+              <th class="ps-4">ID #</th>
               <th>Nombre</th>
-              <th>Correo Electrónico</th>
+              <th>Email</th>
               <th>Rol / Perfil</th>
               <th>Tienda Vinculada</th>
-              <th class="pe-4 text-end">Acciones</th>
+              <th class="text-end pe-4">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!empty($usuarios)): ?>
               <?php foreach ($usuarios as $user): ?>
                 <tr>
-                  <td class="ps-4 fw-bold text-body-secondary"><?= (int)$user['idusuario'] ?></td>
+                  <td class="ps-4 fw-bold text-body-secondary">#<?= (int)$user['idusuario'] ?></td>
                   <td>
-                    <div class="fw-semibold"><?= e($user['usu_nombre']) ?></div>
+                    <div class="title"><?= e($user['usu_nombre']) ?></div>
                   </td>
-                  <td><?= e($user['usu_email']) ?></td>
+                  <td>
+                    <div class="subtitle"><?= e($user['usu_email']) ?></div>
+                  </td>
                   <td>
                     <?php if ((int)$user['usu_tipo'] === 1): ?>
                       <span class="badge bg-danger rounded-pill px-3">Administrador</span>
@@ -187,7 +191,7 @@ render_head('Gestión de Usuarios');
                       <span class="text-muted small">N/A</span>
                     <?php endif; ?>
                   </td>
-                  <td class="pe-4 text-end">
+                  <td class="text-end pe-4">
                     <div class="d-inline-flex gap-2">
                       <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int)$user['idusuario'] ?>">
                         <i class="bi bi-pencil-fill me-1"></i> Editar
@@ -206,7 +210,17 @@ render_head('Gestión de Usuarios');
               <?php endforeach; ?>
             <?php else: ?>
               <tr>
-                <td colspan="6" class="text-center py-5 text-muted">No se encontraron usuarios registrados en la plataforma.</td>
+                <td colspan="6">
+                  <div class="admin-empty p-5">
+                    <i class="bi bi-person-x d-block display-6 mb-2"></i>
+                    No se encontraron usuarios registrados <?= $search !== '' ? 'que coincidan con "<strong>' . e($search) . '</strong>"' : 'en la plataforma' ?>.
+                    <?php if ($search !== ''): ?>
+                      <div class="mt-3">
+                        <a href="admin_usuarios.php" class="btn btn-sm btn-outline-primary rounded-pill px-4">Ver todos</a>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+                </td>
               </tr>
             <?php endif; ?>
           </tbody>
