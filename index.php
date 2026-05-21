@@ -453,7 +453,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 };
 ?>
 
-<div class="search-sticky-bar">
+<div class="search-sticky-container">
   <div class="container">
     <div
       class="search-bar glass-card p-3 p-lg-3"
@@ -557,6 +557,11 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             </div>
           </div>
         <?php endif; ?>
+        <div class="position-absolute" style="right: 15px; bottom: 14px; left: auto !important; width: auto !important; z-index: 1030;">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -664,7 +669,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 </section>
 
 <main>
-  <section class="py-5 position-relative">
+  <section class="pt-1 pb-5 position-relative">
     <div class="container">
       <div class="section-header mb-4">
         <div>
@@ -969,5 +974,62 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
   </section>
 </main>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  let stickyContainer = document.querySelector('.search-sticky-container') || document.querySelector('.search-sticky-bar');
+  const toggleBtn = document.getElementById('toggle-sticky-btn');
+  
+  // Elementos para controlar la visibilidad automática
+  const searchInput = document.getElementById('global-search-home');
+  const liveSection = document.getElementById('home-live-section');
+
+  // 1. LÓGICA DE OCULTAR/MOSTRAR SECCIÓN EN VIVO
+  if (searchInput && liveSection) {
+    // Función que evalúa si mostrar u ocultar
+    const toggleLiveSection = () => {
+      if (searchInput.value.trim() === '') {
+        liveSection.style.setProperty('display', 'none', 'important');
+      } else {
+        liveSection.style.display = 'block';
+      }
+    };
+
+    // Ejecutar al cargar la página (por si el navegador recuerda el texto)
+    toggleLiveSection();
+
+    // Escuchar cada vez que el usuario escribe o borra
+    searchInput.addEventListener('input', toggleLiveSection);
+  }
+
+  // 2. LÓGICA DEL PIN (STICKY)
+  if (!stickyContainer) {
+    const topForm = document.querySelector('.js-smart-search-form');
+    if (topForm) {
+      stickyContainer = topForm.parentElement;
+      stickyContainer.classList.add('search-sticky-container');
+    }
+  }
+
+  if (stickyContainer && toggleBtn) {
+    const icon = toggleBtn.querySelector('i');
+    
+    toggleBtn.addEventListener('click', function() {
+      const currentPosition = window.getComputedStyle(stickyContainer).position;
+      
+      if (currentPosition === 'sticky' || stickyContainer.style.position === 'sticky') {
+        stickyContainer.style.position = 'relative';
+        if (icon) icon.className = 'bi bi-pin-angle';
+        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+      } else {
+        stickyContainer.style.position = 'sticky';
+        stickyContainer.style.top = '0';
+        stickyContainer.style.zIndex = '1020';
+        if (icon) icon.className = 'bi bi-pin-angle-fill';
+        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+      }
+    });
+  }
+});
+</script>
 <script src="./js/search.js"></script>
 <?php render_footer(); ?>
