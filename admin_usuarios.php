@@ -129,20 +129,18 @@ render_head('Gestión de Usuarios');
 
     <div class="admin-panel p-4 mb-4 admin-filter-bar">
       <form method="GET" action="admin_usuarios.php" class="row g-3 align-items-center">
-        <div class="col-lg-10">
-          <div class="input-group">
-            <span class="input-group-text bg-transparent border-end-0 text-body-secondary">
-              <i class="bi bi-search"></i>
-            </span>
-            <input
-              type="text"
-              name="search_user"
-              class="form-control border-start-0 ps-0"
-              placeholder="Buscar por nombre o correo electrónico..."
-              value="<?= e($search) ?>"
-              autocomplete="off"
-            >
-          </div>
+        <div class="col-lg-10 position-relative">
+          <span class="position-absolute top-50 start-0 translate-middle-y ms-3 text-body-secondary">
+            <i class="bi bi-search"></i>
+          </span>
+          <input
+            type="text"
+            name="search_user"
+            class="form-control ps-5"
+            placeholder="Buscar por nombre o correo electrónico..."
+            value="<?= e($search) ?>"
+            autocomplete="off"
+          >
         </div>
         <div class="col-lg-2 d-grid">
           <button class="btn btn-primary rounded-pill px-4" type="submit">Filtrar</button>
