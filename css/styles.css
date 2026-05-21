@@ -1044,3 +1044,30 @@ body.theme-light .suggestion-modal textarea {
     display: none !important;
   }
 }
+
+/* ================================================================= */
+/* CORRECCIÓN DE COLOR DE ICONOS EN MODO CLARO                       */
+/* ================================================================= */
+
+body.theme-light {
+  /* 1. Nos aseguramos de que las variables de texto globales sean oscuras */
+  --text-main: #070b16;
+  --text-soft: #4f5e7b;
+}
+
+/* 2. Forzamos a que todos los iconos sueltos hereden el color oscuro correcto */
+body.theme-light i.bi,
+body.theme-light .bi {
+  color: var(--text-main) !important;
+}
+
+/* 3. Ajuste específico para tu contenedor .icon-wrap */
+body.theme-light .icon-wrap {
+  background-color: rgba(7, 11, 22, 0.06) !important; /* Un fondo gris sutil en vez del fondo oscuro */
+  border-color: rgba(7, 11, 22, 0.1) !important;
+}
+
+/* 4. Aseguramos que el icono dentro del wrap sea bien oscuro y visible */
+body.theme-light .icon-wrap i.bi {
+  color: #070b16 !important;
+}
