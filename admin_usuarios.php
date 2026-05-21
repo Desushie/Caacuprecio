@@ -130,7 +130,7 @@ render_head('Gestión de Usuarios');
     <div class="admin-panel p-4 mb-4 admin-filter-bar">
       <form method="GET" action="admin_usuarios.php" class="row g-3 align-items-center">
         <div class="col-lg-10 position-relative">
-          <span class="position-absolute top-50 start-0 translate-middle-y ms-3 text-body-secondary">
+          <span class="position-absolute top-50 start-0 translate-middle-y text-body-secondary" style="margin-left: 1.5rem !important">
             <i class="bi bi-search"></i>
           </span>
           <input
