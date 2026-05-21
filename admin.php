@@ -116,7 +116,7 @@ render_head('Panel de Administración');
           <h1 class="display-6 fw-bold mb-3">
             <?= $isEmpresa ? 'Panel de Empresa' : 'Gestión del Sistema' ?>
           </h1>
-          <p class="text-body-secondary mb-4">
+          <p class="text-body-secondary mb-4 lead">
             <?= $isEmpresa 
               ? 'Administrá tus productos, precios y visualizá el rendimiento de tu tienda de forma organizada.' 
               : 'Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.' ?>
@@ -175,17 +175,28 @@ render_head('Panel de Administración');
 
         <div class="col-lg-4 position-relative z-1">
           <div class="admin-side-list">
+            <?php if (!$isEmpresa): ?>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-shield-exclamation me-2 text-warning"></i>Moderación</strong>
+                <span class="text-body-secondary small">Hay <?= ($pendingProductReports + $pendingReviewReports) ?> reportes de usuarios esperando revisión.</span>
+              </div>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-chat-dots me-2 text-info"></i>Feedback</strong>
+                <span class="text-body-secondary small">Tenés <?= $pendingSuggestions ?> sugerencias sin leer en la bandeja de entrada.</span>
+              </div>
+            <?php else: ?>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-star me-2 text-warning"></i>Reputación</strong>
+                <span class="text-body-secondary small">Tu tienda tiene <?= $pendingReviewReports ?> reportes en reseñas que requieren atención.</span>
+              </div>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-graph-up-arrow me-2 text-success"></i>Interés de compra</strong>
+                <span class="text-body-secondary small">Tus productos han sido guardados <?= number_format($stats['favoritos'], 0, ',', '.') ?> veces como favoritos.</span>
+              </div>
+            <?php endif; ?>
             <div class="admin-side-item">
-              <strong>Gestión rápida</strong>
-              <span class="text-body-secondary small">Editá productos, precios y datos en segundos.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Interfaz optimizada</strong>
-              <span class="text-body-secondary small">Buscá, filtrá y administrá sin complicaciones.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Integrado al sitio</strong>
-              <span class="text-body-secondary small">Todo el contenido del sitio en un solo panel.</span>
+              <strong><i class="bi bi-lightning-charge me-2 text-primary"></i>Acceso rápido</strong>
+              <span class="text-body-secondary small">Navegá por las pestañas de gestión para actualizar stock o revisar analíticas.</span>
             </div>
           </div>
         </div>
