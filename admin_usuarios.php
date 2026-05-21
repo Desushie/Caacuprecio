@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $stmt = $pdo->prepare("DELETE FROM usuario WHERE idusuario = :id");
-                $stmt->execute(['id' => $id]);
+                $stmt->execute([':id' => $id]);
                 $success = 'Usuario eliminado de forma permanente.';
             } catch (PDOException $e) {
                 $error = 'No se pudo eliminar al usuario (puede tener datos vinculados): ' . $e->getMessage();
@@ -62,8 +62,9 @@ $where = [];
 $params = [];
 
 if ($search !== '') {
-    $where[] = "(u.usu_nombre LIKE :q OR u.usu_email LIKE :q)";
-    $params[':q'] = '%' . $search . '%';
+    $where[] = "(u.usu_nombre LIKE :q_nombre OR u.usu_email LIKE :q_email)";
+    $params[':q_nombre'] = '%' . $search . '%';
+    $params[':q_email'] = '%' . $search . '%';
 }
 
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -229,17 +230,22 @@ render_head('Gestión de Usuarios');
     </div>
 
   </div>
-</section> <?php if (!empty($usuarios)): ?>
+</section>
+
+<?php if (!empty($usuarios)): ?>
   <?php foreach ($usuarios as $user): ?>
     <div class="modal fade admin-modal" id="editUserModal<?= (int)$user['idusuario'] ?>" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content text-start" style="background: var(--bg-card-strong); border: 1px solid var(--border-soft);">
-          <div class="modal-header border-bottom border-light-subtle">
-            <h5 class="modal-title"><i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuario #<?= (int)$user['idusuario'] ?></h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-content text-start">
+          <div class="modal-header">
+            <div>
+              <div class="admin-kicker mb-1">Editar acceso</div>
+              <h5 class="modal-title mb-0"><?= e($user['usu_nombre']) ?></h5>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
           </div>
           <form action="admin_usuarios.php" method="POST">
-            <div class="modal-body py-4">
+            <div class="modal-body">
               <input type="hidden" name="action" value="save_user">
               <input type="hidden" name="idusuario" value="<?= (int)$user['idusuario'] ?>">
 
@@ -276,7 +282,7 @@ render_head('Gestión de Usuarios');
               </div>
 
             </div>
-            <div class="modal-footer border-top border-light-subtle">
+            <div class="modal-footer">
               <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
               <button type="submit" class="btn btn-primary rounded-pill px-4">Guardar Cambios</button>
             </div>
