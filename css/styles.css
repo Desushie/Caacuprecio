@@ -990,54 +990,57 @@ body.theme-light .suggestion-modal textarea {
 }
 
 /* ================================================================= */
-/* OPTIMIZACIÓN DE BARRA DE BÚSQUEDA FIJA EN DISPOSITIVOS MÓVILES    */
+/* CONFIGURACIÓN UNIFICADA DE LA BARRA DE BÚSQUEDA (ESCRITORIO/MÓVIL)*/
 /* ================================================================= */
 
+/* Contenedor base: cuando NO está fijo, fluye de forma natural sin solaparse */
+.search-sticky-container {
+  z-index: 1020;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  transition: all 0.3s ease;
+}
+
+/* Estado FIJO activo (Se aplica solo cuando tiene la clase) */
+.search-sticky-container.is-sticky {
+  position: sticky !important;
+  top: 78px !important; /* Altura del navbar en Escritorio */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Optimización exclusiva para pantallas móviles */
 @media (max-width: 991.98px) {
-  /* 1. Forzamos a que se clave exactamente abajo del menú móvil (70px) */
-  .search-sticky-container {
-    position: sticky !important;
-    top: 70px !important; 
-    z-index: 1010 !important;
-    padding-top: 0.4rem !important;
-    padding-bottom: 0.4rem !important;
+  .search-sticky-container.is-sticky {
+    top: 70px !important; /* Altura del navbar en Móvil */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
   }
 
-  /* 2. Achicamos la tarjeta contenedora para quitarle aire interno */
+  /* Comprimir la barra en celulares */
   .search-sticky-container .search-bar {
     padding: 0.5rem !important;
     border-radius: 0.8rem !important;
   }
 
-  /* 3. Ocultamos los selectores pesados y los chips para ahorrar espacio vertical */
+  /* Ocultar filtros secundarios en móvil para ahorrar espacio */
   .search-sticky-container .form-select,
   .search-sticky-container .search-discovery-stack,
   .search-sticky-container .col-lg-1.d-grid {
     display: none !important;
   }
 
-  /* 4. Forzamos al input de texto a ocupar el 100% del ancho de esta nueva barra delgada */
+  /* Forzar buscador al 100% de ancho */
   .search-sticky-container .col-lg-5 {
     width: 100% !important;
     margin-bottom: 0 !important;
   }
 
   .search-sticky-container .form-control {
-    min-height: 40px !important; /* Buscador más compacto en dedos */
+    min-height: 40px !important;
     font-size: 0.9rem !important;
   }
 
-  /* 5. Ocultamos el botón del PIN en celulares (en móvil debe estar fija siempre por defecto) */
+  /* Ocultar el pin en celulares (siempre queda fija en móvil) */
   .search-sticky-container #toggle-sticky-btn {
     display: none !important;
-  }
-}
-
-/* Ajuste de simetría para Escritorio */
-@media (min-width: 992px) {
-  /* En computadoras el menú mide 78px, por lo tanto debe acoplarse ahí */
-  .search-sticky-container {
-    top: 78px !important;
   }
 }
