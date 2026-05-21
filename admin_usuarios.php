@@ -108,44 +108,44 @@ render_head('Gestión de Usuarios');
       </div>
     </div>
     <div class="row mb-4 justify-content-between align-items-center gap-3">
-  <div class="col-12 col-md-6 col-lg-5">
-    <form method="GET" action="admin_usuarios.php" class="position-relative">
-      <div class="input-group">
-        <input 
-          type="text" 
-          name="search_user" 
-          class="form-control rounded-start-pill px-3" 
-          placeholder="Buscar por nombre o correo..." 
-          value="<?= e($search) ?>"
-          autocomplete="off"
-        >
-        
-        <?php if ($search !== ''): ?>
-          <a href="admin_usuarios.php" class="btn btn-outline-secondary d-flex align-items-center border-end-0 px-3" title="Limpiar búsqueda">
-            <i class="bi bi-x-lg"></i>
-          </a>
-        <?php endif; ?>
-        
-        <button class="btn btn-primary rounded-end-pill px-4 d-flex align-items-center" type="submit">
-          <i class="bi bi-search me-2"></i>Buscar
-        </button>
+      <div class="col-12 col-md-6 col-lg-5">
+        <form method="GET" action="admin_usuarios.php" class="position-relative">
+          <div class="input-group">
+            <input 
+              type="text" 
+              name="search_user" 
+              class="form-control rounded-start-pill px-3" 
+              placeholder="Buscar por nombre o correo..." 
+              value="<?= e($search) ?>"
+              autocomplete="off"
+            >
+            
+            <?php if ($search !== ''): ?>
+              <a href="admin_usuarios.php" class="btn btn-outline-secondary d-flex align-items-center border-end-0 px-3" title="Limpiar búsqueda">
+                <i class="bi bi-x-lg"></i>
+              </a>
+            <?php endif; ?>
+            
+            <button class="btn btn-primary rounded-end-pill px-4 d-flex align-items-center" type="submit">
+              <i class="bi bi-search me-2"></i>Buscar
+            </button>
+          </div>
+        </form>
       </div>
-    </form>
-  </div>
-  
-  <div class="col-auto">
+      
+      <div class="col-auto">
+        </div>
     </div>
-</div>
 
-<?php if ($search !== '' && empty($usuarios)): ?>
-  <div class="alert alert-info rounded-3 text-center p-4 mb-4">
-    <i class="bi bi-person-x d-block display-6 mb-2"></i>
-    No se encontraron usuarios que coincidan con "<strong><?= e($search) ?></strong>".
-    <div class="mt-2">
-      <a href="admin_usuarios.php" class="btn btn-sm btn-secondary rounded-pill px-3">Ver todos los usuarios</a>
-    </div>
-  </div>
-<?php endif; ?>
+    <?php if ($search !== '' && empty($usuarios)): ?>
+      <div class="alert alert-info rounded-3 text-center p-4 mb-4">
+        <i class="bi bi-person-x d-block display-6 mb-2"></i>
+        No se encontraron usuarios que coincidan con "<strong><?= e($search) ?></strong>".
+        <div class="mt-2">
+          <a href="admin_usuarios.php" class="btn btn-sm btn-secondary rounded-pill px-3">Ver todos los usuarios</a>
+        </div>
+      </div>
+    <?php endif; ?>
 
     <div class="card admin-hero p-0 border-0 shadow-sm overflow-hidden mb-4">
       <div class="table-responsive">
