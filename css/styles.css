@@ -29,7 +29,7 @@ body {
     linear-gradient(180deg, #070b16 0%, #08101f 45%, #0a1020 100%);
   color: var(--text-main);
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  transition: background-color .25s ease, color .25s ease;
+  transition: background-color .4s cubic-bezier(0.16, 1, 0.3, 1), color .4s ease;
   overflow-x: hidden;
 }
 
@@ -336,7 +336,7 @@ small,
 .store-card,
 .page-link,
 .stats-card {
-  transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease, background-color .28s ease;
+  transition: transform .5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .5s cubic-bezier(0.16, 1, 0.3, 1), border-color .5s ease, background-color .5s ease, filter .5s ease;
 }
 
 .fancy-hover:hover,
@@ -345,9 +345,10 @@ small,
 .store-card:hover,
 .page-link:hover,
 .stats-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-10px) scale(1.02);
+  filter: brightness(1.08);
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-soft), var(--shadow-glow);
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.45), var(--shadow-glow);
   color: var(--text-main);
 }
 
@@ -571,11 +572,14 @@ body.theme-light .custom-badge {
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
   border: none;
   box-shadow: var(--shadow-glow);
+  transition: all .35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-primary:hover,
 .btn-primary:focus {
-  filter: brightness(1.05);
+  filter: brightness(1.1);
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 12px 28px rgba(124, 58, 237, 0.35);
 }
 
 .btn-outline-primary {
@@ -632,13 +636,14 @@ code {
 }
 
 @keyframes floatOrb {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(0, -18px, 0) scale(1.05); }
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -60px) scale(1.12); }
+  66% { transform: translate(-30px, 30px) scale(0.92); }
 }
 
 @keyframes floatCard {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(1.5deg); }
 }
 
 @keyframes pulseDot {
@@ -980,10 +985,7 @@ body.theme-light .suggestion-modal textarea {
 }
 
 .search-sticky-container {
-  position: -webkit-sticky; /* Soporte para Safari antiguo */
-  position: sticky;
-  top: 0;                   /* Se pega al borde superior de la pantalla */
-  z-index: 1020;            /* Se posiciona por encima del contenido, pero por debajo de los modales */
+  z-index: 1020;
   padding-top: 0.4rem;
   padding-bottom: 0.4rem;
   transition: all 0.3s ease;
@@ -1091,4 +1093,154 @@ body.theme-light .footer-suggestion-card .small {
 /* Como esta tarjeta vuelve a ser oscura, el ícono dentro del botón principal debe seguir siendo blanco */
 body.theme-light .footer-suggestion-card .btn-primary i.bi {
   color: #ffffff !important;
+}
+
+/* ================================================================= */
+/* ANIMACIONES ESTILO MODERN (REVEAL & SMOOTH)                      */
+/* ================================================================= */
+
+@keyframes revealUp {
+  0% { opacity: 0; transform: translateY(50px); filter: blur(10px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes revealIn {
+  0% { opacity: 0; transform: scale(0.94); filter: blur(12px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+/* Clases de animación para usar en el HTML */
+.animate-reveal-up {
+  opacity: 0;
+  animation: revealUp 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-reveal-in {
+  opacity: 0;
+  animation: revealIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Delays para efectos escalonados (Staggered) */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* Efecto Shimmer (Brillo sutil que recorre la tarjeta) */
+@keyframes shimmerSweep {
+  0% { transform: translateX(-150%) skewX(-25deg); }
+  100% { transform: translateX(150%) skewX(-25deg); }
+}
+
+.shimmer-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-card::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  animation: shimmerSweep 4s infinite;
+}
+
+
+/* ================================================================= */
+/* REESTRUCTURACIÓN DE BARRA DE BÚSQUEDA (GLASS PURO Y CAPAS ALTA)   */
+/* ================================================================= */
+
+/* Contenedor Base: Resolvemos el problema de capas del historial */
+.search-sticky-container {
+  position: relative !important; /* Crea el contexto para que el historial no se vaya atrás */
+  z-index: 1060 !important;       /* Posiciona la barra y el historial sobre todo el contenido */
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: none !important; /* Eliminamos cualquier borde inferior */
+  box-shadow: none !important;
+  transition: box-shadow 0.3s ease;
+}
+
+/* Glass sutil en Modo Claro (Mismo comportamiento, sin fondos invasivos) */
+body.theme-light .search-sticky-container {
+  border-bottom: none !important;
+}
+
+/* Cuando la barra entra en Modo Movimiento (Fijado por Scroll/Pin) */
+.search-sticky-container.is-sticky {
+  position: sticky !important;
+  top: 78px !important; /* Se mantiene alineado abajo de tu navbar */
+  /* Una sombra flotante muy suave para dar profundidad en el aire */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important; 
+}
+
+/* Modo Movimiento en Modo Claro */
+body.theme-light .search-sticky-container.is-sticky {
+  background: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 10px 30px rgba(7, 11, 22, 0.03) !important;
+}
+
+/* Asegurar que el panel flotante del historial/sugerencias mantenga prioridad */
+.search-suggest-dropdown {
+  z-index: 1070 !important; /* Por encima del contenedor */
+}
+
+
+/* ================================================================= */
+/* BOTÓN DEL PIN EN MODO CLARO (PIN E ICONO 100% BLANCOS)            */
+/* ================================================================= */
+
+/* Estado Desclavado: Botón gris azulado oscuro para que resalte el texto e icono blanco */
+body.theme-light #toggle-sticky-btn {
+  background-color: #4f5e7b !important;
+  border-color: #4f5e7b !important;
+  color: #ffffff !important; /* Texto blanco */
+}
+
+/* Forzamos de manera estricta que el pin ignore la regla negra global */
+body.theme-light #toggle-sticky-btn i,
+body.theme-light #toggle-sticky-btn i.bi,
+body.theme-light #toggle-sticky-btn .bi {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important; /* Seguridad para variantes de renderizado */
+}
+
+/* Estado Clavado (Activo): Muta al color violeta de tu marca con el pin e icono impecablemente blancos */
+body.theme-light #toggle-sticky-btn.btn-primary {
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #ffffff !important;
+}
+
+body.theme-light #toggle-sticky-btn.btn-primary i,
+body.theme-light #toggle-sticky-btn.btn-primary .bi {
+  color: #ffffff !important;
+}
+
+/* Efecto Hover para el Modo Claro */
+body.theme-light #toggle-sticky-btn:hover {
+  background-color: #3b4861 !important;
+  border-color: #3b4861 !important;
+  opacity: 0.95;
+}
+
+/* ================================================================= */
+/* CONFIGURACIÓN DEL LATERAL DE FILTROS (SCROLL NATURAL)             */
+/* ================================================================= */
+
+.search-filters-sidebar {
+  /* Cambiamos de sticky a relative para que se mueva en sintonía con los productos */
+  position: relative !important; 
+  top: auto !important; /* Quitamos la distancia fija del techo */
+  margin-bottom: 2rem;
+}
+
+/* Mantenemos tu configuración actual para pantallas móviles */
+@media (max-width: 991.98px) {
+  .search-filters-sidebar {
+    position: static !important;
+  }
 }

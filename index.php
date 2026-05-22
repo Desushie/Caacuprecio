@@ -558,8 +558,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
           </div>
         <?php endif; ?>
         <div class="position-absolute" style="right: 15px; bottom: 14px; left: auto !important; width: auto !important; z-index: 1030;">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle-fill" style="font-size: 0.85rem;"></i>
+          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
           </button>
         </div>
       </form>
@@ -976,16 +976,13 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  let stickyContainer = document.querySelector('.search-sticky-container') || document.querySelector('.search-sticky-bar');
+  const stickyContainer = document.querySelector('.search-sticky-container');
   const toggleBtn = document.getElementById('toggle-sticky-btn');
   
-  // Elementos para controlar la visibilidad automática
+  // 1. Control de la sección en vivo (Para index.php)
   const searchInput = document.getElementById('global-search-home');
   const liveSection = document.getElementById('home-live-section');
-
-  // 1. LÓGICA DE OCULTAR/MOSTRAR SECCIÓN EN VIVO
   if (searchInput && liveSection) {
-    // Función que evalúa si mostrar u ocultar
     const toggleLiveSection = () => {
       if (searchInput.value.trim() === '') {
         liveSection.style.setProperty('display', 'none', 'important');
@@ -993,39 +990,26 @@ document.addEventListener('DOMContentLoaded', function() {
         liveSection.style.display = 'block';
       }
     };
-
-    // Ejecutar al cargar la página (por si el navegador recuerda el texto)
     toggleLiveSection();
-
-    // Escuchar cada vez que el usuario escribe o borra
     searchInput.addEventListener('input', toggleLiveSection);
   }
 
-  // 2. LÓGICA DEL PIN (STICKY)
-  if (!stickyContainer) {
-    const topForm = document.querySelector('.js-smart-search-form');
-    if (topForm) {
-      stickyContainer = topForm.parentElement;
-      stickyContainer.classList.add('search-sticky-container');
-    }
-  }
-
+  // 2. Control del Pin (Por defecto: Libre -> Clic: Fija)
   if (stickyContainer && toggleBtn) {
     const icon = toggleBtn.querySelector('i');
     
     toggleBtn.addEventListener('click', function() {
-      const currentPosition = window.getComputedStyle(stickyContainer).position;
+      // Commuta la clase: si no está, la pone (fija); si está, la saca (libre)
+      const isStickyActive = stickyContainer.classList.toggle('is-sticky');
       
-      if (currentPosition === 'sticky' || stickyContainer.style.position === 'sticky') {
-        stickyContainer.style.position = 'relative';
-        if (icon) icon.className = 'bi bi-pin-angle';
-        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
-      } else {
-        stickyContainer.style.position = 'sticky';
-        stickyContainer.style.top = '0';
-        stickyContainer.style.zIndex = '1020';
-        if (icon) icon.className = 'bi bi-pin-angle-fill';
+      if (isStickyActive) {
+        // MODO FIJO ACTIVADO (Se mueve con la pantalla)
+        if (icon) icon.className = 'bi bi-pin-angle-fill'; // Pin relleno
         toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+      } else {
+        // MODO NATURAL/QUIETO (Se queda en su lugar original)
+        if (icon) icon.className = 'bi bi-pin-angle'; // Pin vacío
+        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
       }
     });
   }
