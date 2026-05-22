@@ -1244,3 +1244,33 @@ body.theme-light #toggle-sticky-btn:hover {
     position: static !important;
   }
 }
+
+/* Correcciones explícitas para el Modo Claro en formularios de Tarjetas */
+body.theme-light .card .form-control,
+body.theme-light .card .form-select {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  color: #070b16 !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .card .form-control:focus,
+body.theme-light .card .form-select:focus {
+  background-color: #ffffff !important;
+  color: #070b16 !important;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 0.25rem rgba(124, 58, 237, 0.15) !important;
+}
+
+/* Forzar que los textos atenuados se lean bien sobre fondo claro */
+body.theme-light .text-body-secondary,
+body.theme-light .text-muted {
+  color: #4f5e7b !important;
+}
+
+body.theme-light {
+  --bg-card-strong: #ffffff;                  /* Fondo del modal completamente blanco o gris muy claro */
+  --text-main: #070b16;                       /* Texto principal oscuro */
+  --text-soft: #4f5e7b;                       /* Texto secundario gris oscuro legible */
+  --border-soft: rgba(0, 0, 0, 0.08);         /* Bordes sutiles oscuros para el botón Cancelar */
+  --theme-close-filter: none;                 /* Hace que la 'X' de cerrar vuelva a ser oscura */
+}

@@ -137,14 +137,14 @@ render_navbar('usuario');
         </div>
       <?php endif; ?>
 
-      <div class="card glass-card rounded-4 overflow-hidden">
+      <div class="card rounded-4 border-0 shadow-soft animate-reveal-up" style="background: var(--bg-card); color: var(--text-main); transition: background 0.3s ease, color 0.3s ease;">
         <div class="card-body p-4 p-sm-5">
           
           <div class="text-center mb-4">
             <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle mb-3" style="width: 70px; height: 70px;">
               <i class="bi bi-person-gear display-6"></i>
             </div>
-            <h4 class="text-white mb-1">Configuración de la Cuenta</h4>
+            <h4 class="mb-1">Configuración de la Cuenta</h4>
             <p class="text-body-secondary small">Administrá tu información personal de acceso</p>
           </div>
 
@@ -193,22 +193,22 @@ render_navbar('usuario');
 
 <div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content glass-modal-content text-white rounded-4">
+    <div class="modal-content rounded-4 border-0" style="background: var(--bg-card-strong); color: var(--text-main); box-shadow: var(--shadow-soft); transition: background 0.3s ease, color 0.3s ease;">
       
       <div class="modal-header border-0 pb-0">
         <h5 class="modal-title fw-bold text-danger d-flex align-items-center" id="deleteAccountModalLabel">
           <i class="bi bi-exclamation-octagon-fill me-2 fs-4"></i> ¿Estás completamente seguro?
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close" style="filter: var(--theme-close-filter, invert(1) grayscale(1) brightness(2)); transition: filter 0.3s ease;" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       
       <div class="modal-body py-3">
         <p class="mb-2">Estás a punto de eliminar de forma **definitiva** tu cuenta en Caacuprecio.</p>
-        <p class="text-body-secondary small mb-0">Esta acción no se puede deshacer. Perderás tus configuraciones de inmediato y se cerrará tu sesión.</p>
+        <p class="small mb-0" style="color: var(--text-soft); transition: color 0.3s ease;">Esta acción no se puede deshacer. Perderás tus configuraciones de inmediato y se cerrará tu sesión.</p>
       </div>
       
       <div class="modal-footer border-0 pt-0">
-        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 small" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 small" style="color: var(--text-main); border-color: var(--border-soft); transition: all 0.3s ease;" data-bs-dismiss="modal">Cancelar</button>
         <form method="post" action="usuario.php" class="d-inline">
           <input type="hidden" name="action" value="delete_account">
           <button type="submit" class="btn btn-danger rounded-pill px-4 py-1.5 fw-medium shadow-sm">
@@ -216,6 +216,10 @@ render_navbar('usuario');
           </button>
         </form>
       </div>
+
+    </div>
+  </div>
+</div>
       
     </div>
   </div>
