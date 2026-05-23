@@ -58,6 +58,22 @@ function require_admin(): void
     }
 }
 
+// Verifica si el usuario actual tiene el rol de Empresa (tipo 2)
+function is_empresa(): bool
+{
+    $user = current_user();
+    return isset($user['usu_tipo']) && (int)$user['usu_tipo'] === 2;
+}
+
+// Bloquea el acceso si el usuario no es Administrador ni Empresa
+function require_admin_or_empresa(): void
+{
+    if (!is_admin() && !is_empresa()) {
+        header('Location: index.php');
+        exit;
+    }
+}
+
 function image_url(?string $url, string $name = 'Producto'): string
 {
     $url = trim((string) $url);
@@ -381,11 +397,14 @@ function render_navbar(string $current = 'home'): void
         echo ' <span class="badge rounded-pill text-bg-primary ms-1">' . $favCount . '</span>';
     }
     echo '</a></li>';
-    if ($user && is_admin()) {
+    if ($user && is_admin() || is_empresa()) {
         echo '        <li class="nav-item"><a class="nav-link ' . ($current === 'admin' ? 'active' : '') . '" href="./admin.php"><i class="bi bi-gear me-1"></i>Admin</a></li>';
     }
     if ($user) {
-        echo '        <li class="nav-item"><span class="nav-link disabled"><i class="bi bi-person-circle me-1"></i>' . e((string) ($user['usu_nombre'] ?? $user['nombre'] ?? 'Mi cuenta')) . '</span></li>';
+        // Evaluamos si el usuario se encuentra actualmente parado en su página de perfil
+        $userActive = $current === 'usuario' ? 'active' : '';
+        
+        echo '        <li class="nav-item"><a class="nav-link ' . $userActive . '" href="usuario.php"><i class="bi bi-person-circle me-1"></i>' . e((string) ($user['usu_nombre'] ?? $user['nombre'] ?? 'Mi cuenta')) . '</a></li>';
         echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="logout.php">Salir</a></li>';
     } else {
         echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="login.php">Ingresar</a></li>';
@@ -499,6 +518,16 @@ function render_footer(): void
     echo '    </div>';
     echo '  </div>';
     echo '</div>';
+
+    echo '<script>';
+    echo '(function() {';
+    echo '    document.addEventListener("show.bs.modal", function(event) {';
+    echo '        if (event.target && event.target.id === "suggestionModal") {';
+    echo '            document.body.appendChild(event.target);';
+    echo '        }';
+    echo '    });';
+    echo '})();';
+    echo '</script>';
 
     echo '<script>';
     echo '(function(){';

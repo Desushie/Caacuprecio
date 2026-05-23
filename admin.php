@@ -1,52 +1,106 @@
 <?php
 require_once __DIR__ . '/config.php';
-require_admin();
+require_admin_or_empresa();
 
 $pdo = db();
+$user = current_user();
+$isEmpresa = is_empresa();
+$myStoreId = $isEmpresa ? (int)($user['tiendas_idtiendas'] ?? 0) : 0;
 
-$stats = [
-    'productos' => (int) $pdo->query('SELECT COUNT(*) FROM productos')->fetchColumn(),
-    'tiendas' => (int) $pdo->query('SELECT COUNT(*) FROM tiendas')->fetchColumn(),
-    'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
-    'favoritos' => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
-];
+// 1. CONSULTAS ADAPTADAS SEGÚN EL ROL
+if ($isEmpresa) {
+    // Estadísticas exclusivas de su tienda
+    $stmtProd = $pdo->prepare("SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = :store_id");
+    $stmtProd->execute(['store_id' => $myStoreId]);
+    
+    $stmtFav = $pdo->prepare("
+        SELECT COUNT(*) FROM favoritos f 
+        INNER JOIN productos p ON f.productos_idproductos = p.idproductos 
+        WHERE p.tiendas_idtiendas = :store_id
+    ");
+    $stmtFav->execute(['store_id' => $myStoreId]);
 
-$pendingReviewReports = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM tienda_review_reportes
-    WHERE rep_estado = 'pendiente'
-")->fetchColumn();
+    $stats = [
+        'productos'  => (int)$stmtProd->fetchColumn(),
+        'tiendas'    => 1, // Solo la suya
+        'categorias' => (int)$pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
+        'favoritos'  => (int)$stmtFav->fetchColumn(),
+    ];
 
-$pendingProductReports = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM producto_reportes
-    WHERE rep_estado = 'pendiente'
-")->fetchColumn();
+    // Reportes de productos pertenecientes solo a su tienda
+    $stmtRepProd = $pdo->prepare("
+        SELECT COUNT(*) FROM producto_reportes pr
+        INNER JOIN productos p ON pr.productos_idproductos = p.idproductos
+        WHERE pr.rep_estado = 'pendiente' AND p.tiendas_idtiendas = :store_id
+    ");
+    $stmtRepProd->execute(['store_id' => $myStoreId]);
+    $pendingProductReports = (int)$stmtRepProd->fetchColumn();
 
-$pendingSuggestions = (int) $pdo->query("
-    SELECT COUNT(*)
-    FROM sugerencias
-    WHERE sug_estado = 'pendiente'
-")->fetchColumn();
+    // Reportes de reseñas de su tienda
+    $stmtRepRev = $pdo->prepare("
+        SELECT COUNT(*) FROM tienda_review_reportes trr
+        INNER JOIN tienda_reviews tr ON trr.reviews_idreview = tr.idreview
+        WHERE trr.rep_estado = 'pendiente' AND tr.tiendas_idtiendas = :store_id
+    ");
+    $stmtRepRev->execute(['store_id' => $myStoreId]);
+    $pendingReviewReports = (int)$stmtRepRev->fetchColumn();
 
-$latestProducts = $pdo->query("
-    SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
-    FROM productos p
-    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-    ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC
-    LIMIT 6
-")->fetchAll();
+    // Calificación promedio de la tienda
+    $stmtRating = $pdo->prepare("SELECT AVG(rev_puntaje) FROM tienda_reviews WHERE tiendas_idtiendas = :store_id AND rev_activo = 1");
+    $stmtRating->execute(['store_id' => $myStoreId]);
+    $ratingPromedio = number_format((float)($stmtRating->fetchColumn() ?: 0), 1, ',', '.');
 
-$latestStores = $pdo->query("
-    SELECT t.idtiendas, t.tie_nombre, t.tie_logo, t.tie_ubicacion, COUNT(p.idproductos) AS total_productos
-    FROM tiendas t
-    LEFT JOIN productos p ON p.tiendas_idtiendas = t.idtiendas
-    GROUP BY t.idtiendas, t.tie_nombre, t.tie_logo, t.tie_ubicacion
-    ORDER BY t.idtiendas DESC
-    LIMIT 6
-")->fetchAll();
+    $pendingSuggestions = 0; // Las sugerencias de la app son globales (solo Admin)
 
-render_head('Panel administrador');
+    // Últimos productos de SU tienda
+    $stmtLastProd = $pdo->prepare("
+        SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        WHERE p.tiendas_idtiendas = :store_id
+        ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC LIMIT 6
+    ");
+    $stmtLastProd->execute(['store_id' => $myStoreId]);
+    $latestProducts = $stmtLastProd->fetchAll();
+
+    // Datos de su propia tienda
+    $stmtMyStore = $pdo->prepare("
+        SELECT t.idtiendas, t.tie_nombre, t.tie_ubicacion, t.tie_logo,
+               (SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = t.idtiendas) as total_productos
+        FROM tiendas t
+        WHERE t.idtiendas = :store_id
+    ");
+    $stmtMyStore->execute(['store_id' => $myStoreId]);
+    $latestStores = $stmtMyStore->fetchAll();
+
+} else {
+    // CONSULTAS ORIGINALES GLOBALES (Para el Administrador del Sistema)
+    $stats = [
+        'productos'  => (int) $pdo->query('SELECT COUNT(*) FROM productos')->fetchColumn(),
+        'tiendas'    => (int) $pdo->query('SELECT COUNT(*) FROM tiendas')->fetchColumn(),
+        'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
+        'favoritos'  => (int) $pdo->query('SELECT COUNT(*) FROM favoritos')->fetchColumn(),
+    ];
+
+    $pendingReviewReports = (int) $pdo->query("SELECT COUNT(*) FROM tienda_review_reportes WHERE rep_estado = 'pendiente'")->fetchColumn();
+    $pendingProductReports = (int) $pdo->query("SELECT COUNT(*) FROM producto_reportes WHERE rep_estado = 'pendiente'")->fetchColumn();
+    $pendingSuggestions = (int) $pdo->query("SELECT COUNT(*) FROM sugerencias WHERE sug_estado = 'pendiente'")->fetchColumn();
+
+    $latestProducts = $pdo->query("
+        SELECT p.idproductos, p.pro_nombre, p.pro_precio, p.pro_imagen, p.pro_fecha_scraping, t.tie_nombre
+        FROM productos p
+        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+        ORDER BY p.pro_fecha_scraping DESC, p.idproductos DESC LIMIT 6
+    ")->fetchAll();
+
+    $latestStores = $pdo->query("
+        SELECT t.idtiendas, t.tie_nombre, t.tie_ubicacion, t.tie_logo,
+               (SELECT COUNT(*) FROM productos WHERE tiendas_idtiendas = t.idtiendas) as total_productos
+        FROM tiendas t ORDER BY t.idtiendas DESC LIMIT 5
+    ")->fetchAll();
+}
+
+render_head('Panel de Administración');
 ?>
 <link rel="stylesheet" href="./css/admin.css">
 <?php render_navbar('admin'); ?>
@@ -64,9 +118,13 @@ render_head('Panel administrador');
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
           <div class="admin-kicker mb-2">Panel</div>
-          <h1 class="display-6 fw-bold mb-3">Gestión del Sistema</h1>
-          <p class="text-body-secondary mb-4">
-            Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.
+          <h1 class="display-6 fw-bold mb-3">
+            <?= $isEmpresa ? 'Panel de Empresa' : 'Gestión del Sistema' ?>
+          </h1>
+          <p class="text-body-secondary mb-4 lead">
+            <?= $isEmpresa 
+              ? 'Administrá tus productos, precios y visualizá el rendimiento de tu tienda de forma organizada.' 
+              : 'Administrá productos, tiendas y contenido de forma rápida y organizada desde un solo lugar.' ?>
           </p>
 
           <div class="d-flex flex-wrap gap-3">
@@ -74,61 +132,76 @@ render_head('Panel administrador');
               <i class="bi bi-box-seam me-2"></i>Gestionar productos
             </a>
 
-            <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-shop me-2"></i>Gestionar tiendas
-            </a>
-
-            <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
-              <i class="bi bi-terminal me-2"></i>Importar datos
-            </a>
-
             <a href="analytics.php" class="btn btn-outline-primary rounded-pill px-4">
               <i class="bi bi-bar-chart-line me-2"></i>Analíticas
             </a>
 
-            <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4 position-relative">
-              <i class="bi bi-flag me-2"></i>Reseñas reportadas
-              <?php if ($pendingReviewReports > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                  <?= number_format($pendingReviewReports, 0, ',', '.') ?>
-                  <span class="visually-hidden">reportes de reseñas pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
-            <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
-              <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
-              <?php if ($pendingProductReports > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
-                  <?= number_format($pendingProductReports, 0, ',', '.') ?>
-                  <span class="visually-hidden">reportes de productos pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
-            <a href="admin_sugerencias.php" class="btn btn-outline-info rounded-pill px-4 position-relative">
-              <i class="bi bi-lightbulb me-2"></i>Sugerencias
-              <?php if ($pendingSuggestions > 0): ?>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
-                  <?= number_format($pendingSuggestions, 0, ',', '.') ?>
-                  <span class="visually-hidden">sugerencias pendientes</span>
-                </span>
-              <?php endif; ?>
-            </a>
+            <?php if (!$isEmpresa): ?>
+              <a href="admin_tiendas.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-shop me-2"></i>Gestionar tiendas
+              </a>
+              <a href="admin_usuarios.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-people me-2"></i>Gestionar usuarios
+              </a>
+              <a href="admin_scraper.php" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="bi bi-terminal me-2"></i>Importar datos
+              </a>
+
+              <a href="admin_reviews.php" class="btn btn-outline-danger rounded-pill px-4 position-relative">
+                <i class="bi bi-flag me-2"></i>Reseñas reportadas
+                <?php if ($pendingReviewReports > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    <?= number_format($pendingReviewReports, 0, ',', '.') ?>
+                    <span class="visually-hidden">reportes de reseñas pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+              <a href="admin_reportes_productos.php" class="btn btn-outline-warning rounded-pill px-4 position-relative">
+                <i class="bi bi-exclamation-triangle me-2"></i>Reportes de productos
+                <?php if ($pendingProductReports > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark">
+                    <?= number_format($pendingProductReports, 0, ',', '.') ?>
+                    <span class="visually-hidden">reportes de productos pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+              <a href="admin_sugerencias.php" class="btn btn-outline-info rounded-pill px-4 position-relative">
+                <i class="bi bi-lightbulb me-2"></i>Sugerencias
+                <?php if ($pendingSuggestions > 0): ?>
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info text-dark">
+                    <?= number_format($pendingSuggestions, 0, ',', '.') ?>
+                    <span class="visually-hidden">sugerencias pendientes</span>
+                  </span>
+                <?php endif; ?>
+              </a>
+            <?php endif; ?>
           </div>
         </div>
 
         <div class="col-lg-4 position-relative z-1">
           <div class="admin-side-list">
+            <?php if (!$isEmpresa): ?>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-shield-exclamation me-2 text-warning"></i>Moderación</strong>
+                <span class="text-body-secondary small">Hay <?= ($pendingProductReports + $pendingReviewReports) ?> reportes de usuarios esperando revisión.</span>
+              </div>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-chat-dots me-2 text-info"></i>Feedback</strong>
+                <span class="text-body-secondary small">Tenés <?= $pendingSuggestions ?> sugerencias sin leer en la bandeja de entrada.</span>
+              </div>
+            <?php else: ?>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-star me-2 text-warning"></i>Reputación</strong>
+                <span class="text-body-secondary small">Tu tienda tiene actualmente <?= $ratingPromedio ?> estrellas de reputación.</span>
+              </div>
+              <div class="admin-side-item">
+                <strong><i class="bi bi-graph-up-arrow me-2 text-success"></i>Interés de compra</strong>
+                <span class="text-body-secondary small">Tus productos han sido guardados <?= number_format($stats['favoritos'], 0, ',', '.') ?> veces como favoritos.</span>
+              </div>
+            <?php endif; ?>
             <div class="admin-side-item">
-              <strong>Gestión rápida</strong>
-              <span class="text-body-secondary small">Editá productos, precios y datos en segundos.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Interfaz optimizada</strong>
-              <span class="text-body-secondary small">Buscá, filtrá y administrá sin complicaciones.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Integrado al sitio</strong>
-              <span class="text-body-secondary small">Todo el contenido del sitio en un solo panel.</span>
+              <strong><i class="bi bi-lightning-charge me-2 text-primary"></i>Acceso rápido</strong>
+              <span class="text-body-secondary small">Navegá por las pestañas de gestión para actualizar stock o revisar analíticas.</span>
             </div>
           </div>
         </div>
@@ -136,27 +209,31 @@ render_head('Panel administrador');
     </div>
 
     <div class="row g-4 mb-4">
-      <div class="col-sm-6 col-xl-3">
+      <div class="<?= $isEmpresa ? 'col-sm-6' : 'col-sm-6 col-xl-3' ?>">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Productos</div>
+          <div class="admin-stat-label"><?= $isEmpresa ? 'Mis Productos' : 'Productos' ?></div>
           <div class="admin-stat-value"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
         </div>
       </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Tiendas</div>
-          <div class="admin-stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
+
+      <?php if (!$isEmpresa): ?>
+        <div class="col-sm-6 col-xl-3">
+          <div class="admin-panel admin-stat p-4 h-100">
+            <div class="admin-stat-label">Tiendas</div>
+            <div class="admin-stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
+          </div>
         </div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Categorías</div>
-          <div class="admin-stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
+        <div class="col-sm-6 col-xl-3">
+          <div class="admin-panel admin-stat p-4 h-100">
+            <div class="admin-stat-label">Categorías</div>
+            <div class="admin-stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
+          </div>
         </div>
-      </div>
-      <div class="col-sm-6 col-xl-3">
+      <?php endif; ?>
+
+      <div class="<?= $isEmpresa ? 'col-sm-6' : 'col-sm-6 col-xl-3' ?>">
         <div class="admin-panel admin-stat p-4 h-100">
-          <div class="admin-stat-label">Favoritos</div>
+          <div class="admin-stat-label"><?= $isEmpresa ? 'Favoritos Recibidos' : 'Favoritos' ?></div>
           <div class="admin-stat-value"><?= number_format($stats['favoritos'], 0, ',', '.') ?></div>
         </div>
       </div>
@@ -168,7 +245,9 @@ render_head('Panel administrador');
           <div class="admin-toolbar mb-3">
             <div>
               <div class="admin-kicker">Actividad</div>
-              <h2 class="h4 fw-bold mb-0">Productos actualizados recientemente</h2>
+              <h2 class="h4 fw-bold mb-0">
+                <?= $isEmpresa ? 'Tus productos actualizados recientemente' : 'Productos actualizados recientemente' ?>
+              </h2>
             </div>
             <a href="admin_productos.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todos</a>
           </div>
@@ -195,7 +274,7 @@ render_head('Panel administrador');
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">Aún no hay productos recientes.</div>
+            <div class="admin-empty">Aún no registrás productos en este comercio.</div>
           <?php endif; ?>
         </div>
       </div>
@@ -204,10 +283,14 @@ render_head('Panel administrador');
         <div class="admin-panel p-4 h-100">
           <div class="admin-toolbar mb-3">
             <div>
-              <div class="admin-kicker">Tiendas</div>
-              <h2 class="h4 fw-bold mb-0">Tiendas agregadas recientemente</h2>
+              <div class="admin-kicker"><?= $isEmpresa ? 'Tu Comercio' : 'Tiendas' ?></div>
+              <h2 class="h4 fw-bold mb-0">
+                <?= $isEmpresa ? 'Información de tu tienda' : 'Tiendas agregadas recientemente' ?>
+              </h2>
             </div>
-            <a href="admin_tiendas.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todas</a>
+            <?php if (!$isEmpresa): ?>
+              <a href="admin_tiendas.php" class="btn btn-sm btn-outline-primary rounded-pill px-3">Ver todas</a>
+            <?php endif; ?>
           </div>
 
           <?php if ($latestStores): ?>
@@ -224,19 +307,19 @@ render_head('Panel administrador');
                     </div>
                     <div class="small text-body-secondary mt-1"><?= number_format((int) $store['total_productos'], 0, ',', '.') ?> productos</div>
                   </div>
-                  <div class="admin-store-action">
-                    <a href="admin_tiendas.php?edit=<?= (int) $store['idtiendas'] ?>" class="btn btn-sm btn-outline-primary rounded-pill px-3">Editar</a>
-                  </div>
+                  <?php if (!$isEmpresa): ?>
+                    <div class="admin-store-action">
+                      <a href="admin_tiendas.php?edit=<?= (int) $store['idtiendas'] ?>" class="btn btn-sm btn-outline-primary rounded-pill px-3">Editar</a>
+                    </div>
+                  <?php endif; ?>
                 </div>
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <div class="admin-empty">Aún no hay tiendas registradas.</div>
+            <div class="admin-empty">No se encontró ninguna tienda vinculada a tu cuenta.</div>
           <?php endif; ?>
         </div>
       </div>
     </div>
   </div>
 </section>
-
-<?php render_footer(); ?>

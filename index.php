@@ -453,7 +453,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 };
 ?>
 
-<div class="search-sticky-bar">
+<div class="search-sticky-container">
   <div class="container">
     <div
       class="search-bar glass-card p-3 p-lg-3"
@@ -557,6 +557,11 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             </div>
           </div>
         <?php endif; ?>
+        <div class="position-absolute" style="right: 15px; bottom: 14px; left: auto !important; width: auto !important; z-index: 1030;">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -664,7 +669,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 </section>
 
 <main>
-  <section class="py-5 position-relative">
+  <section class="pt-1 pb-5 position-relative">
     <div class="container">
       <div class="section-header mb-4">
         <div>
@@ -969,5 +974,46 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
   </section>
 </main>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const stickyContainer = document.querySelector('.search-sticky-container');
+  const toggleBtn = document.getElementById('toggle-sticky-btn');
+  
+  // 1. Control de la sección en vivo (Para index.php)
+  const searchInput = document.getElementById('global-search-home');
+  const liveSection = document.getElementById('home-live-section');
+  if (searchInput && liveSection) {
+    const toggleLiveSection = () => {
+      if (searchInput.value.trim() === '') {
+        liveSection.style.setProperty('display', 'none', 'important');
+      } else {
+        liveSection.style.display = 'block';
+      }
+    };
+    toggleLiveSection();
+    searchInput.addEventListener('input', toggleLiveSection);
+  }
+
+  // 2. Control del Pin (Por defecto: Libre -> Clic: Fija)
+  if (stickyContainer && toggleBtn) {
+    const icon = toggleBtn.querySelector('i');
+    
+    toggleBtn.addEventListener('click', function() {
+      // Commuta la clase: si no está, la pone (fija); si está, la saca (libre)
+      const isStickyActive = stickyContainer.classList.toggle('is-sticky');
+      
+      if (isStickyActive) {
+        // MODO FIJO ACTIVADO (Se mueve con la pantalla)
+        if (icon) icon.className = 'bi bi-pin-angle-fill'; // Pin relleno
+        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+      } else {
+        // MODO NATURAL/QUIETO (Se queda en su lugar original)
+        if (icon) icon.className = 'bi bi-pin-angle'; // Pin vacío
+        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+      }
+    });
+  }
+});
+</script>
 <script src="./js/search.js"></script>
 <?php render_footer(); ?>

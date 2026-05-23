@@ -317,7 +317,7 @@ render_head('Buscar productos');
 render_navbar('home');
 ?>
 
-<div class="search-sticky-bar">
+<div class="search-sticky-container">
   <div class="container">
     <div
       class="search-bar glass-card p-3 p-lg-3"
@@ -331,7 +331,7 @@ render_navbar('home');
       data-count-target="#results-live-count"
       data-state-target="#results-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form" method="get" action="buscar.php" autocomplete="off">
+      <form class="row g-2 align-items-center js-smart-search-form position-relative pb-4" method="get" action="buscar.php" autocomplete="off">
         <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
         <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
         <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
@@ -383,16 +383,15 @@ render_navbar('home');
             <?php endforeach; ?>
           </select>
         </div>
-
         <div class="col-lg-1 d-grid">
           <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
             <i class="bi bi-search"></i>
-          </button>
+          </button> 
         </div>
 
         <?php if ($recentSearches || $popularSearches): ?>
           <div class="col-12">
-            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2">
+            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2 pb-4">
               <?php if ($recentSearches): ?>
                 <div class="search-chip-row">
                   <span class="search-chip-label">
@@ -435,6 +434,12 @@ render_navbar('home');
             </div>
           </div>
         <?php endif; ?>
+
+        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; width: auto !important; z-index: 1030;">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -666,6 +671,46 @@ document.addEventListener('DOMContentLoaded', function() {
         sideForm.addEventListener('input', syncInputs(sideForm, topForm));
         sideForm.addEventListener('change', syncInputs(sideForm, topForm));
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  const stickyContainer = document.querySelector('.search-sticky-container');
+  const toggleBtn = document.getElementById('toggle-sticky-btn');
+  
+  // 1. Control de la sección en vivo (Para index.php)
+  const searchInput = document.getElementById('global-search-home');
+  const liveSection = document.getElementById('home-live-section');
+  if (searchInput && liveSection) {
+    const toggleLiveSection = () => {
+      if (searchInput.value.trim() === '') {
+        liveSection.style.setProperty('display', 'none', 'important');
+      } else {
+        liveSection.style.display = 'block';
+      }
+    };
+    toggleLiveSection();
+    searchInput.addEventListener('input', toggleLiveSection);
+  }
+
+  // 2. Control del Pin (Por defecto: Libre -> Clic: Fija)
+  if (stickyContainer && toggleBtn) {
+    const icon = toggleBtn.querySelector('i');
+    
+    toggleBtn.addEventListener('click', function() {
+      // Commuta la clase: si no está, la pone (fija); si está, la saca (libre)
+      const isStickyActive = stickyContainer.classList.toggle('is-sticky');
+      
+      if (isStickyActive) {
+        // MODO FIJO ACTIVADO (Se mueve con la pantalla)
+        if (icon) icon.className = 'bi bi-pin-angle-fill'; // Pin relleno
+        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
+      } else {
+        // MODO NATURAL/QUIETO (Se queda en su lugar original)
+        if (icon) icon.className = 'bi bi-pin-angle'; // Pin vacío
+        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
+      }
+    });
+  }
 });
 </script>
 
