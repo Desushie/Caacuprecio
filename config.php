@@ -328,6 +328,7 @@ function render_head(string $title = ''): void
     echo '<title>' . e(page_title($title)) . '</title>';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">';
+    echo '<link rel="icon" type="image/png" href="./img/icono.png">';
     echo '<link rel="stylesheet" href="./css/styles.css">';
     echo '<link rel="stylesheet" href="./css/auth.css">';
     echo '<link rel="stylesheet" href="./css/favoritos_extra.css">';
@@ -369,9 +370,8 @@ function render_navbar(string $current = 'home'): void
 
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
-    echo '    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="index.php">';
-    echo '      <span class="brand-badge">CP</span>';
-    echo '      <span><span class="d-block lh-1">Caacuprecio</span><small class="text-body-secondary fw-semibold">Comparador de precios</small></span>';
+    echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
+    echo '      <img src="./img/Logo_horizontal.png" alt="Caacuprecio" style="height:52px;width:auto;">';
     echo '    </a>';
 
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
@@ -425,7 +425,7 @@ function render_footer(): void
     echo '  <div class="container">';
     echo '    <div class="row g-4 pb-4 align-items-stretch">';
     echo '      <div class="col-lg-5">';
-    echo '        <div class="d-flex align-items-center gap-2 fw-bold text-white mb-3"><span class="brand-badge">CP</span><span>Caacuprecio</span></div>';
+    echo '        <img src="./img/logo_vertical.png" alt="Caacuprecio" style="height:90px;width:auto;" class="mb-3">';
     echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
 
