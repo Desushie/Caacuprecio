@@ -26,16 +26,43 @@ class ComputexProductosSpider(scrapy.Spider):
         "https://computex.com.py/products-category/gamer-2/": "Gaming",
         "https://computex.com.py/products-category/instrumento-musical/": "Instrumentos Musicales",
     }
-    start_urls = list(CATEGORY_URLS.keys())
+
+    # Páginas de descubrimiento. La versión anterior dependía solo de CATEGORY_URLS;
+    # si Computex agrega una categoría/subcategoría nueva, quedaba afuera del scraping.
+    DISCOVERY_URLS = [
+        "https://computex.com.py/",
+        "https://computex.com.py/productos/",
+        "https://computex.com.py/tienda/",
+        "https://computex.com.py/shop/",
+    ]
+
+    # Sitemaps habituales en WordPress/WooCommerce. Si alguno devuelve 404, Scrapy lo ignora.
+    SITEMAP_URLS = [
+        "https://computex.com.py/sitemap.xml",
+        "https://computex.com.py/product-sitemap.xml",
+        "https://computex.com.py/product_cat-sitemap.xml",
+        "https://computex.com.py/page-sitemap.xml",
+    ]
+
+    # WooCommerce Store API pública. Ayuda a encontrar productos que no aparecen
+    # en las categorías visibles o que están cargados por AJAX.
+    STORE_API_URL = "https://computex.com.py/wp-json/wc/store/v1/products?per_page=100&page=1"
+
+    start_urls = list(CATEGORY_URLS.keys()) + DISCOVERY_URLS + SITEMAP_URLS + [STORE_API_URL]
 
     custom_settings = {
         # Evita reintentos demasiado agresivos si alguna categoría temporalmente no responde.
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 522, 524, 408, 429],
     }
 
-    async def start(self):
-        """Scrapy 2.13+ usa start() en lugar de start_requests()."""
+    def build_start_requests(self):
+        """Genera requests iniciales compatible con Scrapy viejo y nuevo."""
+        vistos = set()
+
         for url, categoria_raw in self.CATEGORY_URLS.items():
+            if url in vistos:
+                continue
+            vistos.add(url)
             yield scrapy.Request(
                 url,
                 callback=self.parse,
@@ -43,12 +70,71 @@ class ComputexProductosSpider(scrapy.Spider):
                 dont_filter=True,
             )
 
+        for url in self.DISCOVERY_URLS:
+            if url in vistos:
+                continue
+            vistos.add(url)
+            yield scrapy.Request(url, callback=self.parse, dont_filter=True)
+
+        for url in self.SITEMAP_URLS:
+            if url in vistos:
+                continue
+            vistos.add(url)
+            yield scrapy.Request(
+                url,
+                callback=self.parse_sitemap,
+                errback=self.ignore_request_error,
+                dont_filter=True,
+            )
+
+        if self.STORE_API_URL not in vistos:
+            yield scrapy.Request(
+                self.STORE_API_URL,
+                callback=self.parse_store_api,
+                errback=self.ignore_request_error,
+                dont_filter=True,
+            )
+
+    async def start(self):
+        """Scrapy 2.13+ usa start() en lugar de start_requests()."""
+        for request in self.build_start_requests():
+            yield request
+
+    def start_requests(self):
+        """Compatibilidad con versiones anteriores de Scrapy."""
+        yield from self.build_start_requests()
+
+    def ignore_request_error(self, failure):
+        self.logger.debug("Request inicial ignorada: %s", failure.request.url)
+
     def parse(self, response):
         categoria_raw = response.meta.get("categoria_raw") or self.extraer_categoria_listado(response)
 
+        # 0) Descubrir categorías/subcategorías nuevas.
+        categorias_vistas = set()
+        categorias_encontradas = 0
+        for a in response.css('a[href*="/products-category/"], a[href*="/product-category/"]'):
+            href = a.attrib.get("href") or ""
+            url_cat = self.limpiar_url(response.urljoin(href))
+            if not self.es_url_categoria(url_cat):
+                continue
+            if url_cat in categorias_vistas:
+                continue
+
+            categorias_vistas.add(url_cat)
+            categorias_encontradas += 1
+            texto_cat = self.limpiar_texto(" ".join(a.css("::text").getall()))
+            yield response.follow(
+                url_cat + "/",
+                callback=self.parse,
+                meta={"categoria_raw": texto_cat or self.categoria_desde_url(url_cat)},
+            )
+
         # 1) Productos: en la estructura nueva siguen usando /productos/<slug>/
         vistos = set()
-        for href in response.css('a[href*="/productos/"]::attr(href)').getall():
+        productos_encontrados = 0
+        for href in response.css('a[href*="/productos/"], a[href*="/producto/"]'):
+            href = href.attrib.get("href") or ""
             url = self.limpiar_url(response.urljoin(href))
 
             if not self.es_url_producto(url):
@@ -58,6 +144,7 @@ class ComputexProductosSpider(scrapy.Spider):
                 continue
 
             vistos.add(url)
+            productos_encontrados += 1
 
             # Computex redirige /productos/slug -> /productos/slug/.
             # Agregar la barra evita un 301 por cada producto.
@@ -69,6 +156,14 @@ class ComputexProductosSpider(scrapy.Spider):
                 meta={"categoria_raw": categoria_raw},
             )
 
+        self.logger.warning(
+            "[%s] productos encontrados: %s | categorías encontradas: %s | categoría: %s",
+            response.url,
+            productos_encontrados,
+            categorias_encontradas,
+            categoria_raw,
+        )
+
         # 2) Paginación: /products-category/<categoria>/page/2/
         next_page = self.extraer_siguiente_pagina(response)
         if next_page:
@@ -77,6 +172,113 @@ class ComputexProductosSpider(scrapy.Spider):
                 callback=self.parse,
                 meta={"categoria_raw": categoria_raw},
             )
+
+    def parse_sitemap(self, response):
+        """Lee sitemap.xml, product-sitemap.xml y product_cat-sitemap.xml."""
+        locs = response.xpath('//*[local-name()="loc"]/text()').getall()
+        if not locs:
+            # Algunos servidores entregan XML como texto plano. Fallback por regex.
+            locs = re.findall(r"<loc>\s*([^<]+?)\s*</loc>", response.text or "", flags=re.I)
+
+        productos = 0
+        categorias = 0
+        sitemaps = 0
+
+        for raw_url in locs:
+            url = self.limpiar_url(raw_url)
+            if not url:
+                continue
+
+            url_lower = url.lower()
+
+            if url_lower.endswith(".xml") or "sitemap" in url_lower and not self.es_url_producto(url):
+                sitemaps += 1
+                yield response.follow(
+                    url,
+                    callback=self.parse_sitemap,
+                    errback=self.ignore_request_error,
+                )
+                continue
+
+            if self.es_url_producto(url):
+                productos += 1
+                yield response.follow(
+                    url + "/",
+                    callback=self.parse_producto,
+                    meta={"categoria_raw": ""},
+                )
+                continue
+
+            if self.es_url_categoria(url):
+                categorias += 1
+                yield response.follow(
+                    url + "/",
+                    callback=self.parse,
+                    meta={"categoria_raw": self.categoria_desde_url(url)},
+                )
+
+        self.logger.warning(
+            "[%s] sitemap: %s productos, %s categorías, %s sitemaps",
+            response.url,
+            productos,
+            categorias,
+            sitemaps,
+        )
+
+    def parse_store_api(self, response):
+        """Lee la API pública de WooCommerce Store si está habilitada."""
+        try:
+            data = json.loads(response.text or "[]")
+        except Exception:
+            self.logger.debug("Store API no devolvió JSON válido: %s", response.url)
+            return
+
+        if not isinstance(data, list):
+            return
+
+        productos = 0
+        for product in data:
+            if not isinstance(product, dict):
+                continue
+
+            permalink = product.get("permalink") or product.get("url")
+            if not permalink and product.get("slug"):
+                permalink = f"https://computex.com.py/productos/{product.get('slug')}/"
+
+            url = self.limpiar_url(permalink)
+            if not self.es_url_producto(url):
+                continue
+
+            productos += 1
+            categoria_raw = self.categoria_desde_api_product(product)
+            yield response.follow(
+                url + "/",
+                callback=self.parse_producto,
+                meta={"categoria_raw": categoria_raw},
+            )
+
+        self.logger.warning("[%s] Store API productos encontrados: %s", response.url, productos)
+
+        # Si la API devolvió 100, probablemente hay otra página. Seguimos hasta que devuelva menos.
+        if len(data) >= 100:
+            page_match = re.search(r"[?&]page=(\d+)", response.url)
+            page = int(page_match.group(1)) if page_match else 1
+            next_url = re.sub(r"([?&]page=)\d+", rf"\g<1>{page + 1}", response.url)
+            yield scrapy.Request(
+                next_url,
+                callback=self.parse_store_api,
+                errback=self.ignore_request_error,
+            )
+
+    def categoria_desde_api_product(self, product):
+        categorias = product.get("categories") or []
+        if isinstance(categorias, list):
+            for cat in categorias:
+                if isinstance(cat, dict):
+                    nombre = self.limpiar_texto(cat.get("name"))
+                    if nombre:
+                        return nombre
+        return ""
 
     def parse_producto(self, response):
         nombre = self.limpiar_texto(
@@ -89,10 +291,20 @@ class ComputexProductosSpider(scrapy.Spider):
             return
 
         body_text = " ".join(t.strip() for t in response.css("body ::text").getall() if t.strip())
-        precio = self.parse_precio(body_text)
+        stock = self.extraer_stock(response, body_text)
+
+        # No buscar el precio en todo el body de forma genérica: ahí aparecen
+        # costos de delivery como Gs. 15.000. En Computex el precio real suele
+        # aparecer como texto: "Precio: ₲ 345.000". Por eso extraemos solo el
+        # bloque que sigue a "Precio:" y cortamos antes de "Envío".
+        precio = self.extraer_precio_producto(response, body_text=body_text)
+
         if precio is None:
-            self.logger.debug("Producto omitido sin precio detectado: %s", response.url)
-            return
+            # Si está agotado o no tiene precio real visible, no uses el delivery
+            # como precio. Guardamos 0 y el stock queda como Consultar stock.
+            precio = 0
+            if stock == "En stock":
+                stock = "Consultar stock"
 
         imagen = self.extraer_imagen(response)
         marca = extract_brand(nombre)
@@ -104,20 +316,12 @@ class ComputexProductosSpider(scrapy.Spider):
         )
         slug = response.url.rstrip("/").split("/")[-1].replace("-", " ")
 
-        categoria_detectada = self.limpiar_texto(
-            extract_category(nombre, categoria_raw, marca)
-            or extract_category(slug, categoria_raw, marca)
+        categoria = self.categoria_final_computex(
+            nombre=nombre,
+            categoria_raw=categoria_raw,
+            marca=marca,
+            slug=slug,
         )
-
-        # Si tu normalizador devuelve "Productos" porque la categoría nueva todavía
-        # no existe en aliases, guardamos la categoría real del listado.
-        if (
-            categoria_detectada.lower() in {"", "productos", "producto", "sin categoría", "sin categoria"}
-            and categoria_raw
-        ):
-            categoria = categoria_raw
-        else:
-            categoria = categoria_detectada or categoria_raw or "Productos"
 
         descripcion = self.extraer_descripcion(response)
         if not descripcion:
@@ -130,9 +334,7 @@ class ComputexProductosSpider(scrapy.Spider):
         item["categoria"] = categoria
         item["tienda"] = self.store_name
 
-        # La página actual no muestra stock real en el detalle.
-        # Uso 1 para que el pipeline no lo marque como agotado.
-        item["stock"] = 1
+        item["stock"] = stock
 
         item["imagen"] = imagen
         item["marca"] = marca
@@ -141,6 +343,352 @@ class ComputexProductosSpider(scrapy.Spider):
         item = self.normalizar_item(item)
 
         yield item
+
+    def extraer_stock(self, response, body_text=""):
+        """Devuelve 'En stock' o 'Consultar stock' usando solo zonas cercanas al producto.
+
+        No se usa el body completo porque puede contener productos relacionados agotados
+        y marcar falsamente como agotada una ficha que sí tiene stock.
+        """
+        textos = []
+
+        # 1) Clases típicas de WooCommerce/Elementor para disponibilidad.
+        for sel in [
+            ".stock ::text", ".stock::text",
+            ".availability ::text", ".availability::text",
+            ".out-of-stock ::text", ".out-of-stock::text",
+            ".in-stock ::text", ".in-stock::text",
+            ".summary .stock ::text", ".summary .stock::text",
+            ".entry-summary .stock ::text", ".entry-summary .stock::text",
+        ]:
+            textos.extend(response.css(sel).getall())
+
+        stock_text = self.limpiar_texto(" ".join(t for t in textos if t and t.strip()))
+        texto = self.normalizar_simple(stock_text)
+
+        negativos = [
+            "agotado", "sin stock", "fuera de stock", "no disponible",
+            "consultar stock", "out of stock", "sold out",
+        ]
+        positivos = [
+            "en stock", "disponible", "hay stock", "in stock",
+        ]
+
+        if texto and any(p in texto for p in negativos):
+            return "Consultar stock"
+        if texto and any(p in texto for p in positivos):
+            return "En stock"
+
+        # 2) Fallback limitado al bloque del resumen, nunca al body completo.
+        resumen = self.texto_producto_para_precio(response)
+        resumen_norm = self.normalizar_simple(resumen)
+        if resumen_norm and any(p in resumen_norm for p in negativos):
+            return "Consultar stock"
+
+        return "En stock"
+
+    def extraer_precio_producto(self, response, body_text=""):
+        """Extrae el precio real del producto sin confundirlo con delivery/envío.
+
+        Computex suele renderizar el precio como texto visible cerca de la etiqueta
+        "Precio". A veces no hay dos puntos: puede venir como "Precio ₲ 345.000".
+        Por eso se revisan primero los textos cercanos a esa etiqueta y se corta
+        antes de bloques de envío/delivery.
+        """
+        candidatos = []
+
+        # 0) Caso más importante: buscar la etiqueta visible Precio/Precio: y leer
+        # los textos inmediatamente siguientes, sin entrar al bloque de envío.
+        precio_marcado = self.extraer_precio_desde_nodos_texto(response)
+        if precio_marcado is not None:
+            return precio_marcado
+
+        # 0b) Fallback sobre el texto unido, aceptando "Precio" con o sin dos puntos.
+        precio_marcado = self.extraer_precio_por_etiqueta(body_text)
+        if precio_marcado is not None:
+            return precio_marcado
+
+        # 1) Meta tags y microdata: cuando existen suelen ser el precio real.
+        for sel in [
+            'meta[property="product:price:amount"]::attr(content)',
+            'meta[property="og:price:amount"]::attr(content)',
+            'meta[itemprop="price"]::attr(content)',
+            '[itemprop="price"]::attr(content)',
+            '[data-price]::attr(data-price)',
+            '[data-product-price]::attr(data-product-price)',
+        ]:
+            for raw in response.css(sel).getall():
+                raw = self.limpiar_texto(raw)
+                if raw:
+                    candidatos.append(raw)
+
+        # 2) JSON-LD Product offers.
+        for raw in response.css('script[type="application/ld+json"]::text').getall():
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            candidatos.extend(self._buscar_precios_jsonld(data))
+
+        # 3) Bloques reales de precio. Se usa *::text porque WooCommerce suele
+        # separar el símbolo ₲/Gs. y el monto en nodos diferentes.
+        price_block_selectors = [
+            '.summary p.price',
+            '.summary .price',
+            '.entry-summary p.price',
+            '.entry-summary .price',
+            '.woocommerce-variation-price',
+            '.woocommerce-Price-amount',
+            '.elementor-widget-woocommerce-product-price',
+            '.elementor-widget-wc-product-price',
+            '.jet-woo-builder-single-price',
+            '.jet-woo-product-price',
+            '.product-price',
+            '.price',
+        ]
+
+        for sel in price_block_selectors:
+            for block in response.css(sel):
+                texto = self.texto_de_bloque(block)
+                if not texto:
+                    continue
+                if self.bloque_es_envio_o_delivery(texto):
+                    continue
+                candidatos.append(texto)
+
+        # 4) Fallback controlado: mirar solo el resumen cercano al producto,
+        # recortando antes de envío/delivery. No usamos body completo.
+        resumen = self.texto_producto_para_precio(response)
+        if resumen:
+            candidatos.append(resumen)
+
+        for raw in candidatos:
+            precio = self.parse_precio(raw)
+            if precio is None:
+                precio = self._precio_a_int(raw)
+
+            # Evitar costos típicos de envío si de alguna forma pasaron el filtro.
+            if precio in {10000, 15000, 20000, 25000, 30000} and self.bloque_es_envio_o_delivery(raw):
+                continue
+
+            if precio is not None and 1000 <= precio <= 500_000_000:
+                return precio
+
+        self.logger.debug("Precio no detectado en %s | textos precio: %r", response.url, self.debug_textos_precio(response))
+        return None
+
+    def extraer_precio_desde_nodos_texto(self, response):
+        """Busca precio en los nodos de texto alrededor de la palabra Precio.
+
+        Esto cubre estructuras donde el HTML separa la etiqueta y el monto:
+        ['Precio', '₲', '345.000', 'Envío', 'Delivery Caacupe', '₲ 15.000'].
+        """
+        textos = [self.limpiar_texto(t) for t in response.css('body ::text').getall()]
+        textos = [t for t in textos if t]
+        if not textos:
+            return None
+
+        cortes = [
+            'envio', 'envios', 'delivery', 'transportadora', 'del local gratis',
+            'retiro del local', 'medios de pago', 'formas de pago',
+            'descripcion', 'descripción', 'productos relacionados',
+            'tambien te puede gustar', 'también te puede gustar',
+            'añadir al carrito', 'agregar al carrito', 'comprar',
+        ]
+
+        for i, texto in enumerate(textos):
+            norm = self.normalizar_simple(texto)
+
+            # Acepta "Precio", "Precio:", "Precio ₲ 345.000".
+            if not re.search(r'\bprecio\b', norm):
+                continue
+            if any(x in norm for x in ['precio de envio', 'precio envio', 'opciones de envio']):
+                continue
+
+            ventana = []
+            for t in textos[i:i + 12]:
+                tn = self.normalizar_simple(t)
+                if ventana and any(c in tn for c in cortes):
+                    break
+                ventana.append(t)
+
+            chunk = self.limpiar_texto(' '.join(ventana))
+            if self.bloque_es_envio_o_delivery(chunk):
+                # Si el bloque contiene precio y envío, cortar antes del envío.
+                chunk = self.recortar_antes_de_envio(chunk)
+
+            precio = self.extraer_precio_por_etiqueta(chunk)
+            if precio is None:
+                precio = self.parse_precio(chunk)
+            if precio is not None and 1000 <= precio <= 500_000_000:
+                return precio
+
+        return None
+
+    def recortar_antes_de_envio(self, texto):
+        texto = self.limpiar_texto(texto)
+        corte = re.search(
+            r'\b(opciones\s+de\s+env[ií]o|env[ií]o|delivery|transportadora|del\s+local\s+gratis|'
+            r'retiro\s+del\s+local|medios\s+de\s+pago|formas\s+de\s+pago)\b',
+            texto,
+            flags=re.IGNORECASE,
+        )
+        if corte:
+            return self.limpiar_texto(texto[:corte.start()])
+        return texto
+
+    def debug_textos_precio(self, response):
+        textos = [self.limpiar_texto(t) for t in response.css('body ::text').getall()]
+        textos = [t for t in textos if t]
+        partes = []
+        for i, t in enumerate(textos):
+            if 'precio' in self.normalizar_simple(t):
+                partes.append(' | '.join(textos[i:i + 10]))
+        return ' || '.join(partes)[:500]
+
+    def texto_de_bloque(self, selector):
+        """Une textos y atributos útiles de un bloque selector CSS."""
+        partes = []
+        partes.extend(selector.css('::text').getall())
+        partes.extend(selector.css('*::text').getall())
+
+        # Algunos themes guardan el precio en data-price/data-product-price.
+        for attr in ['content', 'data-price', 'data-product-price', 'data-value']:
+            val = selector.attrib.get(attr)
+            if val:
+                partes.append(val)
+
+        texto = ' '.join(self.limpiar_texto(p) for p in partes if self.limpiar_texto(p))
+        return self.limpiar_texto(texto)
+
+    def extraer_precio_por_etiqueta(self, texto):
+        """Busca precios detrás de la etiqueta Precio, con o sin dos puntos."""
+        texto = self.limpiar_texto(texto)
+        if not texto:
+            return None
+
+        # Recortar primero si el bloque mezcló precio con envío/delivery.
+        texto = self.recortar_antes_de_envio(texto)
+
+        patrones = [
+            # Precio: ₲ 345.000 / Precio ₲ 345.000 / Precio Gs. 345.000
+            r"precio(?:\s+(?:regular|normal|de\s+venta))?\s*[:：]?\s*(.{0,120})",
+        ]
+
+        cortes = (
+            "envío", "envio", "delivery", "transportadora", "descripción",
+            "descripcion", "también te puede gustar", "tambien te puede gustar",
+            "productos relacionados", "añadir al carrito", "agregar al carrito",
+        )
+
+        for patron in patrones:
+            for match in re.finditer(patron, texto, flags=re.IGNORECASE):
+                chunk = match.group(1)
+
+                chunk_low = chunk.lower()
+                cut_at = len(chunk)
+                for marker in cortes:
+                    pos = chunk_low.find(marker.lower())
+                    if pos != -1:
+                        cut_at = min(cut_at, pos)
+                chunk = chunk[:cut_at]
+
+                if self.bloque_es_envio_o_delivery(chunk):
+                    continue
+
+                precio = self.parse_precio(chunk)
+                if precio is not None and 1000 <= precio <= 500_000_000:
+                    return precio
+
+                # Algunos HTML separan símbolo y número o dejan solo el número después de Precio.
+                precio = self._precio_a_int(chunk)
+                if precio is not None and 1000 <= precio <= 500_000_000:
+                    return precio
+
+        return None
+
+    def bloque_es_envio_o_delivery(self, texto):
+        texto_norm = self.normalizar_simple(texto)
+        basura_envio = [
+            'delivery',
+            'envio',
+            'envios',
+            'opciones de envio',
+            'calcular envio',
+            'transportadora',
+            'del local gratis',
+            'retiro del local',
+            'costo de envio',
+            'costo envio',
+        ]
+        return any(x in texto_norm for x in basura_envio)
+
+    def _buscar_precios_jsonld(self, data):
+        encontrados = []
+        if isinstance(data, dict):
+            tipo = data.get('@type')
+            tipos = tipo if isinstance(tipo, list) else [tipo]
+
+            if any(str(t).lower() == 'product' for t in tipos if t):
+                offers = data.get('offers')
+                encontrados.extend(self._precios_desde_offers(offers))
+
+            for v in data.values():
+                encontrados.extend(self._buscar_precios_jsonld(v))
+
+        elif isinstance(data, list):
+            for item in data:
+                encontrados.extend(self._buscar_precios_jsonld(item))
+
+        return encontrados
+
+    def _precios_desde_offers(self, offers):
+        precios = []
+        if isinstance(offers, dict):
+            for key in ['price', 'lowPrice', 'highPrice']:
+                value = offers.get(key)
+                if value not in (None, ''):
+                    precios.append(str(value))
+            if 'offers' in offers:
+                precios.extend(self._precios_desde_offers(offers.get('offers')))
+        elif isinstance(offers, list):
+            for offer in offers:
+                precios.extend(self._precios_desde_offers(offer))
+        return precios
+
+    def texto_producto_para_precio(self, response):
+        """Fallback limitado a la zona de producto y cortado antes de envío/delivery."""
+        partes = []
+        for sel in [
+            '.summary ::text',
+            '.entry-summary ::text',
+            '.product .summary ::text',
+            '.product .entry-summary ::text',
+            '.elementor-widget-woocommerce-product-price ::text',
+            '.elementor-widget-wc-product-price ::text',
+            '.jet-woo-builder-single-price ::text',
+            '.jet-woo-product-price ::text',
+        ]:
+            partes.extend(response.css(sel).getall())
+
+        texto = ' '.join(t.strip() for t in partes if t and t.strip())
+        texto = self.limpiar_texto(texto)
+        if not texto:
+            return ''
+
+        # Cortar sobre el texto original con regex case-insensitive para no mezclar
+        # índices de texto normalizado con índices del texto original.
+        corte = re.search(
+            r'\b(opciones\s+de\s+env[ií]o|delivery|transportadora|del\s+local\s+gratis|'
+            r'calcular\s+env[ií]o|medios\s+de\s+pago|formas\s+de\s+pago|'
+            r'añadir\s+al\s+carrito|agregar\s+al\s+carrito)\b',
+            texto,
+            flags=re.IGNORECASE,
+        )
+        if corte:
+            texto = texto[:corte.start()]
+
+        return self.limpiar_texto(texto)
 
     def limpiar_url(self, url):
         url = (url or "").strip()
@@ -172,6 +720,30 @@ class ComputexProductosSpider(scrapy.Spider):
         # Evita adjuntos o rutas raras.
         partes = [p for p in path.split("/") if p]
         return len(partes) == 2 and bool(partes[-1])
+
+    def es_url_categoria(self, url):
+        if not url:
+            return False
+
+        parsed = urlparse(url)
+        path = parsed.path.strip("/").lower()
+
+        if parsed.netloc and "computex.com.py" not in parsed.netloc:
+            return False
+
+        if "/page/" in path:
+            return False
+
+        return path.startswith("products-category/") or path.startswith("product-category/")
+
+    def categoria_desde_url(self, url):
+        path = urlparse(url).path.strip("/")
+        partes = [p for p in path.split("/") if p]
+        if not partes:
+            return ""
+        slug = partes[-1]
+        slug = re.sub(r"-\d+$", "", slug)
+        return self.limpiar_texto(slug.replace("-", " ").title())
 
     def extraer_siguiente_pagina(self, response):
         # WooCommerce/WordPress a veces usa rel=next.
@@ -322,6 +894,152 @@ class ComputexProductosSpider(scrapy.Spider):
         if self.descripcion_es_solo_titulo(texto, nombre_producto):
             return ""
         return texto
+
+    def categoria_final_computex(self, nombre="", categoria_raw="", marca="", slug=""):
+        """Devuelve solo categorías maestras para Computex.
+
+        Computex muestra categorías del menú con textos como
+        "PUNTO DE VENTAS 16 productos" o "Calculadora 2 productos".
+        Si guardamos eso directo, el pipeline crea categorías basura.
+        """
+        nombre = self.limpiar_texto(nombre)
+        marca = self.limpiar_texto(marca)
+        slug = self.limpiar_texto(slug)
+        categoria_limpia = self.limpiar_categoria_computex(categoria_raw)
+
+        # 1) Primero dejar que tu normalizador categorice por nombre del producto.
+        # Esto evita que una categoría muy amplia como "Automotivos" arrastre mal
+        # productos que por nombre son Audio, Accesorios, Herramientas, etc.
+        for candidato in [
+            extract_category(nombre, categoria_limpia, marca),
+            extract_category(slug, categoria_limpia, marca),
+            self.mapear_categoria_computex(categoria_limpia),
+            extract_category(categoria_limpia, "", marca),
+        ]:
+            candidato = self.limpiar_texto(candidato)
+            if self.categoria_maestra_valida(candidato):
+                return candidato
+
+        return "Productos"
+
+    def limpiar_categoria_computex(self, categoria):
+        """Limpia categoría cruda del menú: quita conteos y encabezados."""
+        categoria = self.limpiar_texto(categoria)
+        if not categoria:
+            return ""
+
+        # Ejemplos:
+        # "PUNTO DE VENTAS 16 productos" -> "PUNTO DE VENTAS"
+        # "Calculadora 2 productos" -> "Calculadora"
+        # "UKELELE 1 producto" -> "UKELELE"
+        categoria = re.sub(r"\s*\(?\d+\s*(?:productos?|items?|art[ií]culos?)\)?\s*$", "", categoria, flags=re.I)
+        categoria = re.sub(r"\s+\d+\s*$", "", categoria)
+        categoria = re.sub(r"^todo\s+", "", categoria, flags=re.I)
+        categoria = re.sub(r"\s+", " ", categoria).strip(" -–—:;,")
+
+        # Encabezados del menú, no categorías reales.
+        if self.normalizar_categoria_key(categoria) in {
+            "categorias populares",
+            "categoria populares",
+            "categorias",
+            "categoria",
+            "populares",
+        }:
+            return ""
+
+        return categoria
+
+    def normalizar_categoria_key(self, texto):
+        texto = self.normalizar_simple(texto)
+        texto = re.sub(r"[^a-z0-9\s]", " ", texto)
+        texto = re.sub(r"\s+", " ", texto).strip()
+        return texto
+
+    def mapear_categoria_computex(self, categoria):
+        """Mapea subcategorías propias de Computex a categorías maestras."""
+        key = self.normalizar_categoria_key(categoria)
+        if not key:
+            return ""
+
+        mapa = {
+            "informatica": "Informática",
+            "informatica 2": "Informática",
+            "punto de ventas": "Informática",
+            "puntos de ventas": "Informática",
+            "pos": "Informática",
+
+            "seguridad": "Cámaras y Seguridad",
+            "seguridad 2": "Cámaras y Seguridad",
+            "fotografia y videos": "Cámaras y Seguridad",
+            "fotografia y video": "Cámaras y Seguridad",
+            "camaras": "Cámaras y Seguridad",
+
+            "sonido": "Audio",
+            "sonido 2": "Audio",
+            "car audio": "Audio",
+            "discoteca": "Audio",
+            "cuerdas": "Audio",
+            "ukelele": "Audio",
+            "instrumento musical": "Audio",
+            "instrumentos musicales": "Audio",
+
+            "gamer": "Gaming",
+            "gaming": "Gaming",
+
+            "muebles": "Hogar",
+            "muebles 2": "Hogar",
+            "hogar": "Hogar",
+
+            "televisores": "TV y Video",
+            "televisor": "TV y Video",
+            "tv": "TV y Video",
+
+            "calculadora": "Oficina",
+            "calculadoras": "Oficina",
+            "oficina": "Oficina",
+
+            "filtro de linea": "Accesorios",
+            "filtros de linea": "Accesorios",
+            "relojes": "Accesorios",
+            "reloj": "Accesorios",
+            "automotivos": "Accesorios",
+            "automotivo": "Accesorios",
+            "electronica": "Accesorios",
+            "electronicos": "Accesorios",
+        }
+
+        return mapa.get(key, "")
+
+    def categoria_maestra_valida(self, categoria):
+        categoria = self.limpiar_texto(categoria)
+        if not categoria:
+            return False
+        if categoria.lower() in {"productos", "producto", "sin categoría", "sin categoria", "uncategorized"}:
+            return False
+
+        categorias_validas = {
+            "Celulares y Smartphones",
+            "Tablets",
+            "Informática",
+            "Audio",
+            "TV y Video",
+            "Gaming",
+            "Accesorios",
+            "Redes y Conectividad",
+            "Cámaras y Seguridad",
+            "Electrodomésticos",
+            "Climatización",
+            "Herramientas",
+            "Oficina",
+            "Hogar",
+            "Salud y Belleza",
+            "Deportes",
+            "Motocicletas",
+            "Bebés y Juguetes",
+            "Outlet",
+            "Productos",
+        }
+        return categoria in categorias_validas
 
     def normalizar_item(self, item):
         marca = self.limpiar_texto(item.get("marca") or "")

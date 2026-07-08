@@ -13,15 +13,15 @@ class InverfinProductosSpider(scrapy.Spider):
     allowed_domains = ["inverfin.com.py", "www.inverfin.com.py"]
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 6,
+        "DOWNLOAD_DELAY": 20,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 1,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
         "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 3,
-        "AUTOTHROTTLE_MAX_DELAY": 20,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
-        "RETRY_TIMES": 8,
+        "AUTOTHROTTLE_START_DELAY": 10,
+        "AUTOTHROTTLE_MAX_DELAY": 60,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 0.5,
+        "RETRY_TIMES": 5,
         "COOKIES_ENABLED": False,
         "DUPEFILTER_DEBUG": True,
         "DEFAULT_REQUEST_HEADERS": {
@@ -125,12 +125,9 @@ class InverfinProductosSpider(scrapy.Spider):
             t.strip() for t in response.css("body ::text").getall() if t.strip()
         ))
 
-        nombre = self.clean_text(
-            (jsonld or {}).get("title")
-            or (shopify or {}).get("title")
-            or response.css("h1::text").get()
-            or response.css("title::text").get(default="")
-        )
+        # En Inverfin algunos JSON/Shopify embebidos pueden traer datos de otro producto.
+        # Por eso priorizamos el título visible/meta de la página actual.
+        nombre = self.extract_product_name(response, jsonld, shopify)
         if not nombre:
             return
 
@@ -166,6 +163,68 @@ class InverfinProductosSpider(scrapy.Spider):
 
         if item["nombre"] and item["precio"] is not None:
             yield item
+
+    def extract_product_name(self, response, jsonld=None, shopify=None):
+        candidates = [
+            response.css("h1.product__title::text").get(),
+            response.css(".product__title h1::text").get(),
+            response.css(".product__info-container h1::text").get(),
+            response.css("main h1::text").get(),
+            response.css("h1::text").get(),
+            response.css("meta[property='og:title']::attr(content)").get(),
+            response.css("meta[name='twitter:title']::attr(content)").get(),
+            response.css("title::text").get(default=""),
+        ]
+
+        # Estos quedan al final porque a veces aparecen desincronizados
+        # con el producto real mostrado en la URL.
+        candidates.extend([
+            (jsonld or {}).get("title"),
+            (shopify or {}).get("title"),
+        ])
+
+        for raw in candidates:
+            name = self.clean_product_title(raw)
+            if name and self.is_valid_product_name(name):
+                return name
+
+        return ""
+
+    def clean_product_title(self, text):
+        text = self.clean_text(text)
+        if not text:
+            return ""
+
+        # Quitar sufijos típicos del title/meta.
+        text = re.sub(r"\s*[-|–]\s*Inverfin.*$", "", text, flags=re.I)
+        text = re.sub(r"\s*[-|–]\s*Compra.*$", "", text, flags=re.I)
+        text = re.sub(r"\s*\|\s*Inverfin.*$", "", text, flags=re.I)
+        text = re.sub(r"\s+", " ", text).strip(" -|–")
+
+        return text
+
+    def is_valid_product_name(self, name):
+        low = self.clean_text(name).lower()
+
+        bad_exact = {
+            "inverfin",
+            "productos",
+            "producto",
+            "carrito",
+            "buscar",
+            "inicio",
+            "saltar al contenido",
+            "no se pudo cargar la disponibilidad de recogida",
+        }
+
+        if not low or low in bad_exact:
+            return False
+        if len(low) < 4:
+            return False
+        if low.startswith("compartir en "):
+            return False
+
+        return True
 
     # ---------- precio ----------
     def extract_visible_price(self, response):
@@ -335,6 +394,11 @@ class InverfinProductosSpider(scrapy.Spider):
             "impuestos incluidos",
             "envío calculado al finalizar la compra",
             "envio calculado al finalizar la compra",
+            "no se pudo cargar la disponibilidad de recogida",
+            "refrescar",
+            "compartir:",
+            "compartir en facebook",
+            "compartir en x",
         ]
         cut_at = len(text)
         for marker in cuts:
@@ -413,27 +477,55 @@ class InverfinProductosSpider(scrapy.Spider):
         return ""
 
     def extract_brand_value(self, nombre, body_text, jsonld, shopify):
-        if jsonld:
-            brand = jsonld.get("brand")
-            if isinstance(brand, dict):
-                brand = brand.get("name")
-            if isinstance(brand, str) and self.clean_text(brand):
-                return self.clean_text(brand)
-
-        if shopify:
-            brand = self.clean_text(shopify.get("vendor"))
-            if brand:
-                return brand
-
+        # Primero usar el nombre real ya corregido. Evita que un JSON viejo
+        # marque todos los productos como TAIGA u otra marca incorrecta.
         brand = self.clean_text(extract_brand(nombre))
         if brand:
             return brand
 
-        brand = self.clean_text(extract_brand(body_text[:300]))
-        if brand:
-            return brand
+        # Buscar una marca visible en el texto del producto, si existe.
+        m = re.search(r"\bMarca\s*:\s*([A-Za-zÁÉÍÓÚÑáéíóúñ0-9\s\.\-]+)", body_text, re.I)
+        if m:
+            candidate = self.clean_text(m.group(1))
+            candidate = re.split(
+                r"\b(Modelo|Color|Precio|Ficha|Stock|Compartir|Cantidad|Código|Codigo)\b",
+                candidate,
+                maxsplit=1,
+                flags=re.I,
+            )[0]
+            candidate = self.clean_text(candidate)
+            if candidate and 2 <= len(candidate) <= 40:
+                return candidate
+
+        # Usar JSON-LD o Shopify solo si el título coincide con el nombre actual.
+        if jsonld and self.same_product_title((jsonld or {}).get("title"), nombre):
+            brand = jsonld.get("brand")
+            if isinstance(brand, dict):
+                brand = brand.get("name")
+            brand = self.clean_text(brand)
+            if brand:
+                return brand
+
+        if shopify and self.same_product_title((shopify or {}).get("title"), nombre):
+            brand = self.clean_text(shopify.get("vendor"))
+            if brand:
+                return brand
 
         return "Genérico"
+
+    def same_product_title(self, a, b):
+        def norm(x):
+            x = self.clean_product_title(x).lower()
+            x = re.sub(r"[^a-z0-9áéíóúñ]+", "", x)
+            return x
+
+        na = norm(a)
+        nb = norm(b)
+
+        if not na or not nb:
+            return False
+
+        return na in nb or nb in na
 
     def extract_stock(self, response, body_text, shopify, jsonld):
         if shopify:

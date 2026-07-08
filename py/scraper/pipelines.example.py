@@ -8,9 +8,9 @@ class MySQLPipeline:
     def open_spider(self, spider=None):
         self.connection = pymysql.connect(
             host="localhost",
-            user="root",
-            password="",
-            database="Caacuprecio",
+            user="user",
+            password="pass",
+            database="caacuprecio",
             charset="utf8mb4",
             autocommit=True,
             cursorclass=pymysql.cursors.Cursor,

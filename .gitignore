@@ -1,1 +1,32 @@
-__pycache__
+# Configuración privada
+config.php
+.env
+.env.*
+*.key
+*.pem
+*.crt
+
+# Archivos reales con credenciales
+worker.py
+py/scraper/pipelines.py
+
+# Backups / temporales
+*.sql
+*.sql.gz
+*.bak
+*.backup
+*.save
+nohup.out
+logs/
+tmp/
+temp/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.scrapy/
+
+# Node / PHP
+node_modules/
+vendor/

@@ -6,11 +6,16 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 const DB_HOST = 'localhost';
-const DB_NAME = 'Caacuprecio';
-const DB_USER = 'root';
-const DB_PASS = '';
+const DB_NAME = 'caacuprecio';
+const DB_USER = 'user';
+const DB_PASS = 'pass';
 const APP_NAME = 'Caacuprecio';
 const DEFAULT_THEME = 'dark';
+const APP_URL = 'https://caacuprecio.com';
+
+const RESEND_API_KEY = 're';
+const RESEND_FROM = 'Correo no reply';
+
 
 function db(): PDO
 {
@@ -371,7 +376,7 @@ function render_navbar(string $current = 'home'): void
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
     echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
-    echo '      <img src="./img/logo_horizontal_dark.png" data-theme-logo data-light-logo="./img/Logo_horizontal.png" data-dark-logo="./img/logo_horizontal_dark.png" alt="Caacuprecio" style="height:52px;width:auto;">';
+    echo '      <img src="./img/logo_horizontal_dark.png" data-theme-logo data-light-logo="./img/logo_horizontal.png" data-dark-logo="./img/logo_horizontal_dark.png" alt="Caacuprecio" style="height:52px;width:auto;">';
     echo '    </a>';
 
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
