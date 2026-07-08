@@ -681,7 +681,7 @@ render_navbar('tienda');
             <?php if ($products): ?>
               <?php foreach ($products as $product): ?>
                 <div class="col-md-6">
-                  <article class="related-card related-card-lg fancy-hover h-100">
+                  <article class="related-card related-card-lg fancy-hover h-100 clickable-card" role="link" tabindex="0" data-card-href="producto.php?id=<?= (int) $product['idproductos'] ?>" aria-label="Ver detalle de <?= h($product['pro_nombre']) ?>">
                     <img src="<?= h(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= h($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
 
                     <div class="flex-grow-1">
@@ -925,5 +925,29 @@ render_navbar('tienda');
 <?php if ($reviewModals): ?>
   <?= implode("\n", $reviewModals) ?>
 <?php endif; ?>
+
+
+<script>
+document.addEventListener('click', function (event) {
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card) return;
+
+  if (event.target.closest('a, button, input, select, textarea, label, [data-no-card-click]')) {
+    return;
+  }
+
+  window.location.href = card.dataset.cardHref;
+});
+
+document.addEventListener('keydown', function (event) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card || event.target !== card) return;
+
+  event.preventDefault();
+  window.location.href = card.dataset.cardHref;
+});
+</script>
 
 <?php render_footer(); ?>
