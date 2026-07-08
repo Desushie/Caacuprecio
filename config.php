@@ -371,7 +371,7 @@ function render_navbar(string $current = 'home'): void
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
     echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
-    echo '      <img src="./img/Logo_horizontal.png" alt="Caacuprecio" style="height:52px;width:auto;">';
+    echo '      <img src="./img/logo_horizontal_dark.png" data-theme-logo data-light-logo="./img/Logo_horizontal.png" data-dark-logo="./img/logo_horizontal_dark.png" alt="Caacuprecio" style="height:52px;width:auto;">';
     echo '    </a>';
 
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
@@ -425,7 +425,7 @@ function render_footer(): void
     echo '  <div class="container">';
     echo '    <div class="row g-4 pb-4 align-items-stretch">';
     echo '      <div class="col-lg-5">';
-    echo '        <img src="./img/logo_vertical.png" alt="Caacuprecio" style="height:90px;width:auto;" class="mb-3">';
+    echo '        <img src="./img/logo_vertical_dark.png" data-theme-logo data-light-logo="./img/logo_vertical_dark.png" data-dark-logo="./img/logo_vertical_dark.png" alt="Caacuprecio" style="height:90px;width:auto;" class="mb-3">';
     echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
 
@@ -535,7 +535,7 @@ function render_footer(): void
     echo 'const body=document.body;';
     echo 'const storageKey="caacuprecio-theme";';
     echo 'const toggleButtons=[document.getElementById("themeToggle"),document.getElementById("themeToggleMobile")].filter(Boolean);';
-    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
+    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
     echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme);';
     echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next);}));';
 

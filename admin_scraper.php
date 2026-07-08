@@ -18,34 +18,9 @@ $scraperJobs = [
         'path'  => __DIR__ . '/py/run_all.py',
         'type'  => 'principal',
     ],
-    'alex' => [
-        'label' => 'Alex',
-        'path'  => __DIR__ . '/py/run_alex.py',
-        'type'  => 'tienda',
-    ],
-    'bristol' => [
-        'label' => 'Bristol',
-        'path'  => __DIR__ . '/py/run_bristol.py',
-        'type'  => 'tienda',
-    ],
-    'chacomer' => [
-        'label' => 'Chacomer',
-        'path'  => __DIR__ . '/py/run_chacomer.py',
-        'type'  => 'tienda',
-    ],
-    'comfort_house' => [
-        'label' => 'Comfort House',
-        'path'  => __DIR__ . '/py/run_comfort_house.py',
-        'type'  => 'tienda',
-    ],
     'computex' => [
         'label' => 'Computex',
         'path'  => __DIR__ . '/py/run_computex.py',
-        'type'  => 'tienda',
-    ],
-    'gonzalito' => [
-        'label' => 'Tienda Gonzalito',
-        'path'  => __DIR__ . '/py/run_gonzalito.py',
         'type'  => 'tienda',
     ],
     'inverfin' => [
@@ -53,10 +28,10 @@ $scraperJobs = [
         'path'  => __DIR__ . '/py/run_inverfin.py',
         'type'  => 'tienda',
     ],
-      'fulloffice' => [
-      'label' => 'Full Office',
-      'path'  => __DIR__ . '/py/run_fulloffice.py',
-      'type'  => 'tienda',
+    'fulloffice' => [
+        'label' => 'Full Office',
+        'path'  => __DIR__ . '/py/run_fulloffice.py',
+        'type'  => 'tienda',
     ],
 ];
 
@@ -260,10 +235,10 @@ body.theme-light .admin-scraper-card {
     <div class="admin-hero p-4 p-lg-5 mb-4">
       <div class="row g-4 align-items-center">
         <div class="col-lg-8 position-relative z-1">
-          <div class="admin-kicker mb-2">Actualización de datos</div>
-          <h1 class="display-6 fw-bold mb-3">Gestión de actualizaciones</h1>
+          <div class="admin-kicker mb-2">Scrapers</div>
+          <h1 class="display-6 fw-bold mb-3">Actualizar precios</h1>
           <p class="text-body-secondary mb-4">
-            Ejecutá actualizaciones de productos y precios desde distintas tiendas de forma segura y organizada.
+            Usá este panel para traer los precios más recientes de las tiendas activas. Podés correr todo de una vez o actualizar una tienda puntual cuando haga falta.
           </p>
           <div class="d-flex flex-wrap gap-3">
             <a href="admin.php" class="btn btn-outline-primary rounded-pill px-4">
@@ -278,19 +253,11 @@ body.theme-light .admin-scraper-card {
           </div>
         </div>
         <div class="col-lg-4 position-relative z-1">
-          <div class="admin-side-list">
-            <div class="admin-side-item">
-              <strong>Actualizaciones sin interrupciones</strong>
-              <span class="text-body-secondary small">El sistema procesa las actualizaciones sin afectar el uso del sitio.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Control de procesos</strong>
-              <span class="text-body-secondary small">Podés iniciar varias actualizaciones y ver su estado en tiempo real.</span>
-            </div>
-            <div class="admin-side-item">
-              <strong>Optimizado para rendimiento</strong>
-              <span class="text-body-secondary small">Diseñado para manejar grandes volúmenes de datos de forma eficiente.</span>
-            </div>
+          <div class="admin-side-item h-100 d-flex flex-column justify-content-center">
+            <strong class="d-block mb-2">Antes de actualizar</strong>
+            <span class="text-body-secondary small d-block">
+              Si solo necesitás refrescar una tienda, elegila abajo. La actualización completa queda para cuando quieras revisar todo el catálogo activo.
+            </span>
           </div>
         </div>
       </div>

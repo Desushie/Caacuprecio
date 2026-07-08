@@ -1025,7 +1025,6 @@ body.theme-light .suggestion-modal textarea {
 
   /* Ocultar filtros secundarios en móvil para ahorrar espacio */
   .search-sticky-container .form-select,
-  .search-sticky-container .search-discovery-stack,
   .search-sticky-container .col-lg-1.d-grid {
     display: none !important;
   }
@@ -1273,4 +1272,191 @@ body.theme-light {
   --text-soft: #4f5e7b;                       /* Texto secundario gris oscuro legible */
   --border-soft: rgba(0, 0, 0, 0.08);         /* Bordes sutiles oscuros para el botón Cancelar */
   --theme-close-filter: none;                 /* Hace que la 'X' de cerrar vuelva a ser oscura */
+}
+
+/* ================================================================= */
+/* POSICIÓN CORRECTA DEL BOTÓN PIN EN LA BARRA DE BÚSQUEDA           */
+/* ================================================================= */
+.search-pin-col {
+  display: grid !important;
+  place-items: center;
+}
+
+.search-pin-btn,
+#toggle-sticky-btn.search-pin-btn {
+  position: static !important;
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  padding: 0 !important;
+}
+
+.search-pin-btn i,
+#toggle-sticky-btn.search-pin-btn i {
+  font-size: 1rem !important;
+  line-height: 1;
+}
+
+@media (max-width: 991.98px) {
+  .search-pin-col {
+    display: none !important;
+  }
+}
+
+
+/* ================================================================= */
+/* BARRA DE BÚSQUEDA OPTIMIZADA PARA MÓVIL                           */
+/* ================================================================= */
+
+.search-submit-btn {
+  min-height: 52px;
+}
+
+.search-submit-text {
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  .search-sticky-container {
+    padding: 0.55rem 0.65rem !important;
+  }
+
+  .search-sticky-container .container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .search-sticky-container .search-bar {
+    padding: 0.75rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  .search-mobile-form {
+    row-gap: 0.65rem !important;
+  }
+
+  .search-input-col,
+  .search-category-col,
+  .search-order-col,
+  .search-submit-col {
+    display: block !important;
+  }
+
+  .search-input-col {
+    width: 100% !important;
+  }
+
+  .search-category-col,
+  .search-order-col {
+    width: 50% !important;
+  }
+
+  .search-submit-col {
+    width: 100% !important;
+    display: grid !important;
+  }
+
+  .search-sticky-container .form-control,
+  .search-sticky-container .form-select,
+  .search-submit-btn {
+    min-height: 46px !important;
+    border-radius: 0.95rem !important;
+    font-size: 0.92rem !important;
+  }
+
+  .search-submit-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .search-submit-text {
+    display: inline !important;
+    font-weight: 700;
+  }
+
+  .search-sticky-container .search-discovery-stack {
+    display: flex !important;
+    max-height: 92px;
+    overflow-y: auto;
+    padding-right: 0.2rem;
+  }
+
+  .search-sticky-container .search-chip-row {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.45rem;
+    padding-bottom: 0.15rem;
+    scrollbar-width: thin;
+  }
+
+  .search-sticky-container .search-chip-label,
+  .search-sticky-container .search-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .search-pin-col,
+  .search-sticky-container #toggle-sticky-btn {
+    display: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .search-category-col,
+  .search-order-col {
+    width: 100% !important;
+  }
+
+  .search-sticky-container .search-discovery-stack {
+    display: none !important;
+  }
+}
+
+/* Refuerzo contra reglas móviles anteriores que ocultaban selects y botones */
+@media (max-width: 991.98px) {
+  .search-sticky-container .search-category-col .form-select,
+  .search-sticky-container .search-order-col .form-select {
+    display: block !important;
+  }
+
+  .search-sticky-container .search-submit-col {
+    display: grid !important;
+  }
+
+  .search-sticky-container .search-submit-col .search-submit-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  .search-sticky-container .search-pin-col {
+    display: none !important;
+  }
+}
+
+/* Mostrar historial y tendencias también en móvil */
+@media (max-width: 991.98px) {
+  .search-sticky-container .search-discovery-stack {
+    display: flex !important;
+    width: 100%;
+    padding-top: 0.75rem !important;
+  }
+
+  .search-sticky-container .search-chip-row {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.25rem;
+    scrollbar-width: thin;
+  }
+
+  .search-sticky-container .search-chip-label {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .search-sticky-container .search-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
 }

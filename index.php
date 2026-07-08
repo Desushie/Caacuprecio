@@ -467,8 +467,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       data-count-target="#home-live-count"
       data-state-target="#home-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form" method="get" action="buscar.php" autocomplete="off">
-        <div class="col-lg-5 position-relative">
+      <form class="row g-2 align-items-center js-smart-search-form search-mobile-form" method="get" action="buscar.php" autocomplete="off">
+        <div class="col-lg-5 position-relative search-input-col">
           <label for="global-search-home" class="visually-hidden">Buscar productos</label>
           <input
             id="global-search-home"
@@ -495,7 +495,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             aria-label="Sugerencias de búsqueda"
           ></div>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-sm-6 col-lg-3 search-category-col">
           <select name="categoria" class="form-select js-smart-search-category" data-search-category>
             <option value="0">Todas las categorías</option>
             <?php foreach ($categorias as $categoria): ?>
@@ -505,18 +505,24 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-sm-6 col-lg-2 search-order-col">
           <select name="orden" class="form-select" data-search-order data-search-sort>
             <?php foreach (active_sort_options() as $value => $label): ?>
               <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-lg-1 d-grid">
-          <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
+        <div class="col-lg-1 d-grid search-submit-col">
+          <button class="btn btn-primary btn-lg rounded-4 search-submit-btn" type="submit" aria-label="Buscar">
             <i class="bi bi-search"></i>
+            <span class="search-submit-text ms-2">Buscar</span>
           </button>
         </div>
+        <div class="col-lg-1 d-grid search-pin-col">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center search-pin-btn" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle"></i>
+          </button>
+          </div>
 
         <?php if ($recentSearches || $popularSearches): ?>
           <div class="col-12">
@@ -557,11 +563,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             </div>
           </div>
         <?php endif; ?>
-        <div class="position-absolute" style="right: 15px; bottom: 14px; left: auto !important; width: auto !important; z-index: 1030;">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
-          </button>
-        </div>
       </form>
     </div>
   </div>
@@ -652,6 +653,32 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 </section>
 
 <main>
+  <section id="categorias" class="py-5 position-relative">
+    <div class="container">
+      <div class="section-header mb-4">
+        <div>
+          <h2 class="section-title mb-1">Categorías</h2>
+          <p class="section-subtitle mb-0">Filtrá por lo que necesitás.</p>
+        </div>
+      </div>
+      <div class="row g-3">
+        <?php if ($categorias): ?>
+          <?php foreach ($categorias as $categoria): ?>
+            <div class="col-6 col-md-4 col-xl-2">
+              <a class="category-pill fancy-hover" href="index.php?categoria=<?= (int) $categoria['idcategorias'] ?>#productos">
+                <span class="icon-wrap"><i class="bi bi-grid"></i></span>
+                <span><?= e($categoria['cat_nombre']) ?></span>
+              </a>
+            </div>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <div class="col-12"><div class="empty-state">No hay categorías disponibles por ahora.</div></div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
+
+
   <section class="pt-1 pb-5 position-relative">
     <div class="container">
       <div class="section-header mb-4">
@@ -700,31 +727,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="categorias" class="py-5 position-relative">
-    <div class="container">
-      <div class="section-header mb-4">
-        <div>
-          <h2 class="section-title mb-1">Categorías</h2>
-          <p class="section-subtitle mb-0">Filtrá por lo que necesitás.</p>
-        </div>
-      </div>
-      <div class="row g-3">
-        <?php if ($categorias): ?>
-          <?php foreach ($categorias as $categoria): ?>
-            <div class="col-6 col-md-4 col-xl-2">
-              <a class="category-pill fancy-hover" href="index.php?categoria=<?= (int) $categoria['idcategorias'] ?>#productos">
-                <span class="icon-wrap"><i class="bi bi-grid"></i></span>
-                <span><?= e($categoria['cat_nombre']) ?></span>
-              </a>
-            </div>
-          <?php endforeach; ?>
-        <?php else: ?>
-          <div class="col-12"><div class="empty-state">No hay categorías disponibles por ahora.</div></div>
-        <?php endif; ?>
       </div>
     </div>
   </section>
