@@ -1488,10 +1488,6 @@ body.theme-light {
   opacity: .5;
 }
 
-.clickable-card {
-  cursor: pointer;
-}
-
 .clickable-card:focus-visible {
   outline: 2px solid rgba(96, 165, 250, .65);
   outline-offset: 4px;
@@ -1500,4 +1496,9 @@ body.theme-light {
 .clickable-card a,
 .clickable-card button {
   cursor: pointer;
+}
+
+.clickable-card,
+.clickable-card * {
+  cursor: pointer !important;
 }
