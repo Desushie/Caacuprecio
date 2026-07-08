@@ -13,15 +13,15 @@ class InverfinProductosSpider(scrapy.Spider):
     allowed_domains = ["inverfin.com.py", "www.inverfin.com.py"]
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 60,
+        "DOWNLOAD_DELAY": 20,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 1,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
         "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 30,
+        "AUTOTHROTTLE_START_DELAY": 10,
         "AUTOTHROTTLE_MAX_DELAY": 180,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 0.2,
-        "RETRY_TIMES": 2,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 0.5,
+        "RETRY_TIMES": 5,
         "COOKIES_ENABLED": True,
         "DUPEFILTER_DEBUG": True,
         "DEFAULT_REQUEST_HEADERS": {
