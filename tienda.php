@@ -681,7 +681,7 @@ render_navbar('tienda');
             <?php if ($products): ?>
               <?php foreach ($products as $product): ?>
                 <div class="col-md-6">
-                  <article class="related-card related-card-lg fancy-hover h-100 clickable-card" role="link" tabindex="0" data-card-href="producto.php?id=<?= (int) $product['idproductos'] ?>" aria-label="Ver detalle de <?= h($product['pro_nombre']) ?>">
+                  <article class="related-card related-card-lg fancy-hover h-100 clickable-card" role="link" tabindex="0" style="cursor: pointer;" data-card-href="producto.php?id=<?= (int) $product['idproductos'] ?>" aria-label="Ver detalle de <?= h($product['pro_nombre']) ?>">
                     <img src="<?= h(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= h($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
 
                     <div class="flex-grow-1">
