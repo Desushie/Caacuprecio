@@ -1,5 +1,4 @@
 <?php
-//Prueba de commit
 require_once __DIR__ . '/config.php';
 
 $q = trim($_GET['q'] ?? '');
