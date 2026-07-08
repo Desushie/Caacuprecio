@@ -1502,3 +1502,10 @@ body.theme-light {
 .clickable-card * {
   cursor: pointer !important;
 }
+
+.related-card.clickable-card,
+.related-card.clickable-card *,
+article.clickable-card,
+article.clickable-card * {
+  cursor: pointer !important;
+}
