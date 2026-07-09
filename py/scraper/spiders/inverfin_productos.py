@@ -140,11 +140,16 @@ class InverfinProductosSpider(scrapy.Spider):
         descripcion = self.extract_description(response, jsonld, shopify, nombre)
         imagen = self.extract_image(response, jsonld, shopify)
         marca = self.extract_brand_value(nombre, body_text, jsonld, shopify)
-        categoria = extract_category(
-            nombre=nombre,
-            categoria_original=categoria_origen,
-            marca=marca,
-        )
+        categoria_producto = self.extract_breadcrumb_category(response)
+
+        if categoria_producto:
+            categoria = categoria_producto
+        else:
+            categoria = extract_category(
+                nombre=nombre,
+                categoria_original=categoria_origen,
+                marca=marca,
+            )
 
         stock = self.extract_stock(response, body_text, shopify, jsonld)
 
@@ -163,6 +168,47 @@ class InverfinProductosSpider(scrapy.Spider):
 
         if item["nombre"] and item["precio"] is not None:
             yield item
+
+    def extract_breadcrumb_category(self, response):
+        """
+        Extrae la categoría real desde el breadcrumb del producto.
+
+        Ejemplo en Inverfin:
+        Hogar > Smartwatch > RELOJ FTX A10P-SVW 48MM
+
+        Devuelve: Smartwatch
+        """
+        candidates = []
+
+        # Selector principal para Inverfin.
+        candidates.extend(response.css(
+            "nav.breadcrumbs a[href*='/collections/']::text"
+        ).getall())
+
+        # Fallbacks si cambia la clase o estructura del breadcrumb.
+        candidates.extend(response.css(
+            "[aria-label='breadcrumbs'] a[href*='/collections/']::text, "
+            ".breadcrumbs a[href*='/collections/']::text, "
+            "nav a[href*='/collections/']::text"
+        ).getall())
+
+        cleaned = []
+        for raw in candidates:
+            text = self.clean_text(raw)
+            if not text:
+                continue
+
+            low = text.lower()
+            if low in {"hogar", "home", "inicio", "productos", "collections"}:
+                continue
+
+            cleaned.append(text)
+
+        if cleaned:
+            # Usamos la última colección antes del nombre del producto.
+            return cleaned[-1]
+
+        return ""
 
     def extract_product_name(self, response, jsonld=None, shopify=None):
         candidates = [
