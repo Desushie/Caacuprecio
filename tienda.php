@@ -705,9 +705,6 @@ render_navbar('tienda');
                       <div class="d-flex justify-content-between align-items-end gap-2 flex-wrap">
                         <div>
                           <div class="price-now"><?= gs($product['pro_precio']) ?></div>
-                          <?php if ($product['pro_precio_anterior'] !== null): ?>
-                            <div class="price-old"><?= gs($product['pro_precio_anterior']) ?></div>
-                          <?php endif; ?>
                         </div>
 
                         <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="btn btn-sm btn-primary rounded-pill px-3">
