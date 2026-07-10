@@ -376,7 +376,7 @@ function render_navbar(string $current = 'home'): void
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
     echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
-    echo '      <img src="./img/logo_horizontal_dark.png" data-theme-logo data-light-logo="./img/logo_horizontal.png" data-dark-logo="./img/logo_horizontal_dark.png" alt="Caacuprecio" style="height:52px;width:auto;">';
+    echo '      <img src="./img/logo_horizontal_dark.png" data-theme-logo data-light-logo="./img/logo_horizontal.png" data-dark-logo="./img/logo_horizontal_dark.png" alt="Caacuprecio" class="site-navbar-logo">';
     echo '    </a>';
 
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
@@ -430,7 +430,7 @@ function render_footer(): void
     echo '  <div class="container">';
     echo '    <div class="row g-4 pb-4 align-items-stretch">';
     echo '      <div class="col-lg-5">';
-    echo '        <img src="./img/logo_vertical_dark.png" data-theme-logo data-light-logo="./img/logo_vertical_dark.png" data-dark-logo="./img/logo_vertical_dark.png" alt="Caacuprecio" style="height:90px;width:auto;" class="mb-3">';
+    echo '        <img src="./img/logo_vertical.png" data-theme-logo data-light-logo="./img/logo_vertical.png" data-dark-logo="./img/logo_vertical_dark.png" alt="Caacuprecio" class="site-footer-logo mb-3">';
     echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
 
