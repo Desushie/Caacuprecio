@@ -1509,3 +1509,177 @@ article.clickable-card,
 article.clickable-card * {
   cursor: pointer !important;
 }
+/* ================================================================ */
+/* MEJORA DE CONTRASTE ENTRE SECCIONES — SOLO MODO OSCURO            */
+/* ================================================================ */
+body:not(.theme-light) {
+  --bg-main: #04070d;
+  --bg-soft: #0a101a;
+  --bg-card: rgba(19, 24, 34, 0.88);
+  --bg-card-strong: rgba(24, 30, 42, 0.97);
+  --bg-elevated: #171e2a;
+  --text-main: #f1f5f9;
+  --text-soft: #a8b3c5;
+  --border-soft: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(96, 165, 250, 0.42);
+  --shadow-soft: 0 20px 55px rgba(0, 0, 0, 0.52);
+  --shadow-glow: 0 12px 34px rgba(37, 99, 235, 0.18);
+
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.07), transparent 28%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.045), transparent 24%),
+    linear-gradient(180deg, #03060b 0%, #070b12 48%, #0a0e16 100%);
+}
+
+body:not(.theme-light) .bg-orb {
+  opacity: .30;
+}
+
+body:not(.theme-light) .orb-1 {
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.24), transparent 67%);
+}
+
+body:not(.theme-light) .orb-2 {
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.18), transparent 67%);
+}
+
+body:not(.theme-light) .orb-3 {
+  background: radial-gradient(circle, rgba(30, 64, 175, 0.13), transparent 72%);
+}
+
+body:not(.theme-light) .bg-grid {
+  opacity: .045;
+}
+
+body:not(.theme-light) .glass-card,
+body:not(.theme-light) .search-bar,
+body:not(.theme-light) .custom-card,
+body:not(.theme-light) .store-card,
+body:not(.theme-light) .comparison-card,
+body:not(.theme-light) .stats-card,
+body:not(.theme-light) .empty-state,
+body:not(.theme-light) .footer-note,
+body:not(.theme-light) .detail-card,
+body:not(.theme-light) .related-card,
+body:not(.theme-light) .info-box,
+body:not(.theme-light) .mini-row,
+body:not(.theme-light) .page-link,
+body:not(.theme-light) .hero-panel {
+  background: linear-gradient(145deg, rgba(25, 31, 43, .94), rgba(15, 20, 29, .94));
+  border-color: rgba(255, 255, 255, .115);
+  box-shadow:
+    0 22px 48px rgba(0, 0, 0, .46),
+    inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+body:not(.theme-light) .search-bar,
+body:not(.theme-light) .live-search-panel,
+body:not(.theme-light) .hero-panel {
+  background: linear-gradient(145deg, rgba(29, 36, 50, .97), rgba(17, 22, 32, .97));
+  border-color: rgba(96, 165, 250, .18);
+}
+
+body:not(.theme-light) .stats-card,
+body:not(.theme-light) .category-pill,
+body:not(.theme-light) .custom-card,
+body:not(.theme-light) .store-card,
+body:not(.theme-light) .related-card {
+  outline: 1px solid rgba(0, 0, 0, .18);
+  outline-offset: -1px;
+}
+
+body:not(.theme-light) .glass-soft,
+body:not(.theme-light) .hero-metric,
+body:not(.theme-light) .mini-log-item {
+  background: rgba(255, 255, 255, .055);
+  border-color: rgba(255, 255, 255, .085);
+}
+
+body:not(.theme-light) .form-control,
+body:not(.theme-light) .form-select,
+body:not(.theme-light) select {
+  background-color: rgba(3, 7, 14, .62) !important;
+  border-color: rgba(255, 255, 255, .10) !important;
+}
+
+body:not(.theme-light) .form-control:focus,
+body:not(.theme-light) .form-select:focus {
+  background-color: rgba(5, 10, 19, .82) !important;
+  border-color: rgba(96, 165, 250, .42) !important;
+}
+
+body:not(.theme-light) .offer-thumb,
+body:not(.theme-light) .store-logo,
+body:not(.theme-light) .detail-image,
+body:not(.theme-light) .related-thumb {
+  background: linear-gradient(135deg, #111827, #080d15);
+  border-color: rgba(255, 255, 255, .10);
+}
+
+body:not(.theme-light) .topbar {
+  background: rgba(1, 4, 10, .93);
+  border-bottom-color: rgba(255, 255, 255, .075);
+}
+
+body:not(.theme-light) .navbar-shell {
+  background: rgba(7, 10, 16, .86);
+  border-bottom-color: rgba(255, 255, 255, .09);
+}
+
+body:not(.theme-light) .footer {
+  background: #03060b;
+  border-top-color: rgba(255, 255, 255, .09);
+}
+
+body:not(.theme-light) .fancy-hover:hover,
+body:not(.theme-light) .related-card:hover,
+body:not(.theme-light) .custom-card:hover,
+body:not(.theme-light) .store-card:hover,
+body:not(.theme-light) .page-link:hover,
+body:not(.theme-light) .stats-card:hover {
+  background: linear-gradient(145deg, rgba(32, 40, 55, .98), rgba(20, 26, 37, .98));
+  border-color: rgba(96, 165, 250, .42);
+}
+
+/* ================================================================= */
+/* CORRECCIÓN: BARRA DE BÚSQUEDA DEBAJO DEL ENCABEZADO               */
+/* ================================================================= */
+
+/* El encabezado y sus menús siempre deben quedar por encima. */
+.topbar,
+.navbar-shell,
+.navbar-shell .dropdown-menu {
+  z-index: 1080 !important;
+}
+
+/* La búsqueda queda sobre el contenido, pero debajo del encabezado. */
+.search-sticky-container,
+.search-sticky-container.is-sticky,
+.search-sticky-bar {
+  z-index: 1015 !important;
+}
+
+/* Las sugerencias siguen apareciendo sobre tarjetas y productos. */
+.search-suggest-dropdown {
+  z-index: 1025 !important;
+}
+
+/* ================================================================= */
+/* CORRECCIÓN: NAVEGACIÓN SIN DESPLAZAMIENTO SUAVE                   */
+/* ================================================================= */
+
+/* Evita el recorrido animado al usar #productos, #categorias, etc. */
+html,
+html:focus-within,
+body {
+  scroll-behavior: auto !important;
+}
+
+/* Mantiene la accesibilidad para quienes reducen animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  html:focus-within,
+  body {
+    scroll-behavior: auto !important;
+  }
+}

@@ -949,6 +949,36 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 </main>
 
 <script>
+/* Fuerza los saltos internos sin animación, incluso si otro CSS activa smooth scroll. */
+document.documentElement.style.setProperty('scroll-behavior', 'auto', 'important');
+
+document.addEventListener('click', function(event) {
+  const link = event.target.closest('a[href*="#"]');
+  if (!link) return;
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(link.href, window.location.href);
+  } catch (error) {
+    return;
+  }
+
+  const sameDocument =
+    targetUrl.origin === window.location.origin &&
+    targetUrl.pathname === window.location.pathname &&
+    targetUrl.search === window.location.search;
+
+  if (!sameDocument || !targetUrl.hash || targetUrl.hash === '#') return;
+
+  const targetId = decodeURIComponent(targetUrl.hash.slice(1));
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  event.preventDefault();
+  target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  history.pushState(null, '', targetUrl.hash);
+}, true);
+
 document.addEventListener('DOMContentLoaded', function() {
   const stickyContainer = document.querySelector('.search-sticky-container');
   const toggleBtn = document.getElementById('toggle-sticky-btn');
