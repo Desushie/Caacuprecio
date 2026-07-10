@@ -141,15 +141,12 @@ class InverfinProductosSpider(scrapy.Spider):
         imagen = self.extract_image(response, jsonld, shopify)
         marca = self.extract_brand_value(nombre, body_text, jsonld, shopify)
         categoria_producto = self.extract_breadcrumb_category(response)
-
-        if categoria_producto:
-            categoria = categoria_producto
-        else:
-            categoria = extract_category(
-                nombre=nombre,
-                categoria_original=categoria_origen,
-                marca=marca,
-            )
+        categoria = self.map_categoria_inverfin(
+            nombre=nombre,
+            categoria_producto=categoria_producto,
+            categoria_origen=categoria_origen,
+            marca=marca,
+        )
 
         stock = self.extract_stock(response, body_text, shopify, jsonld)
 
@@ -207,6 +204,79 @@ class InverfinProductosSpider(scrapy.Spider):
         if cleaned:
             # Usamos la última colección antes del nombre del producto.
             return cleaned[-1]
+
+        return ""
+
+    def map_categoria_inverfin(self, nombre, categoria_producto="", categoria_origen="", marca=""):
+        """
+        Normaliza la categoría de Inverfin hacia las categorías maestras.
+
+        Inverfin trae breadcrumbs reales, pero también usa colecciones de marca,
+        campañas o categorías muy específicas. Por eso no guardamos el breadcrumb
+        crudo: primero lo pasamos por extract_category(prefer_keywords=False)
+        para respetar aliases como Smartwatch -> Celulares y Smartphones,
+        Anafes -> Electrodomésticos, Motos -> Motocicletas, etc.
+        """
+        categoria_producto = self.clean_text(categoria_producto)
+        categoria_origen = self.clean_text(categoria_origen)
+
+        # Reglas fuertes por nombre para corregir casos donde la colección/
+        # breadcrumb venga de una campaña o categoría equivocada.
+        categoria_fuerte = self.category_by_strong_name(nombre)
+        if categoria_fuerte:
+            return categoria_fuerte
+
+        if categoria_producto:
+            categoria_mapeada = extract_category(
+                nombre=nombre,
+                categoria_original=categoria_producto,
+                marca=marca,
+                prefer_keywords=False,
+            )
+
+            if categoria_mapeada and categoria_mapeada != "Productos":
+                return categoria_mapeada
+
+            # Si el breadcrumb era una campaña/marca sin alias útil, usamos keywords
+            # del producto como respaldo antes de caer en Productos.
+            categoria_por_producto = extract_category(
+                nombre=nombre,
+                categoria_original=categoria_producto,
+                marca=marca,
+                prefer_keywords=True,
+            )
+            if categoria_por_producto:
+                return categoria_por_producto
+
+        return extract_category(
+            nombre=nombre,
+            categoria_original=categoria_origen,
+            marca=marca,
+            prefer_keywords=True,
+        )
+
+    def category_by_strong_name(self, nombre):
+        """
+        Reglas de alta confianza por nombre de producto.
+        Solo incluye casos que suelen venir mal categorizados por colecciones
+        promocionales o categorías demasiado amplias.
+        """
+        low = self.clean_text(nombre).lower()
+
+        if not low:
+            return ""
+
+        if re.search(r"\b(notebook|laptop|macbook|ideapad|thinkpad|vivobook|inspiron|pavilion|elitebook|chromebook)\b", low):
+            return "Informática"
+
+        if re.search(r"\b(placa\s+infrarroja|placa\s+de\s+cocina|anafe|cocina\s+infrarroja)\b", low):
+            return "Electrodomésticos"
+
+        if re.search(r"\b(smartwatch|smart\s+watch|reloj\s+inteligente|reloj)\b", low):
+            return "Celulares y Smartphones"
+
+        if re.search(r"\b(soporte\s+para\s+tv|soporte\s+tv)\b", low):
+            return "Accesorios"
 
         return ""
 
@@ -647,10 +717,24 @@ class InverfinProductosSpider(scrapy.Spider):
             item["marca"] = marca
 
         categoria = self.clean_text(item.get("categoria") or "")
-        if not categoria or categoria.lower() in {"sin categoría", "sin categoria", "uncategorized", "productos"}:
-            item["categoria"] = extract_category(item.get("nombre") or "") or "Otros"
+        if categoria:
+            categoria_mapeada = extract_category(
+                nombre=item.get("nombre") or "",
+                categoria_original=categoria,
+                marca=item.get("marca") or "",
+                prefer_keywords=False,
+            )
+            if categoria_mapeada and categoria_mapeada != "Productos":
+                item["categoria"] = categoria_mapeada
+            else:
+                item["categoria"] = extract_category(
+                    nombre=item.get("nombre") or "",
+                    categoria_original=categoria,
+                    marca=item.get("marca") or "",
+                    prefer_keywords=True,
+                ) or "Productos"
         else:
-            item["categoria"] = categoria
+            item["categoria"] = extract_category(item.get("nombre") or "") or "Productos"
         return item
 
     def clean_html_text(self, html):
