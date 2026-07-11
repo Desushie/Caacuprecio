@@ -422,7 +422,11 @@ usort($historyRows, static function (array $a, array $b): int {
     return strcmp((string) ($a['his_fecha'] ?? ''), (string) ($b['his_fecha'] ?? ''));
 });
 
-$history = array_reverse(array_slice($historyRows, -20));
+/*
+ * La tabla conserva todos los valores obtenidos por producto/tienda.
+ * El gráfico continúa usando $historyRows, que contiene solo el mínimo mensual por tienda.
+ */
+$history = array_reverse(array_slice($historyRowsRaw, -20));
 
 $historyStats = [
     'min' => null,
