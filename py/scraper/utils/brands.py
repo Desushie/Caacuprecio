@@ -158,6 +158,22 @@ BRAND_ALIASES = {
     "Pro-X": ["prox", "pro-x"],
     "HJC": ["hjc"],
     "MENUTRE": ["menutre"],
+    "SanDisk": ["sandisk", "san disk", "cruzer"],
+    "Mega Bass": ["mega bass", "megabass"],
+    "Havit": ["havit","habit"],
+    "Haylou": ["haylou"],
+    "Cecotec": ["cecotec"],
+    "Electrobras": ["electrobras"],
+    "Mibro": ["mibro"],
+    "EZVIZ": ["ezviz"],
+    "Taramps": ["taramps"],
+    "Usina": ["usina"],
+    "Behringer": ["behringer"],
+    "Fifine": ["fifine"],
+    "Shure": ["shure"],
+    "Level": ["level"],
+    "Megasonic": ["megasonic"],
+    "Marvo": ["marvo"],
 }
 
 

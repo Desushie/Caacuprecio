@@ -372,9 +372,61 @@ $historySql = "
 ";
 $historyStmt = $pdo->prepare($historySql);
 $historyStmt->execute(array_merge($groupProductIds, $groupProductIds));
-$historyRows = $historyStmt->fetchAll();
+$historyRowsRaw = $historyStmt->fetchAll();
 
-$history = array_reverse(array_slice($historyRows, -20));
+/**
+ * Conservar un único registro por tienda y mes:
+ * el menor precio encontrado entre todas las ofertas del grupo.
+ * Si el mismo precio mínimo aparece varias veces, se conserva el registro más reciente.
+ */
+$historyByStoreMonth = [];
+
+foreach ($historyRowsRaw as $entry) {
+    $storeId = (int) ($entry['idtiendas'] ?? 0);
+    $monthSort = trim((string) ($entry['month_sort'] ?? ''));
+    $price = isset($entry['his_precio']) ? (float) $entry['his_precio'] : null;
+
+    if ($storeId <= 0 || $monthSort === '' || $price === null) {
+        continue;
+    }
+
+    $key = $storeId . '|' . $monthSort;
+
+    if (!isset($historyByStoreMonth[$key])) {
+        $historyByStoreMonth[$key] = $entry;
+        continue;
+    }
+
+    $savedPrice = (float) $historyByStoreMonth[$key]['his_precio'];
+    $savedDate = strtotime((string) $historyByStoreMonth[$key]['his_fecha']) ?: 0;
+    $entryDate = strtotime((string) $entry['his_fecha']) ?: 0;
+
+    if ($price < $savedPrice || ($price === $savedPrice && $entryDate > $savedDate)) {
+        $historyByStoreMonth[$key] = $entry;
+    }
+}
+
+$historyRows = array_values($historyByStoreMonth);
+
+usort($historyRows, static function (array $a, array $b): int {
+    $monthCompare = strcmp((string) ($a['month_sort'] ?? ''), (string) ($b['month_sort'] ?? ''));
+    if ($monthCompare !== 0) {
+        return $monthCompare;
+    }
+
+    $storeCompare = strcasecmp((string) ($a['tie_nombre'] ?? ''), (string) ($b['tie_nombre'] ?? ''));
+    if ($storeCompare !== 0) {
+        return $storeCompare;
+    }
+
+    return strcmp((string) ($a['his_fecha'] ?? ''), (string) ($b['his_fecha'] ?? ''));
+});
+
+/*
+ * La tabla conserva todos los valores obtenidos por producto/tienda.
+ * El gráfico continúa usando $historyRows, que contiene solo el mínimo mensual por tienda.
+ */
+$history = array_reverse(array_slice($historyRowsRaw, -20));
 
 $historyStats = [
     'min' => null,
@@ -1241,21 +1293,75 @@ document.addEventListener('DOMContentLoaded', function () {
   startAutoplay();
 
   const historyCanvas = document.getElementById('priceHistoryChart');
+  let priceHistoryChart = null;
+
+  function isLightTheme() {
+    return document.body.classList.contains('theme-light') ||
+           document.documentElement.getAttribute('data-bs-theme') === 'light';
+  }
+
+  function historyThemeColors() {
+    if (isLightTheme()) {
+      return {
+        text: 'rgba(15, 23, 42, 0.78)',
+        legend: 'rgba(15, 23, 42, 0.88)',
+        grid: 'rgba(15, 23, 42, 0.10)',
+        point: '#ffffff',
+        tooltipBg: 'rgba(255, 255, 255, 0.98)',
+        tooltipText: '#0f172a',
+        tooltipBorder: 'rgba(15, 23, 42, 0.14)'
+      };
+    }
+
+    return {
+      text: 'rgba(226, 232, 240, 0.78)',
+      legend: 'rgba(241, 245, 249, 0.90)',
+      grid: 'rgba(255, 255, 255, 0.08)',
+      point: '#ffffff',
+      tooltipBg: 'rgba(15, 23, 42, 0.97)',
+      tooltipText: '#f8fafc',
+      tooltipBorder: 'rgba(255, 255, 255, 0.12)'
+    };
+  }
+
+  function applyHistoryChartTheme(chart) {
+    if (!chart) return;
+
+    const colors = historyThemeColors();
+
+    chart.options.scales.x.ticks.color = colors.text;
+    chart.options.scales.y.ticks.color = colors.text;
+    chart.options.scales.y.grid.color = colors.grid;
+    chart.options.plugins.legend.labels.color = colors.legend;
+
+    chart.options.plugins.tooltip.backgroundColor = colors.tooltipBg;
+    chart.options.plugins.tooltip.titleColor = colors.tooltipText;
+    chart.options.plugins.tooltip.bodyColor = colors.tooltipText;
+    chart.options.plugins.tooltip.borderColor = colors.tooltipBorder;
+    chart.options.plugins.tooltip.borderWidth = 1;
+
+    chart.data.datasets.forEach(function (dataset) {
+      dataset.pointBackgroundColor = colors.point;
+    });
+
+    chart.update('none');
+  }
+
   if (historyCanvas && window.priceHistoryDatasets && window.priceHistoryDatasets.length && window.Chart) {
-    
-    // Adaptación estética de datasets para el gráfico de líneas suavizadas
-    window.priceHistoryDatasets.forEach(dataset => {
+    const colors = historyThemeColors();
+
+    window.priceHistoryDatasets.forEach(function (dataset) {
       dataset.type = 'line';
-      dataset.tension = 0.35;                   // Curvas suaves y armoniosas
-      dataset.borderWidth = 3;                  // Grosor definido
-      dataset.pointRadius = 4;                  // Puntos claros
-      dataset.pointHoverRadius = 6;             // Animación al pasar el puntero
-      dataset.pointBackgroundColor = '#ffffff'; // Efecto "hollow" impecable
+      dataset.tension = 0.35;
+      dataset.borderWidth = 3;
+      dataset.pointRadius = 4;
+      dataset.pointHoverRadius = 6;
+      dataset.pointBackgroundColor = colors.point;
       dataset.spanGaps = true;
     });
 
-    new Chart(historyCanvas, {
-      type: 'line', // Cambiado de 'bar' a 'line'
+    priceHistoryChart = new Chart(historyCanvas, {
+      type: 'line',
       data: {
         labels: Array.isArray(window.priceHistoryLabels) ? window.priceHistoryLabels : [],
         datasets: window.priceHistoryDatasets
@@ -1272,17 +1378,17 @@ document.addEventListener('DOMContentLoaded', function () {
             ticks: {
               maxRotation: 0,
               autoSkip: true,
-              color: 'rgba(255, 255, 255, 0.65)',
+              color: colors.text,
               font: { family: 'system-ui', size: 10 }
             },
             grid: {
-              display: false // Remueve líneas verticales redundantes
+              display: false
             }
           },
           y: {
             beginAtZero: false,
             ticks: {
-              color: 'rgba(255, 255, 255, 0.65)',
+              color: colors.text,
               font: { family: 'system-ui', size: 10 },
               callback: function(value) {
                 try {
@@ -1293,8 +1399,8 @@ document.addEventListener('DOMContentLoaded', function () {
               }
             },
             grid: {
-              color: 'rgba(255, 255, 255, 0.06)', // Cuadrícula horizontal tenue
-              borderDash: [4, 4]                  // Estilo punteado elegante
+              color: colors.grid,
+              borderDash: [4, 4]
             }
           }
         },
@@ -1302,9 +1408,9 @@ document.addEventListener('DOMContentLoaded', function () {
           legend: {
             position: 'bottom',
             labels: {
-              color: 'rgba(255, 255, 255, 0.8)',
+              color: colors.legend,
               font: { family: 'system-ui', size: 11 },
-              usePointStyle: true, // Indicadores circulares en lugar de rectángulos
+              usePointStyle: true,
               boxWidth: 7,
               padding: 12
             }
@@ -1312,7 +1418,11 @@ document.addEventListener('DOMContentLoaded', function () {
           tooltip: {
             padding: 10,
             borderRadius: 8,
-            backgroundColor: 'rgba(15, 23, 42, 0.96)', // Tooltip flotante oscuro estilizado
+            backgroundColor: colors.tooltipBg,
+            titleColor: colors.tooltipText,
+            bodyColor: colors.tooltipText,
+            borderColor: colors.tooltipBorder,
+            borderWidth: 1,
             titleFont: { weight: 'bold', family: 'system-ui', size: 12 },
             bodyFont: { family: 'system-ui', size: 12 },
             callbacks: {
@@ -1324,6 +1434,20 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         }
       }
+    });
+
+    const themeObserver = new MutationObserver(function () {
+      applyHistoryChartTheme(priceHistoryChart);
+    });
+
+    themeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-bs-theme']
     });
   }
 });

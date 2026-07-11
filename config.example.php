@@ -6,11 +6,16 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 const DB_HOST = 'localhost';
-const DB_NAME = 'Caacuprecio';
-const DB_USER = 'root';
-const DB_PASS = '';
+const DB_NAME = 'caacuprecio';
+const DB_USER = 'user';
+const DB_PASS = 'pass';
 const APP_NAME = 'Caacuprecio';
 const DEFAULT_THEME = 'dark';
+const APP_URL = 'https://caacuprecio.com';
+
+const RESEND_API_KEY = 're';
+const RESEND_FROM = 'Correo no reply';
+
 
 function db(): PDO
 {
@@ -328,6 +333,7 @@ function render_head(string $title = ''): void
     echo '<title>' . e(page_title($title)) . '</title>';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">';
+    echo '<link rel="icon" type="image/png" href="./img/icono.png">';
     echo '<link rel="stylesheet" href="./css/styles.css">';
     echo '<link rel="stylesheet" href="./css/auth.css">';
     echo '<link rel="stylesheet" href="./css/favoritos_extra.css">';
@@ -369,9 +375,8 @@ function render_navbar(string $current = 'home'): void
 
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
     echo '  <div class="container py-2">';
-    echo '    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="index.php">';
-    echo '      <span class="brand-badge">CP</span>';
-    echo '      <span><span class="d-block lh-1">Caacuprecio</span><small class="text-body-secondary fw-semibold">Comparador de precios</small></span>';
+    echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
+    echo '      <img src="./img/logo_horizontal_dark.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-navbar-logo">';
     echo '    </a>';
 
     echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
@@ -425,7 +430,7 @@ function render_footer(): void
     echo '  <div class="container">';
     echo '    <div class="row g-4 pb-4 align-items-stretch">';
     echo '      <div class="col-lg-5">';
-    echo '        <div class="d-flex align-items-center gap-2 fw-bold text-white mb-3"><span class="brand-badge">CP</span><span>Caacuprecio</span></div>';
+    echo '        <img src="./img/logo_vertical.webp" data-theme-logo data-light-logo="./img/logo_vertical.webp" data-dark-logo="./img/logo_vertical_dark.webp" alt="Caacuprecio" class="site-footer-logo mb-3">';
     echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
     echo '      </div>';
 
@@ -535,7 +540,7 @@ function render_footer(): void
     echo 'const body=document.body;';
     echo 'const storageKey="caacuprecio-theme";';
     echo 'const toggleButtons=[document.getElementById("themeToggle"),document.getElementById("themeToggleMobile")].filter(Boolean);';
-    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
+    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
     echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme);';
     echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next);}));';
 

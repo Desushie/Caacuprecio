@@ -323,3 +323,4 @@ render_head('Panel de Administración');
     </div>
   </div>
 </section>
+<?php render_footer(); ?>

@@ -681,7 +681,7 @@ render_navbar('tienda');
             <?php if ($products): ?>
               <?php foreach ($products as $product): ?>
                 <div class="col-md-6">
-                  <article class="related-card related-card-lg fancy-hover h-100">
+                  <article class="related-card related-card-lg fancy-hover h-100 clickable-card" role="link" tabindex="0" style="cursor: pointer;" data-card-href="producto.php?id=<?= (int) $product['idproductos'] ?>" aria-label="Ver detalle de <?= h($product['pro_nombre']) ?>">
                     <img src="<?= h(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>" alt="<?= h($product['pro_nombre']) ?>" class="related-thumb related-thumb-lg">
 
                     <div class="flex-grow-1">
@@ -705,9 +705,6 @@ render_navbar('tienda');
                       <div class="d-flex justify-content-between align-items-end gap-2 flex-wrap">
                         <div>
                           <div class="price-now"><?= gs($product['pro_precio']) ?></div>
-                          <?php if ($product['pro_precio_anterior'] !== null): ?>
-                            <div class="price-old"><?= gs($product['pro_precio_anterior']) ?></div>
-                          <?php endif; ?>
                         </div>
 
                         <a href="producto.php?id=<?= (int) $product['idproductos'] ?>" class="btn btn-sm btn-primary rounded-pill px-3">
@@ -725,40 +722,80 @@ render_navbar('tienda');
             <?php endif; ?>
           </div>
 
-          <?php if ($totalPages > 1): ?>
-            <nav class="mt-4" aria-label="Paginación de productos de tienda">
-              <ul class="pagination justify-content-center flex-wrap gap-2 mb-0">
-                <?php $prevDisabled = $page <= 1; ?>
-                <li class="page-item <?= $prevDisabled ? 'disabled' : '' ?>">
-                  <a class="page-link rounded-pill" href="<?= $prevDisabled ? '#' : h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page - 1])) ?>">Anterior</a>
+        <?php if ($totalPages > 1): ?>
+          <nav class="mt-4 mb-4" aria-label="Paginación de productos de tienda">
+            <ul class="pagination justify-content-center flex-wrap gap-2 mb-0">
+
+              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                <a
+                  class="page-link rounded-pill"
+                  href="<?= $page > 1 ? h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => 1])) : '#' ?>"
+                  aria-label="Primera página"
+                  title="Ir al inicio"
+                >
+                  <i class="bi bi-chevron-double-left"></i>
+                </a>
+              </li>
+
+              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                <a
+                  class="page-link rounded-pill"
+                  href="<?= $page > 1 ? h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page - 1])) : '#' ?>"
+                  aria-label="Página anterior"
+                  title="Página anterior"
+                >
+                  <i class="bi bi-chevron-left"></i>
+                </a>
+              </li>
+
+              <?php
+                $visiblePages = 5;
+                $half = (int) floor($visiblePages / 2);
+
+                $startPage = max(1, $page - $half);
+                $endPage = min($totalPages, $startPage + $visiblePages - 1);
+
+                if (($endPage - $startPage + 1) < $visiblePages) {
+                    $startPage = max(1, $endPage - $visiblePages + 1);
+                }
+              ?>
+
+              <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                  <a
+                    class="page-link rounded-pill"
+                    href="<?= h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $i])) ?>"
+                  >
+                    <?= $i ?>
+                  </a>
                 </li>
+              <?php endfor; ?>
 
-                <?php
-                  $startPage = max(1, $page - 2);
-                  $endPage = min($totalPages, $page + 2);
-                  if ($startPage > 1) {
-                      $startPage = 1;
-                      $endPage = min($totalPages, 5);
-                  }
-                  if ($endPage - $startPage < 4) {
-                      $startPage = max(1, $endPage - 4);
-                  }
-                ?>
+              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                <a
+                  class="page-link rounded-pill"
+                  href="<?= $page < $totalPages ? h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page + 1])) : '#' ?>"
+                  aria-label="Página siguiente"
+                  title="Página siguiente"
+                >
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+              </li>
 
-                <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                  <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                    <a class="page-link rounded-pill" href="<?= h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $i])) ?>"><?= $i ?></a>
-                  </li>
-                <?php endfor; ?>
+              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
+                <a
+                  class="page-link rounded-pill"
+                  href="<?= $page < $totalPages ? h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $totalPages])) : '#' ?>"
+                  aria-label="Última página"
+                  title="Ir al final"
+                >
+                  <i class="bi bi-chevron-double-right"></i>
+                </a>
+              </li>
 
-                <?php $nextDisabled = $page >= $totalPages; ?>
-                <li class="page-item <?= $nextDisabled ? 'disabled' : '' ?>">
-                  <a class="page-link rounded-pill" href="<?= $nextDisabled ? '#' : h(build_store_page_url($id, ['q' => $q, 'orden' => $sort, 'page' => $page + 1])) ?>">Siguiente</a>
-                </li>
-              </ul>
-            </nav>
-          <?php endif; ?>
-        </div>
+            </ul>
+          </nav>
+        <?php endif; ?>
 
         <div class="detail-card glass-card p-4 mb-4" id="reviews">
           <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -925,5 +962,29 @@ render_navbar('tienda');
 <?php if ($reviewModals): ?>
   <?= implode("\n", $reviewModals) ?>
 <?php endif; ?>
+
+
+<script>
+document.addEventListener('click', function (event) {
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card) return;
+
+  if (event.target.closest('a, button, input, select, textarea, label, [data-no-card-click]')) {
+    return;
+  }
+
+  window.location.href = card.dataset.cardHref;
+});
+
+document.addEventListener('keydown', function (event) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card || event.target !== card) return;
+
+  event.preventDefault();
+  window.location.href = card.dataset.cardHref;
+});
+</script>
 
 <?php render_footer(); ?>

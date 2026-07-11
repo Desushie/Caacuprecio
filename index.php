@@ -1,5 +1,4 @@
 <?php
-//Prueba de commit
 require_once __DIR__ . '/config.php';
 
 $q = trim($_GET['q'] ?? '');
@@ -467,8 +466,8 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
       data-count-target="#home-live-count"
       data-state-target="#home-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form" method="get" action="buscar.php" autocomplete="off">
-        <div class="col-lg-5 position-relative">
+      <form class="row g-2 align-items-center js-smart-search-form search-mobile-form" method="get" action="buscar.php" autocomplete="off">
+        <div class="col-lg-5 position-relative search-input-col">
           <label for="global-search-home" class="visually-hidden">Buscar productos</label>
           <input
             id="global-search-home"
@@ -495,7 +494,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             aria-label="Sugerencias de búsqueda"
           ></div>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-sm-6 col-lg-3 search-category-col">
           <select name="categoria" class="form-select js-smart-search-category" data-search-category>
             <option value="0">Todas las categorías</option>
             <?php foreach ($categorias as $categoria): ?>
@@ -505,18 +504,24 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-sm-6 col-lg-2 search-order-col">
           <select name="orden" class="form-select" data-search-order data-search-sort>
             <?php foreach (active_sort_options() as $value => $label): ?>
               <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-lg-1 d-grid">
-          <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
+        <div class="col-lg-1 d-grid search-submit-col">
+          <button class="btn btn-primary btn-lg rounded-4 search-submit-btn" type="submit" aria-label="Buscar">
             <i class="bi bi-search"></i>
+            <span class="search-submit-text ms-2">Buscar</span>
           </button>
         </div>
+        <div class="col-lg-1 d-grid search-pin-col">
+          <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center search-pin-btn" title="Fijar / Desplazar barra">
+            <i class="bi bi-pin-angle"></i>
+          </button>
+          </div>
 
         <?php if ($recentSearches || $popularSearches): ?>
           <div class="col-12">
@@ -557,11 +562,6 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
             </div>
           </div>
         <?php endif; ?>
-        <div class="position-absolute" style="right: 15px; bottom: 14px; left: auto !important; width: auto !important; z-index: 1030;">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
-          </button>
-        </div>
       </form>
     </div>
   </div>
@@ -590,151 +590,74 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 
 <section class="hero hero-home position-relative overflow-hidden">
   <div class="container position-relative z-1">
-    <div class="row g-4 align-items-center">
-      <div class="col-lg-7">
-        <span class="eyebrow-pill mb-3 d-inline-flex align-items-center gap-2">
+
+    <div class="row g-0 align-items-end mb-3">
+      <div class="col">
+        <span class="eyebrow-pill d-inline-flex align-items-center gap-2 mb-3">
           <span class="eyebrow-dot"></span>
-          Compará precios fácilmente en múltiples tiendas
+          Comparador de precios &mdash; Paraguay
         </span>
-        <h1 class="display-4 fw-bold mb-3 hero-title">Encontrá el mejor precio en segundos</h1>
-        <p class="lead text-body-secondary mb-4 hero-copy">
-          Buscá productos, compará precios actualizados y elegí la mejor opción sin perder tiempo.
-          Guardá tus favoritos y seguí las ofertas en un solo lugar.
+        <h1 class="display-5 fw-bold mb-2 hero-title">El mejor precio,<br>sin vueltas.</h1>
+        <p class="text-body-secondary mb-0" style="max-width: 540px;">
+          Buscá entre tiendas locales, seguí variaciones de precio y guardá lo que te interesa.
         </p>
+      </div>
+      <div class="col-auto d-none d-md-flex gap-2 align-items-center pb-1">
+        <a href="#productos" class="btn btn-primary rounded-pill px-4">
+          <i class="bi bi-search me-2"></i>Ver productos
+        </a>
+        <a href="favoritos.php" class="btn btn-outline-primary rounded-pill px-3">
+          <i class="bi bi-heart"></i>
+        </a>
+      </div>
+    </div>
 
-        <div class="d-flex flex-wrap gap-3 mb-4">
-          <a href="#productos" class="btn btn-primary btn-lg rounded-pill px-4">
-            <i class="bi bi-search me-2"></i>Explorar productos
-          </a>
-          <a href="favoritos.php" class="btn btn-outline-primary btn-lg rounded-pill px-4">
-            <i class="bi bi-heart me-2"></i>Ver favoritos
-          </a>
-        </div>
-
-        <div class="row g-3">
-          <div class="col-sm-6 col-xl-3">
-            <div class="stats-card p-3 h-100 floating-card">
-              <div class="stat-label">Tiendas</div>
-              <div class="stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stats-card p-3 h-100 floating-card delay-1">
-              <div class="stat-label">Categorías</div>
-              <div class="stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stats-card p-3 h-100 floating-card delay-2">
-              <div class="stat-label">Productos</div>
-              <div class="stat-value"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="stats-card p-3 h-100 floating-card delay-3">
-              <div class="stat-label">Favoritos</div>
-              <div class="stat-value"><?= number_format($stats['favoritos'], 0, ',', '.') ?></div>
-            </div>
-          </div>
+    <div class="row g-3 mb-2">
+      <div class="col-6 col-md-3">
+        <div class="stats-card p-3 h-100">
+          <div class="stat-label">Tiendas</div>
+          <div class="stat-value"><?= number_format($stats['tiendas'], 0, ',', '.') ?></div>
         </div>
       </div>
-
-      <div class="col-lg-5">
-        <div class="hero-panel glass-card p-4 p-lg-5 h-100">
-          <div class="d-flex justify-content-between align-items-start mb-4 gap-3">
-            <div>
-              <div class="panel-kicker">Resumen del momento</div>
-              <h2 class="h3 fw-bold mb-1">Movimiento reciente</h2>
-              <p class="text-body-secondary mb-0">Las últimas actualizaciones del catálogo para que sepas qué tiendas tuvieron cambios recientes.</p>
-            </div>
-            <span class="pulse-badge">Activo</span>
-          </div>
-
-          <div class="hero-metric mb-3">
-            <span>Productos disponibles</span>
-            <strong><?= number_format($stats['productos'], 0, ',', '.') ?></strong>
-          </div>
-          <div class="hero-metric mb-3">
-            <span>Tiendas en seguimiento</span>
-            <strong><?= number_format($stats['tiendas'], 0, ',', '.') ?></strong>
-          </div>
-          <div class="hero-metric">
-            <span>Guardados por usuarios</span>
-            <strong><?= number_format($stats['favoritos'], 0, ',', '.') ?></strong>
-          </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-card p-3 h-100">
+          <div class="stat-label">Categorías</div>
+          <div class="stat-value"><?= number_format($stats['categorias'], 0, ',', '.') ?></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-card p-3 h-100">
+          <div class="stat-label">Productos</div>
+          <div class="stat-value"><?= number_format($stats['productos'], 0, ',', '.') ?></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stats-card p-3 h-100">
+          <div class="stat-label">Favoritos guardados</div>
+          <div class="stat-value"><?= number_format($stats['favoritos'], 0, ',', '.') ?></div>
         </div>
       </div>
     </div>
+
+    <div class="d-flex gap-2 d-md-none mt-3">
+      <a href="#productos" class="btn btn-primary rounded-pill px-4 flex-fill">
+        <i class="bi bi-search me-2"></i>Ver productos
+      </a>
+      <a href="favoritos.php" class="btn btn-outline-primary rounded-pill px-3">
+        <i class="bi bi-heart"></i>
+      </a>
+    </div>
+
   </div>
 </section>
 
 <main>
-  <section class="pt-1 pb-5 position-relative">
-    <div class="container">
-      <div class="section-header mb-4">
-        <div>
-          <div class="section-kicker">Para vos</div>
-          <h2 class="section-title mb-2">Lo que estuviste viendo</h2>
-          <p class="section-subtitle mb-0">Accedé rápido a los productos que viste recientemente y descubrí tendencias.</p>
-        </div>
-      </div>
-
-      <div class="row g-4">
-        <div class="col-12">
-          <div class="glass-card p-4">
-            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
-              <div>
-                <div class="section-kicker">Recientes</div>
-                <h3 class="h4 fw-bold mb-1">Productos vistos recientemente</h3>
-                <p class="text-body-secondary mb-0">Basado en tu actividad reciente.</p>
-              </div>
-            </div>
-            <div class="row g-4">
-              <?php $renderAnalyticsCards($recentlyViewed, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-12">
-          <div class="glass-card p-4">
-            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
-              <div>
-                <div class="section-kicker">Trending</div>
-                <h3 class="h4 fw-bold mb-1">Ranking por tendencia</h3>
-                <p class="text-body-secondary mb-0">Los productos más populares del momento.</p>
-              </div>
-            </div>
-            <div class="row g-4">
-              <?php $renderAnalyticsCards($trendingProducts, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-12">
-          <div class="glass-card p-4">
-            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
-              <div>
-                <div class="section-kicker">Ranking</div>
-                <h3 class="h4 fw-bold mb-1">Productos más buscados</h3>
-                <p class="text-body-secondary mb-0">Los productos más buscados por los usuarios.</p>
-              </div>
-            </div>
-            <div class="row g-4">
-              <?php $renderAnalyticsCards($mostSearchedProducts, 'total_clicks', 'No hay datos disponibles por el momento.'); ?>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section id="categorias" class="py-5 position-relative">
     <div class="container">
       <div class="section-header mb-4">
         <div>
-          <div class="section-kicker">Exploración</div>
-          <h2 class="section-title mb-2">Comprá por categoría</h2>
-          <p class="section-subtitle mb-0">Explorá por categorías y encontrá lo que necesitás más rápido.</p>
+          <h2 class="section-title mb-1">Categorías</h2>
+          <p class="section-subtitle mb-0">Filtrá por lo que necesitás.</p>
         </div>
       </div>
       <div class="row g-3">
@@ -754,12 +677,64 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
     </div>
   </section>
 
+
+  <section class="pt-1 pb-5 position-relative">
+    <div class="container">
+      <div class="section-header mb-4">
+        <div>
+          <h2 class="section-title mb-1">Tu actividad reciente</h2>
+          <p class="section-subtitle mb-0">Productos que viste y tendencias del momento.</p>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
+              <div>
+                <h3 class="h5 fw-bold mb-0">Vistos recientemente</h3>
+              </div>
+            </div>
+            <div class="row g-4">
+              <?php $renderAnalyticsCards($recentlyViewed, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
+              <div>
+                <h3 class="h5 fw-bold mb-0">Tendencias esta semana</h3>
+              </div>
+            </div>
+            <div class="row g-4">
+              <?php $renderAnalyticsCards($trendingProducts, 'total_vistas', 'No hay datos disponibles por el momento.'); ?>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-4">
+              <div>
+                <h3 class="h5 fw-bold mb-0">Los más buscados</h3>
+              </div>
+            </div>
+            <div class="row g-4">
+              <?php $renderAnalyticsCards($mostSearchedProducts, 'total_clicks', 'No hay datos disponibles por el momento.'); ?>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="productos" class="pb-5 position-relative">
     <div class="container">
       <div class="section-header mb-4 d-flex justify-content-between align-items-end gap-3 flex-wrap">
         <div>
-          <div class="section-kicker">Catálogo</div>
-          <h2 class="section-title mb-2">Productos disponibles</h2>
+          <h2 class="section-title mb-1">Productos disponibles</h2>
           <p class="section-subtitle mb-0">Compará precios entre tiendas y elegí la mejor opción.</p>
         </div>
         <div class="small text-body-secondary"><?= number_format($totalProducts, 0, ',', '.') ?> resultado(s)</div>
@@ -906,8 +881,7 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
     <div class="container">
       <div class="section-header mb-4">
         <div>
-          <div class="section-kicker">Tiendas</div>
-          <h2 class="section-title mb-2">Explorá por tienda</h2>
+          <h2 class="section-title mb-1">Tiendas</h2>
           <p class="section-subtitle mb-0">Accedé al catálogo de cada tienda y compará sus precios.</p>
         </div>
       </div>
@@ -975,6 +949,36 @@ $renderAnalyticsCards = static function (array $items, string $metricKey, string
 </main>
 
 <script>
+/* Fuerza los saltos internos sin animación, incluso si otro CSS activa smooth scroll. */
+document.documentElement.style.setProperty('scroll-behavior', 'auto', 'important');
+
+document.addEventListener('click', function(event) {
+  const link = event.target.closest('a[href*="#"]');
+  if (!link) return;
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(link.href, window.location.href);
+  } catch (error) {
+    return;
+  }
+
+  const sameDocument =
+    targetUrl.origin === window.location.origin &&
+    targetUrl.pathname === window.location.pathname &&
+    targetUrl.search === window.location.search;
+
+  if (!sameDocument || !targetUrl.hash || targetUrl.hash === '#') return;
+
+  const targetId = decodeURIComponent(targetUrl.hash.slice(1));
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  event.preventDefault();
+  target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  history.pushState(null, '', targetUrl.hash);
+}, true);
+
 document.addEventListener('DOMContentLoaded', function() {
   const stickyContainer = document.querySelector('.search-sticky-container');
   const toggleBtn = document.getElementById('toggle-sticky-btn');
