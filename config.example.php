@@ -2,8 +2,22 @@
 declare(strict_types=1);
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.use_strict_mode', '1');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
+
+mb_internal_encoding('UTF-8');
+mb_http_output('UTF-8');
+ini_set('default_charset', 'UTF-8');
+// Paraguay usa UTC-3 fijo desde 2024; el tzdata de PHP aún aplica UTC-4 en invierno a America/Asuncion.
+date_default_timezone_set('Etc/GMT+3');
 
 const DB_HOST = 'localhost';
 const DB_NAME = 'caacuprecio';
@@ -15,6 +29,21 @@ const APP_URL = 'https://caacuprecio.com';
 
 const RESEND_API_KEY = 're';
 const RESEND_FROM = 'Correo no reply';
+
+// Claves de prueba de Cloudflare (siempre aprueban). Reemplazar por las reales en producción.
+const TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+const TURNSTILE_SECRET_KEY = '1x0000000000000000000000000000000AA';
+
+// Datos del responsable del sitio (Ley 4868/2013 de Comercio Electrónico). Completar con los datos reales;
+// los campos vacíos no se muestran al público y los administradores ven un aviso en las páginas legales.
+const BUSINESS_LEGAL_NAME = '';
+const BUSINESS_RUC = ''; // Opcional: solo si hay actividad económica registrada en la DNIT.
+const BUSINESS_ADDRESS = '';
+const BUSINESS_EMAIL = '';
+const BUSINESS_PHONE = '';
+// Ej.: 'Trabajo de investigación de grado (tesis) – Carrera, Universidad'
+const BUSINESS_PROJECT = '';
+const LEGAL_LAST_UPDATED = '2026-10-12';
 
 
 function db(): PDO
@@ -30,6 +59,7 @@ function db(): PDO
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
     ]);
 
     return $pdo;
@@ -40,6 +70,109 @@ function e(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function turnstile_enabled(): bool
+{
+    return TURNSTILE_SITE_KEY !== '' && TURNSTILE_SECRET_KEY !== '';
+}
+
+function turnstile_widget(): string
+{
+    static $scriptsPrinted = false;
+
+    if (!turnstile_enabled()) {
+        return '';
+    }
+
+    $html = '';
+    if (!$scriptsPrinted) {
+        $scriptsPrinted = true;
+        $html .= '<script src="./js/turnstile.js?v=' . filemtime(__DIR__ . '/js/turnstile.js') . '"></script>';
+        $html .= '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=caacuprecioTurnstileReady" async defer></script>';
+    }
+
+    return $html . '<div class="cf-turnstile-slot" data-turnstile data-sitekey="' . e(TURNSTILE_SITE_KEY) . '"></div>';
+}
+
+/**
+ * Devuelve '' si la verificación es válida o el mensaje de error a mostrar.
+ */
+function turnstile_error(): string
+{
+    if (!turnstile_enabled()) {
+        return '';
+    }
+
+    $token = trim((string) ($_POST['cf-turnstile-response'] ?? ''));
+    if ($token === '') {
+        return 'Completa la verificación de seguridad antes de enviar.';
+    }
+
+    $ch = curl_init('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query([
+            'secret' => TURNSTILE_SECRET_KEY,
+            'response' => $token,
+            'remoteip' => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+        ]),
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $response = curl_exec($ch);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    $data = is_string($response) ? json_decode($response, true) : null;
+    if (is_array($data) && !empty($data['success'])) {
+        return '';
+    }
+
+    error_log('Turnstile rechazó la verificación: ' . ($response ?: $curlError));
+    return 'No pudimos confirmar la verificación de seguridad. Intenta nuevamente.';
+}
+
+const CONSENT_FIELD = 'acepto_privacidad';
+
+/**
+ * Casilla obligatoria de aceptación de la política de privacidad (y opcionalmente de los términos).
+ */
+function consent_field(string $id, bool $withTerms = false): string
+{
+    $newTab = '<span class="visually-hidden"> (se abre en una pestaña nueva)</span>';
+    $privacy = '<a href="privacidad.php" target="_blank" rel="noopener">Política de privacidad' . $newTab . '</a>';
+    $text = $withTerms
+        ? 'Leí y acepto los <a href="terminos.php" target="_blank" rel="noopener">Términos y condiciones' . $newTab . '</a> y la ' . $privacy . '.'
+        : 'Acepto que Caacuprecio trate los datos de este formulario según la ' . $privacy . '.';
+
+    return '<div class="form-check consent-check">'
+        . '<input class="form-check-input" type="checkbox" name="' . CONSENT_FIELD . '" id="' . e($id) . '" value="1" required>'
+        . '<label class="form-check-label" for="' . e($id) . '">' . $text . '</label>'
+        . '</div>';
+}
+
+function consent_accepted(): bool
+{
+    return (string) ($_POST[CONSENT_FIELD] ?? '') === '1';
+}
+
+function consent_error(): string
+{
+    return consent_accepted() ? '' : 'Debes aceptar la Política de privacidad para enviar el formulario.';
+}
+
+/**
+ * Normaliza un destino de redirección a una ruta relativa del propio sitio.
+ */
+function safe_redirect_path(string $target, string $fallback = 'index.php'): string
+{
+    $target = trim($target);
+    if ($target === '' || preg_match('/[\r\n\\\\]/', $target) || preg_match('#^[a-z][a-z0-9+.-]*:#i', $target) || str_starts_with($target, '//')) {
+        return $fallback;
+    }
+
+    return $target;
+}
+
 function gs(null|float|int|string $value): string
 {
     if ($value === null || $value === '') {
@@ -47,6 +180,16 @@ function gs(null|float|int|string $value): string
     }
 
     return 'Gs. ' . number_format((float) $value, 0, ',', '.');
+}
+
+/** Precio de un producto: las tiendas que no publican precio quedan guardadas en 0. */
+function gs_precio(null|float|int|string $value): string
+{
+    if ($value === null || $value === '' || (float) $value <= 0) {
+        return 'Gs. —';
+    }
+
+    return gs($value);
 }
 
 function is_admin(): bool
@@ -87,7 +230,7 @@ function image_url(?string $url, string $name = 'Producto'): string
         return $url;
     }
 
-    return 'https://placehold.co/800x600/1f2937/f8fafc?text=' . rawurlencode($name);
+    return '';
 }
 
 function stock_label(mixed $value): string
@@ -118,10 +261,10 @@ function active_sort_options(): array
 function sort_sql(string $sort): string
 {
     return match ($sort) {
-        'precio_asc' => 'p.pro_precio ASC, p.idproductos DESC',
-        'precio_desc' => 'p.pro_precio DESC, p.idproductos DESC',
-        'nombre_asc' => 'p.pro_nombre ASC, p.idproductos DESC',
-        default => 'p.pro_fecha_scraping DESC, p.idproductos DESC',
+        'precio_asc' => '(p.pro_precio IS NULL OR p.pro_precio <= 0), p.pro_precio ASC, p.idproductos DESC',
+        'precio_desc' => '(p.pro_precio IS NULL OR p.pro_precio <= 0), p.pro_precio DESC, p.idproductos DESC',
+        'nombre_asc' => '(p.pro_precio IS NULL OR p.pro_precio <= 0), p.pro_nombre ASC, p.idproductos DESC',
+        default => '(p.pro_precio IS NULL OR p.pro_precio <= 0), p.pro_fecha_scraping DESC, p.idproductos DESC',
     };
 }
 
@@ -323,43 +466,111 @@ function favorite_toggle_url(int $productId, string $redirect = ''): string
     return 'favorito_toggle.php?' . http_build_query($query);
 }
 
+function lucide_icon(string $name, string $class = '', int $size = 18): string
+{
+    $classAttr = $class !== '' ? ' class="' . e($class) . '"' : '';
+
+    return '<i data-lucide="' . e($name) . '"' . $classAttr . ' width="' . $size . '" height="' . $size . '" aria-hidden="true"></i>';
+}
+
+/**
+ * Logos de marca (Lucide no incluye brand icons). Misma caja/estilo que lucide_icon.
+ */
+function brand_icon(string $name, string $class = '', int $size = 18): string
+{
+    $paths = [
+        'whatsapp' => 'M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z',
+        'facebook' => 'M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z',
+        'x' => 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.991ZM17.61 20.644h2.039L6.486 3.24H4.298Z',
+        'twitter' => 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.991ZM17.61 20.644h2.039L6.486 3.24H4.298Z',
+    ];
+
+    $key = strtolower(trim($name));
+    if (!isset($paths[$key])) {
+        return lucide_icon('share-2', $class, $size);
+    }
+
+    $classes = trim('brand-icon ' . $class);
+
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' . (int) $size . '" height="' . (int) $size . '" viewBox="0 0 24 24" fill="currentColor" class="' . e($classes) . '" aria-hidden="true"><path d="' . $paths[$key] . '"/></svg>';
+}
+
+function category_lucide_icon(string $name, string $class = '', int $size = 22): string
+{
+    $key = mb_strtolower(trim($name), 'UTF-8');
+    $icon = 'layout-grid';
+
+    $keywords = [
+        'celular' => 'smartphone',
+        'smart' => 'smartphone',
+        'tablet' => 'tablet',
+        'cámara' => 'camera',
+        'camara' => 'camera',
+        'seguridad' => 'shield-check',
+        'audio' => 'headphones',
+        'tv' => 'tv',
+        'video' => 'tv',
+        'gaming' => 'gamepad-2',
+        'bebé' => 'baby',
+        'bebe' => 'baby',
+        'juguete' => 'puzzle',
+        'climat' => 'wind',
+        'aire libre' => 'trees',
+        'deporte' => 'dumbbell',
+        'electro' => 'refrigerator',
+        'máquina' => 'cog',
+        'maquina' => 'cog',
+        'herramient' => 'wrench',
+        'informát' => 'laptop',
+        'informat' => 'laptop',
+        'moto' => 'bike',
+        'mueble' => 'sofa',
+        'hogar' => 'house',
+        'oficina' => 'briefcase',
+        'outlet' => 'tag',
+        'red' => 'wifi',
+        'conectiv' => 'wifi',
+        'salud' => 'heart-pulse',
+        'belleza' => 'sparkles',
+        'tecno' => 'cpu',
+        'accesorio' => 'watch',
+        'producto' => 'package',
+    ];
+
+    foreach ($keywords as $needle => $value) {
+        if (str_contains($key, $needle)) {
+            $icon = $value;
+            break;
+        }
+    }
+
+    return lucide_icon($icon, $class, $size);
+}
+
 function render_head(string $title = ''): void
 {
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+    }
+
     echo '<!DOCTYPE html>';
     echo '<html lang="es" data-bs-theme="' . DEFAULT_THEME . '">';
     echo '<head>';
     echo '<meta charset="UTF-8">';
+    echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e(page_title($title)) . '</title>';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
-    echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">';
+    echo '<script src="https://cdn.jsdelivr.net/npm/lucide@0.511.0/dist/umd/lucide.min.js"></script>';
+    echo '<script src="./js/icons.js"></script>';
+    echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
+    echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+    echo '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
     echo '<link rel="icon" type="image/png" href="./img/icono.png">';
-    echo '<link rel="stylesheet" href="./css/styles.css">';
-    echo '<link rel="stylesheet" href="./css/auth.css">';
+    echo '<link rel="stylesheet" href="./css/styles.css?v=' . filemtime(__DIR__ . '/css/styles.css') . '">';
+    echo '<link rel="stylesheet" href="./css/auth.css?v=' . filemtime(__DIR__ . '/css/auth.css') . '">';
     echo '<link rel="stylesheet" href="./css/favoritos_extra.css">';
 
-    echo '<style>';
-    echo '.navbar-apple{background:rgba(15,23,42,.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(148,163,184,.16);box-shadow:0 10px 30px rgba(2,6,23,.18);}';
-    echo '.navbar-apple .navbar-brand{letter-spacing:-.02em;}';
-    echo '.navbar-apple .navbar-nav .nav-link{position:relative;padding:.6rem .9rem;border-radius:999px;color:rgba(226,232,240,.86);transition:all .22s ease;}';
-    echo '.navbar-apple .navbar-nav .nav-link:hover{color:#fff;background:rgba(255,255,255,.08);}';
-    echo '.navbar-apple .navbar-nav .nav-link.active{color:#fff;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}';
-    echo '.navbar-apple .navbar-nav .nav-link.disabled{color:rgba(226,232,240,.7)!important;opacity:1;}';
-    echo '.navbar-apple .navbar-toggler{border-radius:999px;padding:.55rem .8rem;background:rgba(255,255,255,.06);}';
-    echo '.navbar-apple .btn-outline-primary{border-color:rgba(148,163,184,.35);background:rgba(255,255,255,.04);color:#e5eefc;}';
-    echo '.navbar-apple .btn-outline-primary:hover{background:rgba(255,255,255,.12);border-color:rgba(191,219,254,.45);color:#fff;}';
-    echo '.navbar-apple .badge.text-bg-primary{background:linear-gradient(135deg,#60a5fa,#3b82f6)!important;color:#fff;}';
-    echo '@media (max-width:991.98px){.navbar-apple .navbar-collapse{margin-top:.9rem;padding:1rem;border-radius:1.25rem;background:rgba(15,23,42,.92);border:1px solid rgba(148,163,184,.14);box-shadow:0 18px 40px rgba(2,6,23,.28);} .navbar-apple .navbar-nav{gap:.4rem!important;} .navbar-apple .nav-link,.navbar-apple .btn{width:100%;justify-content:flex-start;}}';
-    echo 'html[data-bs-theme="light"] .navbar-apple,body.theme-light .navbar-apple{background:rgba(255,255,255,.72);border-bottom:1px solid rgba(148,163,184,.22);box-shadow:0 10px 30px rgba(15,23,42,.08);}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link,body.theme-light .navbar-apple .navbar-nav .nav-link{color:#334155;}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link:hover,body.theme-light .navbar-apple .navbar-nav .nav-link:hover{color:#0f172a;background:rgba(15,23,42,.05);}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link.active,body.theme-light .navbar-apple .navbar-nav .nav-link.active{color:#0f172a;background:rgba(15,23,42,.07);box-shadow:inset 0 0 0 1px rgba(15,23,42,.06);}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-nav .nav-link.disabled,body.theme-light .navbar-apple .navbar-nav .nav-link.disabled{color:#475569!important;}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .navbar-brand .text-body-secondary,body.theme-light .navbar-apple .navbar-brand .text-body-secondary{color:#475569!important;}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .btn-outline-primary,body.theme-light .navbar-apple .btn-outline-primary{border-color:rgba(148,163,184,.4);background:rgba(255,255,255,.65);color:#0f172a;}';
-    echo 'html[data-bs-theme="light"] .navbar-apple .btn-outline-primary:hover,body.theme-light .navbar-apple .btn-outline-primary:hover{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);color:#0f172a;}';
-    echo '@media (max-width:991.98px){html[data-bs-theme="light"] .navbar-apple .navbar-collapse,body.theme-light .navbar-apple .navbar-collapse{background:rgba(255,255,255,.94);border:1px solid rgba(148,163,184,.18);box-shadow:0 18px 40px rgba(15,23,42,.12);}}';
-    echo '</style>';
     echo '</head>';
     echo '<body class="theme-dark">';
 }
@@ -373,52 +584,128 @@ function render_navbar(string $current = 'home'): void
     $user = current_user();
     $favCount = favorite_count();
 
+    $userMenu = '';
+    $mobileAccount = '';
+
+    if ($user) {
+        $userName = trim((string) ($user['usu_nombre'] ?? $user['nombre'] ?? '')) ?: 'Mi cuenta';
+        $userEmail = trim((string) ($user['usu_email'] ?? ''));
+        $userInitial = mb_strtoupper(mb_substr($userName, 0, 1, 'UTF-8'), 'UTF-8');
+        $userRole = is_admin() ? 'Administrador' : (is_empresa() ? 'Empresa' : '');
+        $canAdmin = is_admin() || is_empresa();
+        $userActive = $current === 'usuario' ? ' active' : '';
+        $adminActive = $current === 'admin' ? ' active' : '';
+
+        $menuLink = static function (string $href, string $icon, string $label, string $class = '', string $trailing = ''): string {
+            return '<li><a class="dropdown-item navbar-user-item' . $class . '" href="' . $href . '">'
+                . '<span class="navbar-user-item-icon">' . lucide_icon($icon, '', 16) . '</span>'
+                . '<span class="navbar-user-item-label">' . $label . '</span>'
+                . $trailing
+                . '</a></li>';
+        };
+
+        $menuItems = $menuLink('usuario.php', 'circle-user', 'Mi cuenta', $userActive);
+        $menuItems .= $menuLink('favoritos.php', 'heart', 'Favoritos', $favActive ? ' active' : '', '<span class="navbar-user-count">' . $favCount . '</span>');
+        if ($canAdmin) {
+            $menuItems .= $menuLink('./admin.php', 'settings', 'Panel admin', $adminActive);
+        }
+        $menuFooter = $menuLink('logout.php', 'log-out', 'Cerrar sesión', ' navbar-user-item-danger');
+
+        $userHead = '<span class="navbar-user-avatar" aria-hidden="true">' . e($userInitial) . '</span>'
+            . '<span class="navbar-user-meta">'
+            . '<span class="navbar-user-name">' . e($userName) . '</span>'
+            . ($userEmail !== '' ? '<span class="navbar-user-email">' . e($userEmail) . '</span>' : '')
+            . ($userRole !== '' ? '<span class="navbar-user-role">' . e($userRole) . '</span>' : '')
+            . '</span>';
+
+        $userMenu = '<div class="dropdown navbar-user d-none d-lg-block">'
+            . '<button class="navbar-user-btn' . ($userActive || $adminActive ? ' is-active' : '') . '" type="button" data-bs-toggle="dropdown" data-bs-offset="0,10" aria-expanded="false" aria-label="Menú de cuenta">'
+            . '<span class="navbar-user-avatar" aria-hidden="true">' . e($userInitial) . '</span>'
+            . '<span class="navbar-user-btn-name">' . e($userName) . '</span>'
+            . lucide_icon('chevron-down', 'navbar-user-chevron', 16)
+            . '</button>'
+            . '<div class="dropdown-menu dropdown-menu-end navbar-user-menu">'
+            . '<div class="navbar-user-head">' . $userHead . '</div>'
+            . '<ul class="navbar-user-list">' . $menuItems . '</ul>'
+            . '<ul class="navbar-user-list navbar-user-footer">' . $menuFooter . '</ul>'
+            . '</div>'
+            . '</div>';
+
+        $mobileAccount = '<div class="navbar-mobile-account d-lg-none">'
+            . '<div class="navbar-user-head">' . $userHead . '</div>'
+            . '<ul class="navbar-nav navbar-account">'
+            . '<li class="nav-item"><a class="nav-link' . $userActive . '" href="usuario.php">' . lucide_icon('circle-user', 'me-2', 17) . 'Mi cuenta</a></li>'
+            . ($canAdmin ? '<li class="nav-item"><a class="nav-link' . $adminActive . '" href="./admin.php">' . lucide_icon('settings', 'me-2', 17) . 'Panel admin</a></li>' : '')
+            . '</ul>'
+            . '<a class="navbar-cta-btn navbar-cta-btn-ghost" href="logout.php">' . lucide_icon('log-out', '', 17) . 'Cerrar sesión</a>'
+            . '</div>';
+    } else {
+        $loginButton = '<a class="navbar-cta-btn" href="login.php">Ingresar</a>';
+        $userMenu = '<div class="navbar-cta d-none d-lg-flex">' . $loginButton . '</div>';
+        $mobileAccount = '<div class="navbar-cta d-lg-none">' . $loginButton . '</div>';
+    }
+
+    echo '<a class="visually-hidden-focusable skip-link" href="#contenido">Saltar al contenido</a>';
     echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
-    echo '  <div class="container py-2">';
+    echo '  <div class="container navbar-inner">';
     echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
-    echo '      <img src="./img/logo_horizontal_dark.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-navbar-logo">';
+    echo '      <img src="./img/logo_horizontal_dark.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-navbar-logo" width="156" height="52">';
     echo '    </a>';
 
-    echo '    <div class="d-flex align-items-center gap-2 order-lg-3 ms-auto ms-lg-3">';
-    echo '      <button id="themeToggle" class="btn btn-outline-primary rounded-pill px-3 d-none d-lg-inline-flex align-items-center" type="button">';
-    echo '        <i class="bi bi-sun-fill me-2"></i><span class="d-none d-xl-inline">Modo claro</span>';
+    echo '    <div class="collapse navbar-collapse" id="mainNav">';
+    echo '      <ul class="navbar-nav navbar-links">';
+    echo '        <li class="nav-item"><a class="nav-link ' . $homeActive . '" data-nav="home" href="index.php">Inicio</a></li>';
+    echo '        <li class="nav-item"><a class="nav-link" data-nav="categorias" href="index.php#categorias">Categorías</a></li>';
+    echo '        <li class="nav-item"><a class="nav-link ' . $productActive . '" data-nav="productos" href="index.php#productos">Productos</a></li>';
+    echo '        <li class="nav-item"><a class="nav-link ' . $storesActive . '" data-nav="tiendas" href="index.php#tiendas">Tiendas</a></li>';
+    if ($user) {
+        echo '        <li class="nav-item"><a class="nav-link ' . $favActive . '" data-nav="favoritos" href="favoritos.php">Favoritos';
+        echo ' <span class="badge rounded-pill navbar-fav-badge ms-1">' . $favCount . '</span>';
+        echo '</a></li>';
+    }
+    echo '      </ul>';
+    echo '      ' . $mobileAccount;
+    echo '    </div>';
+
+    echo '    <div class="navbar-toolbar">';
+    echo '      ' . $userMenu;
+    echo '      <button id="themeToggle" class="navbar-theme-btn navbar-theme-btn-icon d-none d-lg-inline-flex" type="button" aria-label="Cambiar tema" title="Cambiar tema">';
+    echo '        <span data-lucide-host data-icon-dark="sun" data-icon-light="moon">' . lucide_icon('sun') . '</span>';
     echo '      </button>';
-    echo '      <button id="themeToggleMobile" class="btn btn-outline-primary rounded-pill d-lg-none" type="button" aria-label="Cambiar tema">';
-    echo '        <i class="bi bi-circle-half"></i>';
+    echo '      <button id="themeToggleMobile" class="navbar-theme-btn navbar-theme-btn-icon d-lg-none" type="button" aria-label="Cambiar tema">';
+    echo '        <span data-lucide-host data-icon-dark="sun" data-icon-light="moon">' . lucide_icon('contrast') . '</span>';
     echo '      </button>';
-    echo '      <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">';
+    echo '      <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Abrir menú">';
     echo '        <span class="navbar-toggler-icon"></span>';
     echo '      </button>';
     echo '    </div>';
-
-    echo '    <div class="collapse navbar-collapse" id="mainNav">';
-    echo '      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">';
-    echo '        <li class="nav-item"><a class="nav-link ' . $homeActive . '" href="index.php">Inicio</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link" href="index.php#categorias">Categorías</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link ' . $productActive . '" href="index.php#productos">Productos</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link ' . $storesActive . '" href="index.php#tiendas">Tiendas</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link ' . $favActive . '" href="favoritos.php">Favoritos';
-    if ($user) {
-        echo ' <span class="badge rounded-pill text-bg-primary ms-1">' . $favCount . '</span>';
-    }
-    echo '</a></li>';
-    if ($user && is_admin() || is_empresa()) {
-        echo '        <li class="nav-item"><a class="nav-link ' . ($current === 'admin' ? 'active' : '') . '" href="./admin.php"><i class="bi bi-gear me-1"></i>Admin</a></li>';
-    }
-    if ($user) {
-        // Evaluamos si el usuario se encuentra actualmente parado en su página de perfil
-        $userActive = $current === 'usuario' ? 'active' : '';
-        
-        echo '        <li class="nav-item"><a class="nav-link ' . $userActive . '" href="usuario.php"><i class="bi bi-person-circle me-1"></i>' . e((string) ($user['usu_nombre'] ?? $user['nombre'] ?? 'Mi cuenta')) . '</a></li>';
-        echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="logout.php">Salir</a></li>';
-    } else {
-        echo '        <li class="nav-item"><a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="login.php">Ingresar</a></li>';
-    }
-
-    echo '      </ul>';
-    echo '    </div>';
     echo '  </div>';
     echo '</nav>';
+    echo '<div id="contenido" tabindex="-1"></div>';
+    echo '<script>';
+    echo '(function(){';
+    echo 'var page=' . json_encode($current) . ';';
+    echo 'function links(){return document.querySelectorAll(".navbar-links .nav-link[data-nav]");}';
+    echo 'function setActive(name){links().forEach(function(link){link.classList.toggle("active",link.getAttribute("data-nav")===name);});}';
+    echo 'function sectionFromScroll(){var ids=["categorias","productos","tiendas"];var y=window.scrollY+100;var current="home";ids.forEach(function(id){var el=document.getElementById(id);if(el&&el.offsetTop<=y)current=id;});return current;}';
+    echo 'function sync(){';
+    echo 'if(page==="favoritos")return setActive("favoritos");';
+    echo 'if(page==="usuario")return setActive("usuario");';
+    echo 'if(page==="admin")return setActive("admin");';
+    echo 'if(page==="producto")return setActive("productos");';
+    echo 'if(page==="tienda")return setActive("tiendas");';
+    echo 'if(page!=="home")return setActive("");';
+    echo 'var hash=(location.hash||"").replace("#","");';
+    echo 'if(hash==="categorias"||hash==="productos"||hash==="tiendas")return setActive(hash);';
+    echo 'setActive(sectionFromScroll());';
+    echo '}';
+    echo 'document.addEventListener("click",function(event){var link=event.target.closest(".navbar-links .nav-link[data-nav]");if(!link)return;var name=link.getAttribute("data-nav");if(name==="home"||name==="categorias"||name==="productos"||name==="tiendas"){setActive(name);}});';
+    echo 'window.addEventListener("hashchange",sync);';
+    echo 'window.addEventListener("scroll",function(){if(page==="home")setActive(sectionFromScroll());},{passive:true});';
+    echo 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",sync);}else{sync();}';
+    echo 'window.addEventListener("load",sync);';
+    echo '})();';
+    echo '</script>';
 }
 
 function render_footer(): void
@@ -426,49 +713,112 @@ function render_footer(): void
     $suggestionSaved = isset($_GET['suggestion_saved']) && $_GET['suggestion_saved'] === '1';
     $suggestionError = isset($_GET['suggestion_error']) ? trim((string) $_GET['suggestion_error']) : '';
 
-    echo '<footer class="footer pt-5 pb-4 mt-5">';
-    echo '  <div class="container">';
-    echo '    <div class="row g-4 pb-4 align-items-stretch">';
-    echo '      <div class="col-lg-5">';
-    echo '        <img src="./img/logo_vertical.webp" data-theme-logo data-light-logo="./img/logo_vertical.webp" data-dark-logo="./img/logo_vertical_dark.webp" alt="Caacuprecio" class="site-footer-logo mb-3">';
-    echo '        <p class="mb-0">Compará precios de distintas tiendas en un solo lugar y encontrá rápidamente la mejor opción disponible.</p>';
+    $user = current_user();
+    $year = date('Y');
+
+    echo '<footer class="footer site-footer">';
+    echo '  <div class="container site-footer-inner">';
+    echo '    <div class="site-footer-grid">';
+
+    echo '      <div class="site-footer-brand">';
+    echo '        <a class="site-footer-logo-link" href="index.php">';
+    echo '          <img src="./img/logo_horizontal.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-footer-logo" width="156" height="52">';
+    echo '        </a>';
+    echo '        <p class="site-footer-tagline">Compara precios entre los comercios de la ciudad y elige la mejor opción antes de salir.</p>';
+    echo '        <p class="site-footer-place">';
+    echo            lucide_icon('map-pin', 'site-footer-place-icon', 14);
+    echo '          <span>Caacupé, Paraguay</span>';
+    echo '        </p>';
+    if (BUSINESS_EMAIL !== '') {
+        echo '        <a class="site-footer-place site-footer-mail" href="mailto:' . e(BUSINESS_EMAIL) . '">';
+        echo            lucide_icon('mail', 'site-footer-place-icon', 14);
+        echo '          <span>' . e(BUSINESS_EMAIL) . '</span>';
+        echo '        </a>';
+    }
     echo '      </div>';
 
-    echo '      <div class="col-6 col-lg-3">';
-    echo '        <h6 class="text-white">Explorar</h6>';
-    echo '        <ul class="list-unstyled d-grid gap-2 mt-3">';
+    echo '      <nav class="site-footer-col" aria-label="Explorar">';
+    echo '        <h6 class="site-footer-heading">Explorar</h6>';
+    echo '        <ul class="site-footer-links">';
     echo '          <li><a href="index.php#productos">Productos</a></li>';
     echo '          <li><a href="index.php#tiendas">Tiendas</a></li>';
     echo '          <li><a href="index.php#categorias">Categorías</a></li>';
-    echo '          <li><a href="favoritos.php">Favoritos</a></li>';
+    echo '          <li><a href="buscar.php">Buscar</a></li>';
     echo '        </ul>';
-    echo '      </div>';
+    echo '      </nav>';
 
-    echo '      <div class="col-lg-4">';
-    echo '        <div class="footer-note footer-suggestion-card h-100">';
-    echo '          <div class="d-flex flex-column h-100 justify-content-between gap-3">';
-    echo '            <div>';
-    echo '              <strong class="d-block mb-2">¿Tienes alguna sugerencia?</strong>';
-    echo '              <div class="small">Contanos ideas, mejoras, errores o funciones que te gustaría ver en Caacuprecio.</div>';
-    echo '            </div>';
-    echo '            <div>';
-    echo '              <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#suggestionModal">';
-    echo '                <i class="bi bi-chat-left-text me-2"></i>Enviar sugerencia';
-    echo '              </button>';
-    echo '            </div>';
-    echo '          </div>';
-    echo '        </div>';
-    echo '      </div>';
+    echo '      <nav class="site-footer-col" aria-label="Cuenta">';
+    echo '        <h6 class="site-footer-heading">Cuenta</h6>';
+    echo '        <ul class="site-footer-links">';
+    if ($user) {
+        echo '          <li><a href="usuario.php">Mi cuenta</a></li>';
+        echo '          <li><a href="favoritos.php">Mis favoritos</a></li>';
+        if (is_admin() || is_empresa()) {
+            echo '          <li><a href="admin.php">Panel admin</a></li>';
+        }
+        echo '          <li><a href="logout.php">Cerrar sesión</a></li>';
+    } else {
+        echo '          <li><a href="login.php">Ingresar</a></li>';
+        echo '          <li><a href="registro.php">Crear cuenta</a></li>';
+        echo '          <li><a href="olvide_password.php">Recuperar clave</a></li>';
+    }
+    echo '        </ul>';
+    echo '      </nav>';
+
+    echo '      <nav class="site-footer-col" aria-label="Legal">';
+    echo '        <h6 class="site-footer-heading">Legal</h6>';
+    echo '        <ul class="site-footer-links">';
+    echo '          <li><a href="terminos.php">Términos</a></li>';
+    echo '          <li><a href="privacidad.php">Privacidad</a></li>';
+    echo '          <li><a href="cookies.php">Cookies</a></li>';
+    echo '          <li><a href="reembolsos.php">Reembolsos</a></li>';
+    echo '          <li><a href="aviso_legal.php">Aviso legal</a></li>';
+    echo '        </ul>';
+    echo '      </nav>';
+
+    try {
+        $footerStores = db()->query('
+            SELECT t.idtiendas, t.tie_nombre
+            FROM tiendas t
+            WHERE EXISTS (
+                SELECT 1 FROM productos p
+                WHERE p.tiendas_idtiendas = t.idtiendas AND p.pro_activo = 1
+            )
+            ORDER BY t.tie_nombre ASC
+            LIMIT 5
+        ')->fetchAll();
+    } catch (Throwable $e) {
+        $footerStores = [];
+    }
+    if ($footerStores) {
+        echo '      <nav class="site-footer-col" aria-label="Tiendas">';
+        echo '        <h6 class="site-footer-heading">Tiendas</h6>';
+        echo '        <ul class="site-footer-links">';
+        foreach ($footerStores as $store) {
+            echo '          <li><a href="tienda.php?id=' . (int) $store['idtiendas'] . '">' . e($store['tie_nombre']) . '</a></li>';
+        }
+        echo '        </ul>';
+        echo '      </nav>';
+    }
+
     echo '    </div>';
 
-    echo '    <div class="border-top border-secondary-subtle pt-3 d-flex flex-column flex-md-row justify-content-between gap-2">';
-    echo '      <small>© 2026 Caacuprecio</small>';
-    echo '    </div>';
+    echo '    <p class="site-footer-note">' . e(APP_NAME) . ' no vende productos. Precios, stock e imágenes provienen de cada tienda, pueden estar desactualizados y no constituyen una oferta propia; confirma siempre antes de comprar. Las marcas pertenecen a sus respectivos titulares.</p>';
+
+    echo '    <p class="site-footer-copy">© ' . e($year) . ' ' . e(APP_NAME) . '</p>';
     echo '  </div>';
     echo '</footer>';
 
+    echo '<button type="button" class="suggestion-fab" data-bs-toggle="modal" data-bs-target="#suggestionModal" aria-label="Enviar sugerencia" aria-describedby="suggestionFabTip">';
+    echo     lucide_icon('message-square', 'suggestion-fab-icon', 22);
+    echo '  <span class="suggestion-fab-tip" id="suggestionFabTip" role="tooltip">';
+    echo '    <strong>Enviar sugerencia</strong>';
+    echo '    <span>¿Una idea, un error o una tienda que falta? Cuéntanos.</span>';
+    echo '  </span>';
+    echo '</button>';
+
     if ($suggestionSaved) {
-        echo '<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">';
+        echo '<div class="toast-container position-fixed bottom-0 end-0 p-3 suggestion-toast" style="z-index: 1080;">';
         echo '  <div class="toast show align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">';
         echo '    <div class="d-flex">';
         echo '      <div class="toast-body">Tu sugerencia fue enviada correctamente.</div>';
@@ -495,29 +845,31 @@ function render_footer(): void
     echo '          <input type="hidden" name="redirect" value="' . e($_SERVER['REQUEST_URI'] ?? 'index.php') . '">';
 
     echo '          <div class="mb-3">';
-    echo '            <label class="form-label">Tu nombre</label>';
-    echo '            <input type="text" name="sug_nombre" class="form-control" maxlength="120" placeholder="Opcional">';
+    echo '            <label class="form-label" for="sug_nombre">Tu nombre <span class="text-body-secondary">(opcional)</span></label>';
+    echo '            <input type="text" id="sug_nombre" name="sug_nombre" class="form-control" maxlength="120" autocomplete="name">';
     echo '          </div>';
 
     echo '          <div class="mb-3">';
-    echo '            <label class="form-label">Email</label>';
-    echo '            <input type="email" name="sug_email" class="form-control" maxlength="150" placeholder="Opcional">';
+    echo '            <label class="form-label" for="sug_email">Correo electrónico <span class="text-body-secondary">(opcional, solo si quieres respuesta)</span></label>';
+    echo '            <input type="email" id="sug_email" name="sug_email" class="form-control" maxlength="150" autocomplete="email">';
     echo '          </div>';
 
     echo '          <div class="mb-3">';
-    echo '            <label class="form-label">Asunto</label>';
-    echo '            <input type="text" name="sug_asunto" class="form-control" maxlength="150" placeholder="Ej: Mejorar filtros, nueva tienda, error visual">';
+    echo '            <label class="form-label" for="sug_asunto">Asunto <span class="text-body-secondary">(opcional)</span></label>';
+    echo '            <input type="text" id="sug_asunto" name="sug_asunto" class="form-control" maxlength="150" placeholder="Ej: Mejorar filtros, nueva tienda, error visual">';
     echo '          </div>';
 
-    echo '          <div class="mb-0">';
-    echo '            <label class="form-label">Sugerencia</label>';
-    echo '            <textarea name="sug_detalle" class="form-control" rows="5" maxlength="2000" required placeholder="Escribí tu sugerencia aquí..."></textarea>';
+    echo '          <div class="mb-3">';
+    echo '            <label class="form-label" for="sug_detalle">Sugerencia</label>';
+    echo '            <textarea id="sug_detalle" name="sug_detalle" class="form-control" rows="5" maxlength="2000" required placeholder="Escribe tu sugerencia aquí..."></textarea>';
     echo '          </div>';
+    echo '          ' . consent_field('sug_consent');
+    echo '          <div class="mt-3">' . turnstile_widget() . '</div>';
     echo '        </div>';
 
     echo '        <div class="modal-footer">';
-    echo '          <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>';
-    echo '          <button type="submit" class="btn btn-primary rounded-pill px-4">Enviar</button>';
+    echo '          <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>';
+    echo '          <button type="submit" class="btn btn-primary px-4">Enviar sugerencia</button>';
     echo '        </div>';
     echo '      </form>';
     echo '    </div>';
@@ -540,7 +892,7 @@ function render_footer(): void
     echo 'const body=document.body;';
     echo 'const storageKey="caacuprecio-theme";';
     echo 'const toggleButtons=[document.getElementById("themeToggle"),document.getElementById("themeToggleMobile")].filter(Boolean);';
-    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const icon=btn.querySelector("i");const text=btn.querySelector("span");if(icon){icon.className=isDark?"bi bi-sun-fill me-2":"bi bi-moon-stars-fill me-2";}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
+    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const host=btn.querySelector("[data-lucide-host]");const text=btn.querySelector("span:not([data-lucide-host])");if(host&&window.setLucideIcon){setLucideIcon(host,isDark?(host.dataset.iconDark||"sun"):(host.dataset.iconLight||"moon"));}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});if(window.refreshLucideIcons){refreshLucideIcons();}}';
     echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme);';
     echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next);}));';
 

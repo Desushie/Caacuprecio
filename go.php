@@ -2,12 +2,17 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/tracking.php';
+
+const CP_GO_SOURCES = ['inicio', 'producto', 'buscar', 'busqueda', 'tienda', 'favoritos'];
+const CP_GO_CLICK_TYPES = ['ir_oferta', 'ir_mejor_oferta'];
 
 $productId = (int) ($_GET['id'] ?? 0);
-$source = trim((string) ($_GET['source'] ?? 'producto'));
-$clickType = trim((string) ($_GET['click_type'] ?? 'ir_oferta'));
-$term = trim((string) ($_GET['term'] ?? ''));
-$targetUrl = trim((string) ($_GET['target_url'] ?? ''));
+$source = mb_strtolower(trim((string) ($_GET['source'] ?? '')), 'UTF-8');
+$source = in_array($source, CP_GO_SOURCES, true) ? $source : 'producto';
+$clickType = mb_strtolower(trim((string) ($_GET['click_type'] ?? '')), 'UTF-8');
+$clickType = in_array($clickType, CP_GO_CLICK_TYPES, true) ? $clickType : 'ir_oferta';
+$term = mb_substr(trim((string) ($_GET['term'] ?? '')), 0, 255, 'UTF-8');
 
 if ($productId <= 0) {
     http_response_code(400);
@@ -17,7 +22,6 @@ if ($productId <= 0) {
 $pdo = db();
 $userId = function_exists('current_user_id') ? (int) current_user_id() : 0;
 $sessionId = session_id();
-
 /**
  * Verificar si existe tabla (versión CORRECTA)
  */
@@ -65,11 +69,11 @@ if (!$product) {
 }
 
 /**
- * URL destino
+ * URL destino: solo la del producto en la base, nunca una recibida por parámetro
  */
-$redirectUrl = $targetUrl !== '' ? $targetUrl : trim((string) ($product['pro_url'] ?? ''));
+$redirectUrl = trim((string) ($product['pro_url'] ?? ''));
 
-if ($redirectUrl === '') {
+if ($redirectUrl === '' || !preg_match('#^https?://#i', $redirectUrl)) {
     http_response_code(404);
     exit('No hay URL disponible para este producto.');
 }
@@ -77,7 +81,7 @@ if ($redirectUrl === '') {
 /**
  * TRACKING CLICK (AHORA SÍ FUNCIONA)
  */
-if (cp_go_table_exists($pdo, 'producto_clicks')) {
+if (cp_should_track('clicks', 30) && cp_go_table_exists($pdo, 'producto_clicks')) {
     try {
         $track = $pdo->prepare("
             INSERT INTO producto_clicks (
@@ -115,8 +119,8 @@ if (cp_go_table_exists($pdo, 'producto_clicks')) {
             $track->bindValue(':sid', null, PDO::PARAM_NULL);
         }
 
-        $track->bindValue(':origen', $source !== '' ? $source : 'producto', PDO::PARAM_STR);
-        $track->bindValue(':tipo', $clickType !== '' ? $clickType : 'ir_oferta', PDO::PARAM_STR);
+        $track->bindValue(':origen', $source, PDO::PARAM_STR);
+        $track->bindValue(':tipo', $clickType, PDO::PARAM_STR);
 
         if ($term !== '') {
             $track->bindValue(':busqueda', $term, PDO::PARAM_STR);

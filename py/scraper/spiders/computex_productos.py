@@ -53,6 +53,15 @@ class ComputexProductosSpider(scrapy.Spider):
     custom_settings = {
         # Evita reintentos demasiado agresivos si alguna categoría temporalmente no responde.
         "RETRY_HTTP_CODES": [500, 502, 503, 504, 522, 524, 408, 429],
+        # Computex no limita por IP; con 2 s entre ~770 páginas la corrida duraba
+        # más de 30 min. AutoThrottle baja el ritmo si el servidor se pone lento.
+        "DOWNLOAD_DELAY": 0.5,
+        "CONCURRENT_REQUESTS": 4,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 4,
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": 0.5,
+        "AUTOTHROTTLE_MAX_DELAY": 10,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 3.0,
     }
 
     def build_start_requests(self):
@@ -1252,6 +1261,7 @@ class ComputexProductosSpider(scrapy.Spider):
 
         # 1) Selectores directos: WooCommerce + Elementor + constructores comunes.
         selectores = [
+            ".cx-product-desc-body *::text",
             ".woocommerce-Tabs-panel--description *::text",
             "#tab-description *::text",
             ".woocommerce-product-details__short-description *::text",
@@ -1583,11 +1593,23 @@ class ComputexProductosSpider(scrapy.Spider):
         if any(x in texto_norm for x in basura_contiene):
             return False
 
+        if self.parece_codigo(texto_norm):
+            return False
+
         # Evitar precios sueltos o botones.
         if re.fullmatch(r"(?:₲|gs\.?|g\$)?\s*[0-9\.\s]+\s*(?:₲|gs\.?|g\$)?", texto_norm):
             return False
 
         return len(texto) >= 3
+
+    def parece_codigo(self, texto_norm):
+        """Configuración de plugins/JS que se cuela desde <script>, p. ej. el chat
+        de WhatsApp "ht_ctc_chat_var" (position: fixed, z-index, pre_filled...)."""
+        return bool(re.search(
+            r'ht[_\s]?ctc|z-index|pre[_\s]filled|position\s*:\s*fixed|\bvar\s+\w+\s*=|'
+            r'":\s*"|\d+px\b|function\s*\(|=>|document\.|window\.',
+            texto_norm,
+        ))
 
     def descripcion_util(self, texto):
         texto = self.limpiar_descripcion(texto)
@@ -1595,6 +1617,8 @@ class ComputexProductosSpider(scrapy.Spider):
             return False
 
         texto_norm = self.normalizar_simple(texto)
+        if self.parece_codigo(texto_norm):
+            return False
         if texto_norm in {
             "descripción", "descripcion", "especificaciones", "especificaciones generales",
             "productos", "producto", "sin descripcion", "sin descripción",

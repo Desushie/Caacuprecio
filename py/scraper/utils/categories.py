@@ -150,6 +150,26 @@ CATEGORY_ALIASES: Dict[str, str] = {
     "tablet xiaomi": "Tablets",
     "teles 55": "TV y Video",
 
+    # ---- Inverfin: product_type de Shopify ----
+    "audifonos": "Audio",
+    "auto radios": "Audio",
+    "barras de sonido": "Audio",
+    "equipos de sonido": "Audio",
+    "microfono inalambrico": "Audio",
+    "parlantes": "Audio",
+    "soporte para tv": "Accesorios",
+    "campanas extractoras": "Electrodomésticos",
+    "enfriador de vinos": "Electrodomésticos",
+    "heladeras": "Electrodomésticos",
+    "lavarropas": "Electrodomésticos",
+    "lavasecarropas": "Electrodomésticos",
+    "microondas": "Electrodomésticos",
+    "placas a induccion": "Electrodomésticos",
+    "procesadores": "Electrodomésticos",
+    "tostadoras": "Electrodomésticos",
+    "vitrinas": "Electrodomésticos",
+    "planchitas de pelo": "Salud y Belleza",
+
     # ---- Otras tiendas / variantes comunes ----
     "equipate": "Productos",
     "muebles y accesorios": "Hogar",

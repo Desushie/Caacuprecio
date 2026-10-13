@@ -142,6 +142,19 @@ function cp_record_search(PDO $pdo, string $term, int $userId = 0): array
             $insert->execute();
         }
 
+        try {
+            $pdo->prepare("
+                INSERT INTO busquedas_diarias (bd_normalizado, bd_termino, bd_fecha, bd_total)
+                VALUES (:normalizado, :termino, CURDATE(), 1)
+                ON DUPLICATE KEY UPDATE bd_total = bd_total + 1, bd_termino = VALUES(bd_termino)
+            ")->execute([
+                ':normalizado' => $normalized,
+                ':termino' => $term,
+            ]);
+        } catch (Throwable $e) {
+            // El conteo diario es opcional: solo alimenta el filtro por fechas de analytics.
+        }
+
         return [true, null];
     } catch (Throwable $e) {
         return [false, $e->getMessage()];
@@ -322,11 +335,11 @@ if ($mode === 'live') {
     $whereSql = implode(' AND ', $where);
 
     $orderBy = match ($sort) {
-        'precio_asc'  => 'precio_min ASC, total_ofertas DESC, nombre ASC',
-        'precio_desc' => 'precio_min DESC, total_ofertas DESC, nombre ASC',
-        'nombre_asc'  => 'nombre ASC',
-        'nombre_desc' => 'nombre DESC',
-        default       => 'total_ofertas DESC, precio_min ASC, nombre ASC',
+        'precio_asc'  => 'MIN(NULLIF(pro_precio, 0)) IS NULL, precio_min ASC, total_ofertas DESC, nombre ASC',
+        'precio_desc' => 'MIN(NULLIF(pro_precio, 0)) IS NULL, precio_min DESC, total_ofertas DESC, nombre ASC',
+        'nombre_asc'  => 'MIN(NULLIF(pro_precio, 0)) IS NULL, nombre ASC',
+        'nombre_desc' => 'MIN(NULLIF(pro_precio, 0)) IS NULL, nombre DESC',
+        default       => 'MIN(NULLIF(pro_precio, 0)) IS NULL, total_ofertas DESC, precio_min ASC, nombre ASC',
     };
 
     $sql = "
@@ -335,7 +348,7 @@ if ($mode === 'live') {
             MIN(idproductos) AS id_representante,
             MIN(pro_nombre) AS nombre,
             MAX(pro_marca) AS marca,
-            MIN(pro_precio) AS precio_min,
+            MIN(NULLIF(pro_precio, 0)) AS precio_min,
             MAX(pro_imagen) AS imagen,
             MAX(cat_nombre) AS categoria,
             SUM(CASE WHEN pro_en_stock = 1 THEN 1 ELSE 0 END) AS ofertas_stock,
@@ -379,9 +392,11 @@ if ($mode === 'live') {
             'nombre' => $nombreBase,
             'marca' => $product['marca'],
             'categoria' => $product['categoria'],
-            'precio' => 'Desde ' . gs($product['precio_min']),
+            'precio' => (float) $product['precio_min'] > 0 ? 'Desde ' . gs($product['precio_min']) : gs_precio(null),
             'precio_raw' => (float) $product['precio_min'],
+            'precio_fmt' => gs_precio($product['precio_min']),
             'imagen' => image_url($product['imagen'], $nombreBase),
+            'en_stock' => (bool) $enStock,
             'stock' => $enStock ? 'Disponible' : 'Sin stock',
             'stock_class' => stock_badge_class($enStock),
             'tienda' => $totalOfertas . ' oferta' . ($totalOfertas !== 1 ? 's' : ''),

@@ -113,6 +113,19 @@ if (!function_exists('cp_record_search')) {
         } catch (Throwable $e) {
             // Ignorar si la tabla todavía no existe o tiene otra estructura.
         }
+
+        try {
+            $pdo->prepare("
+                INSERT INTO busquedas_diarias (bd_normalizado, bd_termino, bd_fecha, bd_total)
+                VALUES (:termino, :termino_visible, CURDATE(), 1)
+                ON DUPLICATE KEY UPDATE bd_total = bd_total + 1, bd_termino = VALUES(bd_termino)
+            ")->execute([
+                ':termino' => $normalizedTerm,
+                ':termino_visible' => $term,
+            ]);
+        } catch (Throwable $e) {
+            // El conteo diario es opcional: solo alimenta el filtro por fechas de analytics.
+        }
     }
 }
 
@@ -150,6 +163,19 @@ if (!function_exists('cp_clear_session_search_history')) {
     }
 }
 
+if (!function_exists('cp_remove_session_search_item')) {
+    function cp_remove_session_search_item(string $term): void
+    {
+        $history = $_SESSION['search_history'] ?? [];
+        if (is_array($history)) {
+            $_SESSION['search_history'] = array_values(array_filter(
+                $history,
+                static fn ($value) => mb_strtolower(trim((string) $value), 'UTF-8') !== mb_strtolower(trim($term), 'UTF-8')
+            ));
+        }
+    }
+}
+
 if (!function_exists('cp_redirect_without_clear_history')) {
     function cp_redirect_without_clear_history(string $fallback = 'buscar.php'): void
     {
@@ -157,9 +183,20 @@ if (!function_exists('cp_redirect_without_clear_history')) {
         exit;
     }
 }
+
 if (isset($_GET['clear_history']) && (string) $_GET['clear_history'] === '1') {
     cp_clear_session_search_history();
     cp_redirect_without_clear_history('buscar.php');
+}
+
+if (isset($_GET['remove_history']) && (string) $_GET['remove_history'] !== '') {
+    cp_remove_session_search_item((string) $_GET['remove_history']);
+    $params = $_GET;
+    unset($params['remove_history']);
+    $queryString = http_build_query($params);
+    $redirectUrl = 'buscar.php' . ($queryString !== '' ? '?' . $queryString : '');
+    header('Location: ' . $redirectUrl);
+    exit;
 }
 
 if ($q !== '') {
@@ -259,11 +296,11 @@ $offset = ($page - 1) * $perPage;
    ORDEN
    ========================= */
 $orderBy = match ($sort) {
-    'precio_asc'  => 'precio_min ASC, total_ofertas DESC, nombre ASC',
-    'precio_desc' => 'precio_min DESC, total_ofertas DESC, nombre ASC',
-    'nombre_asc'  => 'nombre ASC',
-    'nombre_desc' => 'nombre DESC',
-    default       => 'precio_min ASC, total_ofertas DESC, nombre ASC',
+    'precio_asc'  => 'MIN(NULLIF(pro_precio, 0)) IS NULL, precio_min ASC, total_ofertas DESC, nombre ASC',
+    'precio_desc' => 'MIN(NULLIF(pro_precio, 0)) IS NULL, precio_min DESC, total_ofertas DESC, nombre ASC',
+    'nombre_asc'  => 'MIN(NULLIF(pro_precio, 0)) IS NULL, nombre ASC',
+    'nombre_desc' => 'MIN(NULLIF(pro_precio, 0)) IS NULL, nombre DESC',
+    default       => 'MIN(NULLIF(pro_precio, 0)) IS NULL, precio_min ASC, total_ofertas DESC, nombre ASC',
 };
 
 /* =========================
@@ -275,7 +312,7 @@ $sql = "
         MIN(idproductos) AS id_representante,
         MIN(pro_nombre) AS nombre,
         MAX(pro_marca) AS marca,
-        MIN(pro_precio) AS precio_min,
+        MIN(NULLIF(pro_precio, 0)) AS precio_min,
         MAX(pro_imagen) AS imagen,
         MAX(cat_nombre) AS cat_nombre,
         SUM(CASE WHEN pro_en_stock = 1 THEN 1 ELSE 0 END) AS ofertas_stock,
@@ -320,7 +357,7 @@ render_navbar('home');
 <div class="search-sticky-container">
   <div class="container">
     <div
-      class="search-bar glass-card p-3 p-lg-3"
+      class="search-bar search-dock glass-card"
       data-search-root
       data-search-endpoint="buscar_api.php"
       data-search-results-page="buscar.php"
@@ -331,136 +368,47 @@ render_navbar('home');
       data-count-target="#results-live-count"
       data-state-target="#results-live-state"
     >
-      <form class="row g-2 align-items-center js-smart-search-form position-relative pb-4" method="get" action="buscar.php" autocomplete="off">
+      <form class="js-smart-search-form search-mobile-form search-dock-form position-relative" method="get" action="buscar.php" autocomplete="off">
         <input type="hidden" name="tienda" value="<?= (int) $tiendaId ?>" data-search-filter="tienda">
         <input type="hidden" name="marca" value="<?= e($marca) ?>" data-search-filter="marca">
         <input type="hidden" name="precio_min" value="<?= e($precioMin) ?>" data-search-filter="precio_min">
         <input type="hidden" name="precio_max" value="<?= e($precioMax) ?>" data-search-filter="precio_max">
 
-        <div class="col-lg-5 position-relative">
-          <label for="global-search-results" class="visually-hidden">Buscar productos</label>
-          <input
-            id="global-search-results"
-            type="text"
-            name="q"
-            class="form-control js-smart-search-input"
-            placeholder="Buscá por producto, marca, tienda o categoría"
-            value="<?= e($q) ?>"
-            autocomplete="off"
-            data-search-input
-            data-live-delay="320"
-            data-min-length="2"
-            aria-autocomplete="list"
-            aria-expanded="false"
-            aria-controls="global-search-results-suggestions"
-          >
-          <div
-            id="global-search-results-suggestions"
-            class="search-suggest-dropdown search-suggestions-panel"
-            data-search-dropdown
-            data-search-suggest
-            data-search-suggestions
-            role="listbox"
-            aria-label="Sugerencias de búsqueda"
-          ></div>
-        </div>
-
-        <div class="col-sm-6 col-lg-3">
-          <select name="categoria" class="form-select js-smart-search-category" data-search-category>
-            <option value="0">Todas las categorías</option>
-            <?php foreach ($categorias as $categoria): ?>
-              <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
-                <?= e($categoria['cat_nombre']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <div class="col-sm-6 col-lg-3">
-          <select name="orden" class="form-select" data-search-order data-search-sort>
-            <?php foreach (active_sort_options() as $value => $label): ?>
-              <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="col-lg-1 d-grid">
-          <button class="btn btn-primary btn-lg rounded-4" type="submit" aria-label="Buscar">
-            <i class="bi bi-search"></i>
-          </button> 
-        </div>
-
-        <?php if ($recentSearches || $popularSearches): ?>
-          <div class="col-12">
-            <div class="search-discovery-stack d-flex flex-column gap-2 pt-2 pb-4">
-              <?php if ($recentSearches): ?>
-                <div class="search-chip-row">
-                  <span class="search-chip-label">
-                    <i class="bi bi-clock-history me-1"></i>Historial
-                  </span>
-
-                  <?php foreach ($recentSearches as $term): ?>
-                    <a
-                      class="search-chip"
-                      href="buscar.php?q=<?= rawurlencode($term) ?>"
-                      data-search-chip="history"
-                      data-search-term="<?= e($term) ?>"
-                    ><?= e($term) ?></a>
-                  <?php endforeach; ?>
-
-                  <a class="search-chip search-chip-clear search-chip-clear-danger"
-                    href="buscar.php?clear_history=1"
-                    title="Limpiar historial">
-                    <i class="bi bi-trash3 me-1"></i>Limpiar todo
-                  </a>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($popularSearches): ?>
-                <div class="search-chip-row">
-                  <span class="search-chip-label"><i class="bi bi-fire me-1"></i>Más buscados</span>
-                  <?php foreach ($popularSearches as $item): ?>
-                    <a
-                      class="search-chip search-chip-hot"
-                      href="buscar.php?q=<?= rawurlencode((string) $item['termino']) ?>"
-                      data-search-chip="popular"
-                      data-search-term="<?= e((string) $item['termino']) ?>"
-                    >
-                      <?= e((string) $item['termino']) ?>
-                      <small class="search-chip-hot-count"><?= number_format((int) ($item['total'] ?? 0), 0, ',', '.') ?></small>
-                    </a>
-                  <?php endforeach; ?>
-                </div>
-              <?php endif; ?>
-            </div>
+        <div class="search-dock-row">
+          <div class="search-input-col search-dock-field">
+            <span class="search-dock-icon" aria-hidden="true"><?= lucide_icon('search', '', 18) ?></span>
+            <label for="global-search-results" class="visually-hidden">Buscar productos</label>
+            <input
+              id="global-search-results"
+              type="text"
+              name="q"
+              class="form-control js-smart-search-input search-dock-input"
+              placeholder="Busca por producto, marca, tienda o categoría"
+              value="<?= e($q) ?>"
+              autocomplete="off"
+              data-search-input
+              data-live-delay="320"
+              data-min-length="2"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="global-search-results-suggestions"
+            >
+            <div
+              id="global-search-results-suggestions"
+              class="search-suggest-dropdown search-suggestions-panel"
+              data-search-dropdown
+              data-search-suggest
+              data-search-suggestions
+              role="listbox"
+              aria-label="Sugerencias de búsqueda"
+            ></div>
           </div>
-        <?php endif; ?>
 
-        <div class="position-absolute bottom-0 mb-2" style="right: 15px; left: auto !important; width: auto !important; z-index: 1030;">
-          <button type="button" id="toggle-sticky-btn" class="btn btn-sm btn-secondary rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Fijar / Desplazar barra">
-            <i class="bi bi-pin-angle" style="font-size: 0.85rem;"></i>
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<section class="page-section page-search-results py-5">
-  <div class="container">
-    <div class="row g-4">
-
-      <aside class="col-lg-3">
-        <div class="glass-card p-4 search-filters-sidebar">
-          <h3 class="h5 fw-bold mb-3">Filtros</h3>
-
-          <form method="get" action="buscar.php" class="d-grid gap-3 js-sidebar-filter-form">
-            <input type="hidden" name="q" value="<?= e($q) ?>">
-            <input type="hidden" name="orden" value="<?= e($sort) ?>">
-
-            <div>
-              <label class="form-label">Categoría</label>
-              <select name="categoria" class="form-select">
-                <option value="0">Todas</option>
+          <div class="search-dock-filters">
+            <div class="search-category-col search-dock-select-wrap">
+              <span class="search-dock-select-icon" aria-hidden="true"><?= lucide_icon('layout-grid', '', 15) ?></span>
+              <select name="categoria" class="form-select js-smart-search-category search-dock-select" data-search-category>
+                <option value="0">Todas las categorías</option>
                 <?php foreach ($categorias as $categoria): ?>
                   <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
                     <?= e($categoria['cat_nombre']) ?>
@@ -469,178 +417,500 @@ render_navbar('home');
               </select>
             </div>
 
-            <div>
-              <label class="form-label">Tienda</label>
-              <select name="tienda" class="form-select">
-                <option value="0">Todas</option>
-                <?php foreach ($tiendas as $tienda): ?>
-                  <option value="<?= (int) $tienda['idtiendas'] ?>" <?= $tiendaId === (int) $tienda['idtiendas'] ? 'selected' : '' ?>>
-                    <?= e($tienda['tie_nombre']) ?>
-                  </option>
+            <div class="search-order-col search-dock-select-wrap">
+              <span class="search-dock-select-icon" aria-hidden="true"><?= lucide_icon('arrow-up-down', '', 15) ?></span>
+              <select name="orden" class="form-select search-dock-select" data-search-order data-search-sort>
+                <?php foreach (active_sort_options() as $value => $label): ?>
+                  <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
-
-            <div>
-              <label class="form-label">Marca</label>
-              <select name="marca" class="form-select">
-                <option value="">Todas</option>
-                <?php foreach ($marcas as $m): ?>
-                  <option value="<?= e($m['pro_marca']) ?>" <?= $marca === $m['pro_marca'] ? 'selected' : '' ?>>
-                    <?= e($m['pro_marca']) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-
-            <div class="row g-2">
-              <div class="col-6">
-                <label class="form-label">Precio mín.</label>
-                <input type="number" step="0.01" name="precio_min" class="form-control" value="<?= e($precioMin) ?>" placeholder="0">
-              </div>
-              <div class="col-6">
-                <label class="form-label">Precio máx.</label>
-                <input type="number" step="0.01" name="precio_max" class="form-control" value="<?= e($precioMax) ?>" placeholder="9999999">
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary rounded-pill">Aplicar filtros</button>
-
-            <a href="buscar.php?q=<?= rawurlencode($q) ?>&orden=<?= rawurlencode($sort) ?>" class="btn btn-outline-secondary rounded-pill">
-              Limpiar filtros
-            </a>
-          </form>
-        </div>
-      </aside>
-
-      <div class="col-lg-9">
-        <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
-          <div>
-            <h2 class="mb-2">
-              <?= $q !== '' ? 'Resultados para: "' . e($q) . '"' : 'Todos los productos' ?>
-            </h2>
           </div>
-          <div class="small text-body-secondary">
-            <?= number_format($totalProducts, 0, ',', '.') ?> resultado(s)
+
+          <div class="search-dock-actions">
+            <div class="search-submit-col">
+              <button class="btn btn-primary search-submit-btn" type="submit" aria-label="Buscar">
+                <?= lucide_icon('search') ?>
+                <span class="search-submit-text">Buscar</span>
+              </button>
+            </div>
+            <div class="search-pin-col">
+              <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary search-pin-btn" title="Fijar / Desplazar barra">
+                <span data-lucide-host><?= lucide_icon('pin') ?></span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <div class="row g-4">
-          <?php if ($products): ?>
-            <?php foreach ($products as $product): ?>
-              <div class="col-md-6 col-xl-3">
-                <article class="custom-card product-card h-100 p-3 fancy-hover">
-                  <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset d-block">
-                    <div class="product-thumb-wrap mb-3">
-                      <img class="offer-thumb" src="<?= e(image_url($product['imagen'] ?? null, $product['nombre'] ?? 'Producto')) ?>" alt="<?= e($product['nombre'] ?? 'Producto') ?>">
-                    </div>
-                  </a>
-
-                  <div class="d-flex align-items-start gap-2 mb-2 flex-wrap">
-                    <span class="badge soft-badge category-badge">
-                      <?= e($product['cat_nombre'] ?? 'Sin categoría') ?>
-                    </span>
-
-                    <span class="mini-badge <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'badge-stock-ok' : 'badge-stock-no' ?>">
-                      <?= ((int) ($product['ofertas_stock'] ?? 0)) > 0 ? 'En stock' : 'Sin stock' ?>
-                    </span>
-                  </div>
-
-                  <h3 class="h6 fw-bold mb-2">
-                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="text-decoration-none text-reset stretched-link-sibling">
-                      <?= e($product['grupo'] ?: $product['nombre']) ?>
-                    </a>
-                  </h3>
-
-                  <?php if (!empty($product['marca'])): ?>
-                    <div class="small text-body-secondary mb-3">Marca: <strong><?= e($product['marca']) ?></strong></div>
-                  <?php endif; ?>
-
-                  <div class="product-price-row d-flex align-items-end justify-content-between mb-3 gap-2 flex-wrap">
-                    <div class="product-price-main">
-                      <div class="price-now"><?= gs($product['precio_min']) ?></div>
-                      <div class="small text-body-secondary">Desde</div>
-                    </div>
-
-                    <div class="product-price-meta text-end small text-body-secondary">
-                      <div><?= (int) ($product['total_ofertas'] ?? 0) ?> oferta(s)</div>
-                      <div><?= !empty($product['pro_fecha_scraping']) ? e(date('d/m/Y', strtotime((string) $product['pro_fecha_scraping']))) : '' ?></div>
-                    </div>
-                  </div>
-
-                  <div class="product-meta d-flex justify-content-between align-items-center gap-2 flex-wrap border-top pt-3">
-                    <div class="small text-body-secondary position-relative z-2">
-                      Mejor precio agrupado
-                    </div>
-                    <a href="producto.php?grupo=<?= rawurlencode((string) $product['grupo']) ?>&q=<?= rawurlencode($q) ?>" class="btn btn-sm btn-outline-primary rounded-pill position-relative z-2">
-                      Ver ofertas
-                    </a>
-                  </div>
-                </article>
-              </div>
-            <?php endforeach; ?>
-          <?php else: ?>
-            <div class="col-12">
-              <div class="empty-state">No se encontraron productos con los filtros actuales.</div>
-            </div>
-          <?php endif; ?>
-        </div>
-
-        <?php if ($totalPages > 1): ?>
-          <?php
-          $visiblePages = 5;
-          $half = (int) floor($visiblePages / 2);
-
-          $startPage = max(1, $page - $half);
-          $endPage = min($totalPages, $startPage + $visiblePages - 1);
-
-          if (($endPage - $startPage + 1) < $visiblePages) {
-              $startPage = max(1, $endPage - $visiblePages + 1);
+        <?php
+          $dockRecentSearches = array_slice($recentSearches, 0, 5);
+          $dockRecentLookup = [];
+          foreach ($dockRecentSearches as $term) {
+              $dockRecentLookup[mb_strtolower((string) $term)] = true;
           }
 
-          $buildUrl = function (int $p) use ($q, $categoriaId, $tiendaId, $marca, $precioMin, $precioMax, $sort): string {
-              return '?' . http_build_query([
-                  'q' => $q,
-                  'categoria' => $categoriaId,
-                  'tienda' => $tiendaId,
-                  'marca' => $marca,
-                  'precio_min' => $precioMin,
-                  'precio_max' => $precioMax,
-                  'orden' => $sort,
-                  'page' => $p
-              ]);
-          };
-          ?>
+          $dockPopularSearches = [];
+          foreach ($popularSearches as $item) {
+              $term = trim((string) ($item['termino'] ?? ''));
+              if ($term === '' || isset($dockRecentLookup[mb_strtolower($term)])) {
+                  continue;
+              }
+              $dockPopularSearches[] = $item;
+              if (count($dockPopularSearches) >= 5) {
+                  break;
+              }
+          }
+        ?>
+        <?php if ($dockRecentSearches || $dockPopularSearches): ?>
+          <div class="search-discovery-stack mt-2">
+            <?php if ($dockRecentSearches): ?>
+              <div class="search-chip-row search-chip-row-recent">
+                <span class="search-chip-label"><?= lucide_icon('history', '', 12) ?>Recientes</span>
+                <div class="search-chip-track">
+                  <?php foreach ($dockRecentSearches as $term): ?>
+                    <span class="search-chip search-chip-history">
+                      <a
+                        class="search-chip-link"
+                        href="buscar.php?q=<?= rawurlencode($term) ?>"
+                        data-search-chip="history"
+                        data-search-term="<?= e($term) ?>"
+                      ><?= e($term) ?></a>
+                      <a
+                        class="search-chip-remove"
+                        href="buscar.php?remove_history=<?= rawurlencode($term) ?>"
+                        title="Eliminar '<?= e($term) ?>' del historial"
+                        aria-label="Eliminar <?= e($term) ?> del historial"
+                        data-remove-history-term="<?= e($term) ?>"
+                      ><?= lucide_icon('x', '', 10) ?></a>
+                    </span>
+                  <?php endforeach; ?>
+                </div>
+                <a class="search-discovery-clear" href="buscar.php?clear_history=1" title="Limpiar todo el historial" aria-label="Limpiar todo el historial">
+                  <?= lucide_icon('trash-2', '', 12) ?>
+                </a>
+              </div>
+            <?php endif; ?>
 
-          <nav class="mt-4" aria-label="Paginación">
-            <ul class="pagination justify-content-center flex-wrap gap-2">
-              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page > 1 ? e($buildUrl(1)) : '#' ?>" title="Ir al inicio">«</a>
-              </li>
-
-              <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page > 1 ? e($buildUrl($page - 1)) : '#' ?>" title="Página anterior">‹</a>
-              </li>
-
-              <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
-                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                  <a class="page-link rounded-pill" href="<?= e($buildUrl($i)) ?>"><?= $i ?></a>
-                </li>
-              <?php endfor; ?>
-
-              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page < $totalPages ? e($buildUrl($page + 1)) : '#' ?>" title="Página siguiente">›</a>
-              </li>
-
-              <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>">
-                <a class="page-link rounded-pill" href="<?= $page < $totalPages ? e($buildUrl($totalPages)) : '#' ?>" title="Ir al final">»</a>
-              </li>
-            </ul>
-          </nav>
+            <?php if ($dockPopularSearches): ?>
+              <div class="search-chip-row search-chip-row-hot">
+                <span class="search-chip-label search-chip-label-hot"><?= lucide_icon('flame', '', 12) ?>Tendencias</span>
+                <div class="search-chip-track">
+                  <?php foreach ($dockPopularSearches as $item): ?>
+                    <a
+                      class="search-chip search-chip-hot"
+                      href="buscar.php?q=<?= rawurlencode((string) $item['termino']) ?>"
+                      data-search-chip="popular"
+                      data-search-term="<?= e((string) $item['termino']) ?>"
+                    ><?= e((string) $item['termino']) ?></a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
+          </div>
         <?php endif; ?>
+      </form>
+    </div>
+  </div>
+</div>
+
+<?php
+  $currentCategoryName = '';
+  foreach ($categorias as $categoria) {
+      if ((int) $categoria['idcategorias'] === $categoriaId) {
+          $currentCategoryName = (string) $categoria['cat_nombre'];
+          break;
+      }
+  }
+
+  $currentStoreName = '';
+  foreach ($tiendas as $tienda) {
+      if ((int) $tienda['idtiendas'] === $tiendaId) {
+          $currentStoreName = (string) $tienda['tie_nombre'];
+          break;
+      }
+  }
+
+  $hasSideFilters = $categoriaId > 0 || $tiendaId > 0 || $marca !== '' || $precioMin !== '' || $precioMax !== '';
+  $resultFrom = $totalProducts > 0 ? $offset + 1 : 0;
+  $resultTo = min($offset + count($products), $totalProducts);
+  $pageInStock = 0;
+  $pageOffers = 0;
+  $pageMinPrice = null;
+
+  foreach ($products as $productRow) {
+      if ((int) ($productRow['ofertas_stock'] ?? 0) > 0) {
+          $pageInStock++;
+      }
+      $pageOffers += (int) ($productRow['total_ofertas'] ?? 0);
+      $priceValue = isset($productRow['precio_min']) ? (float) $productRow['precio_min'] : null;
+      if ($priceValue === null || $priceValue <= 0) {
+          continue;
+      }
+      $pageMinPrice = $pageMinPrice === null ? $priceValue : min($pageMinPrice, $priceValue);
+  }
+
+  $pageOutOfStock = max(0, count($products) - $pageInStock);
+
+  $buildSearchUrl = static function (array $overrides = []) use ($q, $categoriaId, $tiendaId, $marca, $precioMin, $precioMax, $sort, $page): string {
+      $params = array_merge([
+          'q' => $q,
+          'categoria' => $categoriaId,
+          'tienda' => $tiendaId,
+          'marca' => $marca,
+          'precio_min' => $precioMin,
+          'precio_max' => $precioMax,
+          'orden' => $sort,
+          'page' => $page,
+      ], $overrides);
+
+      foreach (['q', 'marca', 'precio_min', 'precio_max'] as $key) {
+          if (($params[$key] ?? '') === '') {
+              unset($params[$key]);
+          }
+      }
+      if ((int) ($params['categoria'] ?? 0) === 0) {
+          unset($params['categoria']);
+      }
+      if ((int) ($params['tienda'] ?? 0) === 0) {
+          unset($params['tienda']);
+      }
+      if ((int) ($params['page'] ?? 1) <= 1) {
+          unset($params['page']);
+      }
+
+      $query = http_build_query($params);
+      return $query !== '' ? '?' . $query : 'buscar.php';
+  };
+
+  $formatFreshness = static function (?string $date): string {
+      if ($date === null || trim($date) === '') {
+          return 'Sin fecha';
+      }
+      $ts = strtotime($date);
+      if (!$ts) {
+          return 'Sin fecha';
+      }
+      $diff = time() - $ts;
+      if ($diff < 3600) {
+          return 'Hace minutos';
+      }
+      if ($diff < 86400) {
+          $hours = max(1, (int) floor($diff / 3600));
+          return 'Hace ' . $hours . ' h';
+      }
+      if ($diff < 86400 * 7) {
+          $days = max(1, (int) floor($diff / 86400));
+          return 'Hace ' . $days . ' d';
+      }
+      return date('d/m/Y', $ts);
+  };
+?>
+
+<section class="products-section page-search-results" aria-labelledby="search-results-title">
+  <div class="container">
+    <header class="sr-head">
+      <div class="sr-head-main">
+        <p class="products-kicker">Resultados de búsqueda</p>
+        <h2 id="search-results-title" class="section-title sr-title">
+          <?= $q !== '' ? '“' . e($q) . '”' : 'Catálogo completo' ?>
+        </h2>
+      </div>
+    </header>
+
+    <dl class="sr-kpis" aria-label="Indicadores de esta página">
+      <div class="sr-kpi" data-kpi="results">
+        <dt>Resultados</dt>
+        <dd><?= number_format($totalProducts, 0, ',', '.') ?></dd>
+        <span class="sr-kpi-icon" aria-hidden="true"><?= lucide_icon('layout-grid', '', 28) ?></span>
       </div>
 
+      <div class="sr-kpi" data-kpi="price">
+        <dt>Desde</dt>
+        <dd><?= $pageMinPrice !== null ? gs($pageMinPrice) : '—' ?></dd>
+        <span class="sr-kpi-icon" aria-hidden="true"><?= lucide_icon('tag', '', 28) ?></span>
+      </div>
+
+      <div class="sr-kpi" data-kpi="offers">
+        <dt>Ofertas</dt>
+        <dd><?= number_format($pageOffers, 0, ',', '.') ?></dd>
+        <span class="sr-kpi-icon" aria-hidden="true"><?= lucide_icon('layers', '', 28) ?></span>
+      </div>
+
+      <div class="sr-kpi" data-kpi="stock">
+        <dt>Con stock</dt>
+        <dd><?= number_format($pageInStock, 0, ',', '.') ?></dd>
+        <span class="sr-kpi-icon" aria-hidden="true"><?= lucide_icon('package', '', 28) ?></span>
+      </div>
+
+      <div class="sr-kpi" data-kpi="nostock">
+        <dt>Sin stock</dt>
+        <dd><?= number_format($pageOutOfStock, 0, ',', '.') ?></dd>
+        <span class="sr-kpi-icon" aria-hidden="true"><?= lucide_icon('package-x', '', 28) ?></span>
+      </div>
+    </dl>
+
+    <div class="sr-filters" aria-label="Filtros de búsqueda">
+      <form method="get" action="buscar.php" class="sr-filters-form js-sidebar-filter-form">
+        <input type="hidden" name="q" value="<?= e($q) ?>">
+        <input type="hidden" name="orden" value="<?= e($sort) ?>">
+
+        <div class="sr-field">
+          <label class="sr-field-label" for="search-filter-categoria">Categoría</label>
+          <select id="search-filter-categoria" name="categoria" class="form-select search-filter-control">
+            <option value="0">Todas</option>
+            <?php foreach ($categorias as $categoria): ?>
+              <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
+                <?= e($categoria['cat_nombre']) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="sr-field">
+          <label class="sr-field-label" for="search-filter-tienda">Tienda</label>
+          <select id="search-filter-tienda" name="tienda" class="form-select search-filter-control">
+            <option value="0">Todas</option>
+            <?php foreach ($tiendas as $tienda): ?>
+              <option value="<?= (int) $tienda['idtiendas'] ?>" <?= $tiendaId === (int) $tienda['idtiendas'] ? 'selected' : '' ?>>
+                <?= e($tienda['tie_nombre']) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="sr-field">
+          <label class="sr-field-label" for="search-filter-marca">Marca</label>
+          <select id="search-filter-marca" name="marca" class="form-select search-filter-control">
+            <option value="">Todas</option>
+            <?php foreach ($marcas as $m): ?>
+              <option value="<?= e($m['pro_marca']) ?>" <?= $marca === $m['pro_marca'] ? 'selected' : '' ?>>
+                <?= e($m['pro_marca']) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="sr-field sr-field-price">
+          <span class="sr-field-label">Precio</span>
+          <div class="search-filter-price">
+            <div>
+              <label class="visually-hidden" for="search-filter-precio-min">Precio mínimo</label>
+              <input id="search-filter-precio-min" type="number" step="0.01" name="precio_min" class="form-control search-filter-control" value="<?= e($precioMin) ?>" placeholder="Mín.">
+            </div>
+            <span class="search-filter-price-sep" aria-hidden="true">–</span>
+            <div>
+              <label class="visually-hidden" for="search-filter-precio-max">Precio máximo</label>
+              <input id="search-filter-precio-max" type="number" step="0.01" name="precio_max" class="form-control search-filter-control" value="<?= e($precioMax) ?>" placeholder="Máx.">
+            </div>
+          </div>
+        </div>
+
+        <div class="sr-field sr-field-actions">
+          <span class="sr-field-label sr-field-label-spacer" aria-hidden="true">&nbsp;</span>
+          <div class="search-filter-actions">
+            <button type="submit" class="search-filter-apply">Aplicar</button>
+            <a href="<?= e($buildSearchUrl(['categoria' => 0, 'tienda' => 0, 'marca' => '', 'precio_min' => '', 'precio_max' => '', 'page' => 1])) ?>" class="search-filter-reset">Limpiar</a>
+          </div>
+        </div>
+      </form>
+
+      <?php if ($hasSideFilters): ?>
+        <div class="sr-chips products-chips">
+          <?php if ($categoriaId > 0): ?>
+            <a class="products-chip" href="<?= e($buildSearchUrl(['categoria' => 0, 'page' => 1])) ?>">
+              <?= lucide_icon('tag', '', 14) ?>
+              <span><?= e($currentCategoryName !== '' ? $currentCategoryName : 'Categoría') ?></span>
+              <?= lucide_icon('x', '', 14) ?>
+            </a>
+          <?php endif; ?>
+          <?php if ($tiendaId > 0): ?>
+            <a class="products-chip" href="<?= e($buildSearchUrl(['tienda' => 0, 'page' => 1])) ?>">
+              <?= lucide_icon('store', '', 14) ?>
+              <span><?= e($currentStoreName !== '' ? $currentStoreName : 'Tienda') ?></span>
+              <?= lucide_icon('x', '', 14) ?>
+            </a>
+          <?php endif; ?>
+          <?php if ($marca !== ''): ?>
+            <a class="products-chip" href="<?= e($buildSearchUrl(['marca' => '', 'page' => 1])) ?>">
+              <?= lucide_icon('award', '', 14) ?>
+              <span><?= e($marca) ?></span>
+              <?= lucide_icon('x', '', 14) ?>
+            </a>
+          <?php endif; ?>
+          <?php if ($precioMin !== '' || $precioMax !== ''): ?>
+            <a class="products-chip" href="<?= e($buildSearchUrl(['precio_min' => '', 'precio_max' => '', 'page' => 1])) ?>">
+              <?= lucide_icon('circle-dollar-sign', '', 14) ?>
+              <span>
+                <?= $precioMin !== '' ? e($precioMin) : '0' ?>
+                –
+                <?= $precioMax !== '' ? e($precioMax) : '∞' ?>
+              </span>
+              <?= lucide_icon('x', '', 14) ?>
+            </a>
+          <?php endif; ?>
+          <a class="products-clear" href="<?= e($buildSearchUrl(['categoria' => 0, 'tienda' => 0, 'marca' => '', 'precio_min' => '', 'precio_max' => '', 'page' => 1])) ?>">Quitar filtros</a>
+        </div>
+      <?php endif; ?>
     </div>
+
+    <div class="sr-board">
+      <?php if ($products): ?>
+        <?php
+          $tileWashPalette = [
+            '#8ba4c4',
+            '#c9a87a',
+            '#c48b8e',
+            '#8fad97',
+            '#a89bc4',
+            '#7eb8b0',
+            '#c4a88b',
+            '#9bb0c9',
+          ];
+          $tileWashColors = $tileWashPalette;
+          $tileWashSeed = crc32('search-tile|' . $page . '|' . $sort . '|' . $q . '|' . $categoriaId . '|' . $tiendaId . '|' . $marca);
+          mt_srand($tileWashSeed);
+          for ($i = count($tileWashColors) - 1; $i > 0; $i--) {
+              $j = mt_rand(0, $i);
+              $swap = $tileWashColors[$i];
+              $tileWashColors[$i] = $tileWashColors[$j];
+              $tileWashColors[$j] = $swap;
+          }
+          mt_srand();
+        ?>
+        <?php foreach ($products as $index => $product): ?>
+          <?php
+            $productName = (string) ($product['grupo'] ?: $product['nombre'] ?: 'Producto');
+            $productUrl = 'producto.php?grupo=' . rawurlencode((string) $product['grupo']) . ($q !== '' ? '&q=' . rawurlencode($q) : '');
+            $inStock = ((int) ($product['ofertas_stock'] ?? 0)) > 0;
+            $offersCount = (int) ($product['total_ofertas'] ?? 0);
+            $tileTone = $inStock ? 'stock' : 'wait';
+            $tileWash = $tileWashColors[$index % count($tileWashColors)];
+            $catalogNumber = $offset + (int) $index + 1;
+            $scrapedAt = (string) ($product['pro_fecha_scraping'] ?? '');
+            $scrapedTs = $scrapedAt !== '' ? strtotime($scrapedAt) : false;
+            $scrapedExact = $scrapedTs ? date('d/m/Y H:i', $scrapedTs) : 'Sin fecha';
+          ?>
+          <article
+            class="sr-card clickable-card"
+            data-tone="<?= e($tileTone) ?>"
+            style="--tile-wash: <?= e($tileWash) ?>;"
+            data-card-href="<?= e($productUrl) ?>"
+            role="link"
+            tabindex="0"
+            aria-label="Comparar <?= e($productName) ?>"
+          >
+            <?php $cardImg = image_url($product['imagen'] ?? null, $productName); ?>
+            <a class="sr-card-media" href="<?= e($productUrl) ?>">
+              <?php if ($cardImg !== ''): ?>
+                <img
+                  src="<?= e($cardImg) ?>"
+                  alt="<?= e($productName) ?>"
+                  loading="lazy"
+                  onerror="this.onerror=null;if(window.applyProductImageFallback){applyProductImageFallback(this);}else{this.style.display='none';}"
+                >
+              <?php else: ?>
+                <span class="img-fallback" role="img" aria-label="<?= e($productName) ?>">
+                  <?= lucide_icon('image', '', 48) ?>
+                </span>
+              <?php endif; ?>
+              <span class="sr-card-index"><?= str_pad((string) $catalogNumber, 2, '0', STR_PAD_LEFT) ?></span>
+              <span class="sr-card-flag <?= $inStock ? 'is-stock' : 'is-wait' ?>"><?= $inStock ? 'Stock' : 'Consultar' ?></span>
+            </a>
+
+            <div class="sr-card-body">
+              <div class="sr-card-tags">
+                <span class="sr-card-cat"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
+                <?php if (!empty($product['marca'])): ?>
+                  <span class="sr-card-brand"><?= e($product['marca']) ?></span>
+                <?php endif; ?>
+              </div>
+
+              <h3 class="sr-card-name">
+                <a href="<?= e($productUrl) ?>"><?= e($productName) ?></a>
+              </h3>
+
+              <div class="sr-card-priceblock">
+                <div>
+                  <p class="sr-card-from">Desde</p>
+                  <p class="sr-card-price"><?= gs_precio($product['precio_min']) ?></p>
+                </div>
+                <span class="sr-card-offers" title="<?= e($scrapedExact) ?>">
+                  <?= number_format($offersCount, 0, ',', '.') ?> oferta<?= $offersCount === 1 ? '' : 's' ?>
+                </span>
+              </div>
+
+              <div class="sr-card-foot">
+                <span class="sr-card-fresh" title="<?= e($scrapedExact) ?>">
+                  <?= lucide_icon('clock', '', 13) ?>
+                  <?= e($formatFreshness($scrapedAt)) ?>
+                </span>
+                <a class="sr-card-cta" href="<?= e($productUrl) ?>">
+                  Comparar<?= $offersCount > 1 ? ' · ' . number_format($offersCount, 0, ',', '.') : '' ?>
+                  <?= lucide_icon('arrow-right', '', 14) ?>
+                </a>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <div class="products-empty sr-empty">
+          <h3 class="sr-empty-title">
+            <?= lucide_icon('circle-x', 'sr-empty-title-icon', 22) ?>
+            No hay productos para mostrar
+          </h3>
+          <p>Prueba otra búsqueda o cambia los filtros actuales.</p>
+          <a class="products-empty-link" href="buscar.php">
+            Ver catálogo completo
+            <?= lucide_icon('arrow-right', '', 15) ?>
+          </a>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <?php if ($totalPages > 1): ?>
+      <?php
+        $visiblePages = 5;
+        $half = (int) floor($visiblePages / 2);
+        $startPage = max(1, $page - $half);
+        $endPage = min($totalPages, $startPage + $visiblePages - 1);
+
+        if (($endPage - $startPage + 1) < $visiblePages) {
+            $startPage = max(1, $endPage - $visiblePages + 1);
+        }
+      ?>
+      <nav class="products-pager sr-pager" aria-label="Paginación de resultados">
+        <p class="products-pager-status">Página <?= number_format($page, 0, ',', '.') ?> de <?= number_format($totalPages, 0, ',', '.') ?></p>
+        <div class="products-pager-controls">
+          <?php if ($page > 1): ?>
+            <a class="products-pager-btn" href="<?= e($buildSearchUrl(['page' => 1])) ?>" aria-label="Primera página" title="Ir al inicio"><?= lucide_icon('chevrons-left', '', 16) ?></a>
+            <a class="products-pager-btn" href="<?= e($buildSearchUrl(['page' => $page - 1])) ?>" aria-label="Página anterior" title="Página anterior"><?= lucide_icon('chevron-left', '', 16) ?></a>
+          <?php else: ?>
+            <span class="products-pager-btn is-disabled" aria-hidden="true"><?= lucide_icon('chevrons-left', '', 16) ?></span>
+            <span class="products-pager-btn is-disabled" aria-hidden="true"><?= lucide_icon('chevron-left', '', 16) ?></span>
+          <?php endif; ?>
+
+          <div class="products-pager-pages">
+            <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+              <a
+                class="products-pager-num<?= $i === $page ? ' is-active' : '' ?>"
+                href="<?= e($buildSearchUrl(['page' => $i])) ?>"
+                <?= $i === $page ? 'aria-current="page"' : '' ?>
+              >
+                <?= $i ?>
+              </a>
+            <?php endfor; ?>
+          </div>
+
+          <?php if ($page < $totalPages): ?>
+            <a class="products-pager-btn" href="<?= e($buildSearchUrl(['page' => $page + 1])) ?>" aria-label="Página siguiente" title="Página siguiente"><?= lucide_icon('chevron-right', '', 16) ?></a>
+            <a class="products-pager-btn" href="<?= e($buildSearchUrl(['page' => $totalPages])) ?>" aria-label="Última página" title="Ir al final"><?= lucide_icon('chevrons-right', '', 16) ?></a>
+          <?php else: ?>
+            <span class="products-pager-btn is-disabled" aria-hidden="true"><?= lucide_icon('chevron-right', '', 16) ?></span>
+            <span class="products-pager-btn is-disabled" aria-hidden="true"><?= lucide_icon('chevrons-right', '', 16) ?></span>
+          <?php endif; ?>
+        </div>
+      </nav>
+    <?php endif; ?>
   </div>
 </section>
 
@@ -650,7 +920,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const sideForm = document.querySelector('.js-sidebar-filter-form');
 
     if (topForm && sideForm) {
-        // Función para copiar valores de un form al otro
         const syncInputs = (sourceForm, targetForm) => {
             return function(e) {
                 const name = e.target.name;
@@ -663,17 +932,61 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         };
 
-        // Sincronizar desde Top hacia Lateral
         topForm.addEventListener('input', syncInputs(topForm, sideForm));
         topForm.addEventListener('change', syncInputs(topForm, sideForm));
-
-        // Sincronizar desde Lateral hacia Top
         sideForm.addEventListener('input', syncInputs(sideForm, topForm));
         sideForm.addEventListener('change', syncInputs(sideForm, topForm));
     }
 });
 
+document.addEventListener('click', function (event) {
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card) return;
+  if (event.target.closest('a, button, input, select, textarea, label, [data-no-card-click]')) {
+    return;
+  }
+  window.location.href = card.dataset.cardHref;
+});
+
+document.addEventListener('keydown', function (event) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const card = event.target.closest('.clickable-card[data-card-href]');
+  if (!card || event.target !== card) return;
+  event.preventDefault();
+  window.location.href = card.dataset.cardHref;
+});
+
 document.addEventListener('DOMContentLoaded', function() {
+  // Manejo de eliminación individual de historial en vivo
+  document.addEventListener('click', function(e) {
+    const removeBtn = e.target.closest('.search-chip-remove');
+    if (!removeBtn) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const chip = removeBtn.closest('.search-chip');
+    const term = removeBtn.getAttribute('data-remove-history-term') || '';
+    
+    if (chip) {
+      chip.style.transition = 'all 0.18s ease';
+      chip.style.opacity = '0';
+      chip.style.transform = 'scale(0.8)';
+      setTimeout(() => {
+        const track = chip.closest('.search-chip-track');
+        chip.remove();
+        if (track && track.querySelectorAll('.search-chip').length === 0) {
+          const row = track.closest('.search-chip-row-recent');
+          if (row) row.remove();
+        }
+      }, 180);
+    }
+    
+    if (term) {
+      fetch('buscar.php?remove_history=' + encodeURIComponent(term), { credentials: 'same-origin' });
+    }
+  });
+
   const stickyContainer = document.querySelector('.search-sticky-container');
   const toggleBtn = document.getElementById('toggle-sticky-btn');
   
@@ -694,19 +1007,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 2. Control del Pin (Por defecto: Libre -> Clic: Fija)
   if (stickyContainer && toggleBtn) {
-    const icon = toggleBtn.querySelector('i');
+    const iconHost = toggleBtn.querySelector('[data-lucide-host]') || toggleBtn;
     
     toggleBtn.addEventListener('click', function() {
       // Commuta la clase: si no está, la pone (fija); si está, la saca (libre)
       const isStickyActive = stickyContainer.classList.toggle('is-sticky');
+      document.body.classList.toggle('search-pinned', isStickyActive);
       
       if (isStickyActive) {
         // MODO FIJO ACTIVADO (Se mueve con la pantalla)
-        if (icon) icon.className = 'bi bi-pin-angle-fill'; // Pin relleno
+        if (window.setLucideIcon) setLucideIcon(iconHost, 'pin-off');
         toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
       } else {
         // MODO NATURAL/QUIETO (Se queda en su lugar original)
-        if (icon) icon.className = 'bi bi-pin-angle'; // Pin vacío
+        if (window.setLucideIcon) setLucideIcon(iconHost, 'pin');
         toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
       }
     });

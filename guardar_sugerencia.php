@@ -34,10 +34,9 @@ function client_ip_address(): string
     return '';
 }
 
-$redirect = trim((string) ($_POST['redirect'] ?? 'index.php'));
-if ($redirect === '' || str_contains($redirect, "\n") || str_contains($redirect, "\r")) {
-    $redirect = 'index.php';
-}
+$redirect = safe_redirect_path((string) ($_POST['redirect'] ?? 'index.php'));
+$redirect = preg_replace('/([?&])suggestion_(saved|error)=[^&]*&?/', '$1', $redirect);
+$redirect = rtrim((string) $redirect, '?&') ?: 'index.php';
 
 $nombre = trim((string) ($_POST['sug_nombre'] ?? ''));
 $email = trim((string) ($_POST['sug_email'] ?? ''));
@@ -46,13 +45,20 @@ $detalle = trim((string) ($_POST['sug_detalle'] ?? ''));
 
 if ($detalle === '') {
     $separator = str_contains($redirect, '?') ? '&' : '?';
-    header('Location: ' . $redirect . $separator . 'suggestion_error=' . rawurlencode('Escribí una sugerencia antes de enviar.'));
+    header('Location: ' . $redirect . $separator . 'suggestion_error=' . rawurlencode('Escribe una sugerencia antes de enviar.'));
+    exit;
+}
+
+$captchaError = consent_error() ?: turnstile_error();
+if ($captchaError !== '') {
+    $separator = str_contains($redirect, '?') ? '&' : '?';
+    header('Location: ' . $redirect . $separator . 'suggestion_error=' . rawurlencode($captchaError));
     exit;
 }
 
 if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $separator = str_contains($redirect, '?') ? '&' : '?';
-    header('Location: ' . $redirect . $separator . 'suggestion_error=' . rawurlencode('Ingresá un email válido o dejalo vacío.'));
+    header('Location: ' . $redirect . $separator . 'suggestion_error=' . rawurlencode('Ingresa un email válido o déjalo vacío.'));
     exit;
 }
 

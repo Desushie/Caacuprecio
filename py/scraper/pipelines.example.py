@@ -351,16 +351,19 @@ class MySQLPipeline:
         if tv_group:
             return tv_group
 
+        iphone_group = self.extract_iphone_group(texto)
+        if iphone_group:
+            return iphone_group
+
         patrones = [
-            (r"\bsamsung\s+(?:galaxy\s+)?a(\d{1,3})\b", lambda m: f"SAMSUNG GALAXY A{m.group(1)}"),
-            (r"\bsamsung\s+(?:galaxy\s+)?s(\d{1,3})\b", lambda m: f"SAMSUNG GALAXY S{m.group(1)}"),
-            (r"\biphone\s+(\d{1,2})\b", lambda m: f"IPHONE {m.group(1)}"),
-            (r"\bxiaomi\s+redmi\s+note\s+(\d{1,2}[a-z]?)\b", lambda m: f"XIAOMI REDMI NOTE {m.group(1).upper()}"),
-            (r"\bredmi\s+note\s+(\d{1,2}[a-z]?)\b", lambda m: f"XIAOMI REDMI NOTE {m.group(1).upper()}"),
-            (r"\bxiaomi\s+redmi\s+(\d{1,2}[a-z]?)\b", lambda m: f"XIAOMI REDMI {m.group(1).upper()}"),
-            (r"\bredmi\s+(\d{1,2}[a-z]?)\b", lambda m: f"XIAOMI REDMI {m.group(1).upper()}"),
-            (r"\bpoco\s+([a-z]+\d*[a-z]*)\b", lambda m: f"POCO {m.group(1).upper()}"),
-            (r"\bmoto\s+([a-z]+\d*[a-z]*)\b", lambda m: f"MOTO {m.group(1).upper()}"),
+            (r"\bsamsung\s+(?:galaxy\s+)?a(\d{1,3})\b", lambda m: self.with_storage(f"SAMSUNG GALAXY A{m.group(1)}", texto)),
+            (r"\bsamsung\s+(?:galaxy\s+)?s(\d{1,3})\b", lambda m: self.with_storage(f"SAMSUNG GALAXY S{m.group(1)}", texto)),
+            (r"\bxiaomi\s+redmi\s+note\s+(\d{1,2}[a-z]?)\b", lambda m: self.with_storage(f"XIAOMI REDMI NOTE {m.group(1).upper()}", texto)),
+            (r"\bredmi\s+note\s+(\d{1,2}[a-z]?)\b", lambda m: self.with_storage(f"XIAOMI REDMI NOTE {m.group(1).upper()}", texto)),
+            (r"\bxiaomi\s+redmi\s+(\d{1,2}[a-z]?)\b", lambda m: self.with_storage(f"XIAOMI REDMI {m.group(1).upper()}", texto)),
+            (r"\bredmi\s+(\d{1,2}[a-z]?)\b", lambda m: self.with_storage(f"XIAOMI REDMI {m.group(1).upper()}", texto)),
+            (r"\bpoco\s+([a-z]+\d*[a-z]*)\b", lambda m: self.with_storage(f"POCO {m.group(1).upper()}", texto)),
+            (r"\bmoto\s+([a-z]+\d*[a-z]*)\b", lambda m: self.with_storage(f"MOTO {m.group(1).upper()}", texto)),
             (r"\bremington\b.*?\b([a-z]{1,4}\d{2,5}[a-z]*)\b", lambda m: f"REMINGTON {m.group(1).upper()}"),
         ]
 
@@ -384,6 +387,59 @@ class MySQLPipeline:
         if marca_limpia:
             return f"{marca_limpia} {base}".strip()
         return base or nombre.upper().strip()
+
+    def extract_iphone_group(self, texto):
+        """
+        Agrupa por modelo + línea + capacidad.
+        El color queda fuera (variante); CPO / usado sí separa el grupo.
+        Ej: IPHONE 13 128GB | IPHONE 13 PRO 256GB CPO
+        """
+        m = re.search(
+            r"\biphone\s+(\d{1,2})\s*(pro\s*max|pro|plus|mini|air|e)?\b",
+            texto,
+        )
+        if not m:
+            return None
+
+        parts = ["IPHONE", m.group(1)]
+        line = re.sub(r"\s+", " ", (m.group(2) or "").strip()).upper()
+        if line:
+            parts.append(line)
+
+        storage = self.extract_storage_capacity(texto)
+        if storage:
+            parts.append(storage)
+
+        if re.search(r"\b(cpo|reacondicionad\w*|refurbished|usado|seminuevo)\b", texto):
+            parts.append("CPO")
+
+        return " ".join(parts)
+
+    def extract_storage_capacity(self, texto):
+        tb = re.search(r"\b(\d+)\s*tb\b", texto)
+        if tb:
+            return f"{tb.group(1)}TB"
+
+        ram_storage = re.search(r"\b(\d{1,2})\s*[+/x]\s*(\d{2,4})\s*gb\b", texto)
+        if ram_storage:
+            return f"{ram_storage.group(2)}GB"
+
+        ram_storage_alt = re.search(r"\b(\d{1,2})\+(\d{2,4})\s*gb\b", texto)
+        if ram_storage_alt:
+            return f"{ram_storage_alt.group(2)}GB"
+
+        nums = [int(x) for x in re.findall(r"\b(\d{2,4})\s*gb\b", texto)]
+        storage = [n for n in nums if n >= 32]
+        if storage:
+            return f"{max(storage)}GB"
+
+        return None
+
+    def with_storage(self, label, texto):
+        storage = self.extract_storage_capacity(texto)
+        if storage:
+            return f"{label} {storage}".strip()
+        return label
 
     def extract_tv_group(self, texto, marca=""):
         if "tv" not in texto and "televisor" not in texto:
@@ -620,6 +676,11 @@ class MySQLPipeline:
             "dorado", "ngo", "en", "stock", "disponible", "oferta", "ofertas",
             "secador", "de", "pelo", "mod", "con", "para", "y", "incluido",
             "incluida", "incluye", "c",
+            # Colores genéricos (el modelo/capacidad del grupo no depende de estos)
+            "black", "white", "blue", "red", "green", "gray", "grey", "gold",
+            "silver", "pink", "purple", "yellow", "orange", "rosa", "lila",
+            "morado", "celeste", "plateado", "negra", "blanca",
+            "starlight", "ultramarine", "midnight", "graphite",
         ]
 
         for palabra in basura:

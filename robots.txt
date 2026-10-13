@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /go.php
+Disallow: /event.php
+Disallow: /admin
+Disallow: /analytics.php

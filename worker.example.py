@@ -15,6 +15,7 @@ DB_CONFIG = {
 POLL_SECONDS = 3
 CHECK_CANCEL_SECONDS = 1
 PROCESS_TIMEOUT_SECONDS = None  # Ej: 3600 para 1 hora
+MAX_OUTPUT_CHARS = 1_000_000
 
 
 def get_connection():
@@ -129,9 +130,19 @@ def kill_process(process):
 def read_file_safely(path):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return f.read().strip()
+            return trim_output(f.read().strip())
     except Exception as e:
         return f"[Worker] No se pudo leer log temporal: {e}"
+
+
+def trim_output(text):
+    # Un log enorme supera max_allowed_packet de MySQL y la tarea termina en error
+    if len(text) <= MAX_OUTPUT_CHARS:
+        return text
+    head = text[:MAX_OUTPUT_CHARS // 4]
+    tail = text[-(MAX_OUTPUT_CHARS - len(head)):]
+    omitted = len(text) - len(head) - len(tail)
+    return f"{head}\n\n[Worker] ... {omitted} caracteres omitidos ...\n\n{tail}"
 
 
 def run_job(job):

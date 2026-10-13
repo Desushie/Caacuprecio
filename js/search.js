@@ -17,10 +17,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!form || !input || !suggestBox) return;
 
+    const suggestHost = input.closest('.search-dock-field, .search-input-col, .search-autocomplete-wrap') || input.parentElement;
+
+    function openSuggest() {
+      suggestBox.classList.remove('d-none');
+      suggestBox.classList.add('is-open');
+      if (suggestHost) suggestHost.classList.add('is-suggesting');
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeSuggest() {
+      suggestBox.classList.remove('is-open');
+      suggestBox.classList.add('d-none');
+      if (suggestHost) suggestHost.classList.remove('is-suggesting');
+      input.setAttribute('aria-expanded', 'false');
+    }
+
     let suggestTimer = null;
     let liveTimer = null;
     let lastQuery = '';
     let requestId = 0;
+    let liveRequestId = 0;
+    const livePanel = liveBox ? liveBox.closest('[data-live-panel]') : null;
+    const liveTileWash = ['#8ba4c4', '#c9a87a', '#c48b8e', '#8fad97', '#a89bc4', '#7eb8b0', '#c4a88b', '#9bb0c9'];
 
     input.addEventListener('focus', () => loadSuggestions(input.value.trim()));
 
@@ -38,8 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('click', (e) => {
       if (!root.contains(e.target)) {
-        suggestBox.classList.remove('is-open');
-        suggestBox.classList.add('d-none');
+        closeSuggest();
       }
     });
 
@@ -53,8 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const value = item.getAttribute('data-search-value') || '';
       input.value = value;
-      suggestBox.classList.remove('is-open');
-      suggestBox.classList.add('d-none');
+      closeSuggest();
 
       if (item.dataset.searchAction === 'submit') {
         trackSearch(value);
@@ -90,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadLiveResults(q) {
       if (!liveBox) return;
 
-      const currentId = ++requestId;
+      const currentId = ++liveRequestId;
       const params = new URLSearchParams({
         mode: 'live',
         q,
@@ -103,15 +120,18 @@ document.addEventListener('DOMContentLoaded', () => {
         stateBox.textContent = q ? 'Buscando...' : 'Mostrando resultados recientes...';
       }
 
+      setLiveLoading(true);
+
       try {
         const res = await fetch(`${endpoint}?${params.toString()}`, {
           headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await res.json();
-        if (currentId !== requestId) return;
+        if (currentId !== liveRequestId) return;
         renderLiveResults(data, q);
       } catch (err) {
         console.error('Error búsqueda en vivo', err);
+        if (currentId === liveRequestId) setLiveLoading(false);
         if (stateBox) {
           stateBox.textContent = 'No se pudo actualizar la búsqueda en vivo.';
         }
@@ -149,34 +169,64 @@ document.addEventListener('DOMContentLoaded', () => {
       if (history.length) {
         html += sectionTitle('Tu historial');
         history.forEach(item => {
-          html += itemRow('bi-clock-history', item.label, item.meta);
+          html += itemRow('history', item.label, item.meta);
         });
       }
 
       if (trending.length) {
         html += sectionTitle('Más buscados');
         trending.forEach(item => {
-          html += itemRow('bi-fire', item.label, item.meta);
+          html += itemRow('flame', item.label, item.meta);
         });
       }
 
       if (q) {
-        html += `<button type="button" class="search-suggest-submit" data-search-value="${escapeHtml(q)}" data-search-action="submit"><i class="bi bi-search me-2"></i>Buscar "${escapeHtml(q)}"</button>`;
+        html += `<button type="button" class="search-suggest-submit" data-search-value="${escapeHtml(q)}" data-search-action="submit">
+          <span class="search-suggest-icon" aria-hidden="true"><i data-lucide="search"></i></span>
+          <span class="search-suggest-copy">
+            <span class="search-suggest-label">Buscar “${escapeHtml(q)}”</span>
+            <span class="search-suggest-meta">Ver todos los resultados</span>
+          </span>
+          <span class="search-suggest-go" aria-hidden="true"><i data-lucide="arrow-right"></i></span>
+        </button>`;
       }
 
       if (!html) {
-        html = '<div class="search-suggest-empty">Empezá a escribir para ver sugerencias.</div>';
+        html = '<div class="search-suggest-empty">Empieza a escribir para ver sugerencias.</div>';
       }
 
       suggestBox.innerHTML = html;
-      suggestBox.classList.remove('d-none');
-      suggestBox.classList.add('is-open');
+      openSuggest();
+      if (window.refreshLucideIcons) refreshLucideIcons();
+    }
+
+    function setLiveLoading(isLoading) {
+      if (!livePanel) return;
+
+      livePanel.classList.toggle('is-loading', isLoading);
+      livePanel.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+
+      if (isLoading && !liveBox.querySelector('.sr-card')) {
+        liveBox.innerHTML = Array.from({ length: 4 }, () => `
+          <div class="hl-skeleton" aria-hidden="true">
+            <span class="hl-skeleton-media"></span>
+            <span class="hl-skeleton-line is-short"></span>
+            <span class="hl-skeleton-line"></span>
+            <span class="hl-skeleton-line is-price"></span>
+          </div>
+        `).join('');
+      }
     }
 
     function renderLiveResults(data, q) {
       if (!liveBox) return;
 
       const items = Array.isArray(data.items) ? data.items : [];
+
+      if (livePanel) {
+        renderLiveBoard(items, q);
+        return;
+      }
 
       if (countBox) {
         countBox.textContent = `${items.length} resultado(s) en vista rápida`;
@@ -213,32 +263,150 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    function renderLiveBoard(items, q) {
+      const searchUrl = 'buscar.php' + (q ? `?q=${encodeURIComponent(q)}` : '');
+      const prices = items.map(item => Number(item.precio_raw) || 0).filter(price => price > 0);
+      const offers = items.reduce((total, item) => total + (Number(item.ofertas) || 0), 0);
+      const inStock = items.filter(item => item.en_stock).length;
+
+      setLiveStat('results', String(items.length));
+      setLiveStat('price', prices.length ? formatGs(Math.min(...prices)) : '—');
+      setLiveStat('offers', formatNumber(offers));
+      setLiveStat('stock', String(inStock));
+      const queryLabel = livePanel.querySelector('[data-live-query]');
+      if (queryLabel) queryLabel.textContent = q ? `“${q}”` : 'tu búsqueda';
+
+      const allLink = livePanel.querySelector('[data-live-all]');
+      if (allLink) allLink.setAttribute('href', searchUrl);
+
+      setLiveLoading(false);
+      livePanel.classList.toggle('is-empty', !items.length);
+
+      if (!items.length) {
+        liveBox.innerHTML = `
+          <div class="hl-empty">
+            <span class="hl-empty-icon" aria-hidden="true"><i data-lucide="search-x"></i></span>
+            <div class="hl-empty-copy">
+              <h3 class="hl-empty-title">Sin coincidencias para “${escapeHtml(q)}”</h3>
+              <p>Revisá la ortografía o probá con una marca, una categoría o el nombre de una tienda.</p>
+            </div>
+            <a class="hl-empty-link" href="${escapeHtml(searchUrl)}">
+              Buscar en todo el catálogo
+              <i data-lucide="arrow-right"></i>
+            </a>
+          </div>
+        `;
+        if (stateBox) stateBox.textContent = 'Sin coincidencias.';
+        if (window.refreshLucideIcons) refreshLucideIcons();
+        return;
+      }
+
+      liveBox.innerHTML = items.map((item, index) => {
+        const name = item.nombre || 'Producto';
+        const url = escapeHtml(appendQueryToUrl(item.url || '#', q));
+        const offersCount = Number(item.ofertas) || 0;
+        const stock = Boolean(item.en_stock);
+        const media = item.imagen
+          ? `<img src="${escapeHtml(item.imagen)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.onerror=null;if(window.applyProductImageFallback){applyProductImageFallback(this);}else{this.style.display='none';}">`
+          : `<span class="img-fallback" role="img" aria-label="${escapeHtml(name)}"><i data-lucide="image"></i></span>`;
+
+        return `
+          <article
+            class="sr-card clickable-card hl-card"
+            data-tone="${stock ? 'stock' : 'wait'}"
+            style="--tile-wash: ${liveTileWash[index % liveTileWash.length]}; --hl-delay: ${index * 40}ms;"
+            data-card-href="${url}"
+            role="link"
+            tabindex="0"
+            aria-label="Comparar ${escapeHtml(name)}"
+          >
+            <a class="sr-card-media" href="${url}">
+              ${media}
+              <span class="sr-card-index">${String(index + 1).padStart(2, '0')}</span>
+              <span class="sr-card-flag ${stock ? 'is-stock' : 'is-wait'}">${stock ? 'Stock' : 'Consultar'}</span>
+            </a>
+            <div class="sr-card-body">
+              <div class="sr-card-tags">
+                <span class="sr-card-cat">${escapeHtml(item.categoria || 'Sin categoría')}</span>
+                ${item.marca ? `<span class="sr-card-brand">${escapeHtml(item.marca)}</span>` : ''}
+              </div>
+              <h3 class="sr-card-name"><a href="${url}">${highlightMatch(name, q)}</a></h3>
+              <div class="sr-card-priceblock">
+                <div>
+                  <p class="sr-card-from">Desde</p>
+                  <p class="sr-card-price">${escapeHtml(item.precio_fmt || item.precio || '')}</p>
+                </div>
+              </div>
+              <div class="sr-card-foot">
+                <span class="sr-card-fresh">
+                  <i data-lucide="store"></i>
+                  ${offersCount} oferta${offersCount === 1 ? '' : 's'}
+                </span>
+                <a class="sr-card-cta" href="${url}">
+                  Comparar
+                  <i data-lucide="arrow-right"></i>
+                </a>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      if (stateBox) stateBox.textContent = `${items.length} resultado(s) actualizados.`;
+      if (window.refreshLucideIcons) refreshLucideIcons();
+    }
+
+    function setLiveStat(key, value) {
+      const node = livePanel.querySelector(`[data-live-stat="${key}"]`);
+      if (node) node.textContent = value;
+    }
+
+    function formatNumber(value) {
+      return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function formatGs(value) {
+      return 'Gs. ' + formatNumber(value);
+    }
+
+    function highlightMatch(text, q) {
+      const needle = (q || '').trim();
+      if (needle.length < 2) return escapeHtml(text);
+
+      const pattern = new RegExp(`(${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return String(text).split(pattern).map((part, i) => (
+        i % 2 ? `<mark class="hl-mark">${escapeHtml(part)}</mark>` : escapeHtml(part)
+      )).join('');
+    }
+
     function itemRow(icon, label, meta) {
+      const tone = icon === 'flame' ? 'hot' : (icon === 'history' ? 'history' : 'hit');
       return `
-        <button type="button" class="search-suggest-item" data-search-value="${escapeHtml(label || '')}">
-          <span class="search-suggest-icon"><i class="bi ${escapeHtml(icon)}"></i></span>
+        <button type="button" class="search-suggest-item" data-tone="${tone}" data-search-value="${escapeHtml(label || '')}">
+          <span class="search-suggest-icon" aria-hidden="true"><i data-lucide="${escapeHtml(icon)}"></i></span>
           <span class="search-suggest-copy">
-            <strong>${escapeHtml(label || '')}</strong>
-            ${meta ? `<small>${escapeHtml(meta)}</small>` : ''}
+            <span class="search-suggest-label">${escapeHtml(label || '')}</span>
+            ${meta ? `<span class="search-suggest-meta">${escapeHtml(meta)}</span>` : ''}
           </span>
+          <span class="search-suggest-go" aria-hidden="true"><i data-lucide="corner-down-left"></i></span>
         </button>
       `;
     }
 
     function sectionTitle(text) {
-      return `<div class="search-suggest-section">${escapeHtml(text)}</div>`;
+      return `<div class="search-suggest-section"><span>${escapeHtml(text)}</span></div>`;
     }
 
     function iconByType(type) {
       switch (type) {
-        case 'producto': return 'bi-box-seam';
-        case 'marca': return 'bi-bookmark-star';
-        case 'categoria': return 'bi-grid';
-        case 'tienda': return 'bi-shop';
+        case 'producto': return 'package';
+        case 'marca': return 'bookmark';
+        case 'categoria': return 'layout-grid';
+        case 'tienda': return 'store';
         case 'popular':
-        case 'trending': return 'bi-fire';
-        case 'history': return 'bi-clock-history';
-        default: return 'bi-search';
+        case 'trending': return 'flame';
+        case 'history': return 'history';
+        default: return 'search';
       }
     }
 

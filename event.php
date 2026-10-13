@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/tracking.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -20,12 +21,27 @@ if (!$data) {
     $data = $_POST;
 }
 
+const CP_EVENT_ACTIONS = ['view', 'search_click', 'product_click'];
+const CP_EVENT_SOURCES = ['inicio', 'producto', 'buscar', 'busqueda', 'tienda', 'favoritos'];
+const CP_EVENT_SOURCE_ALIASES = ['index' => 'inicio'];
+const CP_EVENT_CLICK_TYPES = ['ir_oferta', 'ir_mejor_oferta'];
+
 $action = trim((string) ($data['action'] ?? ''));
+$action = in_array($action, CP_EVENT_ACTIONS, true) ? $action : '';
 $productId = (int) ($data['product_id'] ?? 0);
-$term = trim((string) ($data['term'] ?? ''));
-$source = trim((string) ($data['source'] ?? ''));
-$clickType = trim((string) ($data['click_type'] ?? ''));
+$term = mb_substr(trim((string) ($data['term'] ?? '')), 0, 255, 'UTF-8');
+
+$source = mb_strtolower(trim((string) ($data['source'] ?? '')), 'UTF-8');
+$source = CP_EVENT_SOURCE_ALIASES[$source] ?? $source;
+$source = in_array($source, CP_EVENT_SOURCES, true) ? $source : '';
+
+$clickType = mb_strtolower(trim((string) ($data['click_type'] ?? '')), 'UTF-8');
+$clickType = in_array($clickType, CP_EVENT_CLICK_TYPES, true) ? $clickType : '';
+
 $targetUrl = trim((string) ($data['target_url'] ?? ''));
+if (mb_strlen($targetUrl, 'UTF-8') > 500 || !preg_match('#^https?://#i', $targetUrl)) {
+    $targetUrl = '';
+}
 
 $pdo = db();
 $userId = function_exists('current_user_id') ? current_user_id() : 0;
@@ -179,6 +195,14 @@ if ($action === '' || $productId <= 0) {
 $viewTracked = false;
 $searchClickTracked = false;
 $productClickTracked = false;
+
+$allowed = $action === 'product_click'
+    ? cp_should_track('clicks', 30)
+    : cp_should_track('views', 60);
+
+if (!$allowed) {
+    $action = 'ignored';
+}
 
 if ($action === 'view') {
     $viewTracked = cp_insert_product_view($pdo, $productId, $userId, $sessionId);
