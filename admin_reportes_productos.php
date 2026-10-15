@@ -422,7 +422,7 @@ render_head('Gestión de productos reportados');
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page rp-page" aria-labelledby="rp-title">
+<section class="dash-page rp-page" aria-labelledby="rp-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -441,9 +441,9 @@ render_head('Gestión de productos reportados');
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel rp-desk animate-reveal-up">
+      <header class="dash-panel rp-desk animate-reveal-up">
         <div class="rp-desk-top">
           <div class="rp-intro">
             <div class="rp-intro-head">
@@ -575,12 +575,12 @@ render_head('Gestión de productos reportados');
         </div>
       </header>
 
-      <section class="ad-panel rp-queue animate-reveal-up" aria-labelledby="rp-list-title" style="--lane-accent: <?= RP_ESTADOS[$status]['tone'] ?>">
-        <header class="ad-panel-head rp-queue-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon(RP_ESTADOS[$status]['icon'], '', 18) ?></span>
+      <section class="dash-panel rp-queue animate-reveal-up" aria-labelledby="rp-list-title" style="--lane-accent: <?= RP_ESTADOS[$status]['tone'] ?>">
+        <header class="dash-panel-head rp-queue-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon(RP_ESTADOS[$status]['icon'], '', 18) ?></span>
           <div>
-            <h2 id="rp-list-title" class="ad-panel-title">Fichas en revisión</h2>
-            <p class="ad-panel-caption">
+            <h2 id="rp-list-title" class="dash-panel-title">Fichas en revisión</h2>
+            <p class="dash-panel-caption">
               <?php if ($productGroups): ?>
                 <?= $fmt($resultTotal) ?> <?= $resultTotal === 1 ? 'producto' : 'productos' ?> · por <?= e(mb_strtolower(RP_ORDENES[$order]['label'])) ?>
               <?php else: ?>
@@ -985,12 +985,12 @@ render_head('Gestión de productos reportados');
 
 <div class="modal fade" id="rpAlertsModal" tabindex="-1" aria-labelledby="rp-alerts-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content suggestion-modal report-product-modal ad-confirm rp-alerts-modal ar-reports-modal">
+    <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal">
       <div class="modal-header">
         <div class="report-product-heading">
           <span class="report-product-icon" aria-hidden="true"><?= lucide_icon('message-square-warning', '', 18) ?></span>
           <div class="report-product-heading-text">
-            <p class="ad-confirm-kicker">Moderación del catálogo</p>
+            <p class="dash-confirm-kicker">Moderación del catálogo</p>
             <h5 class="modal-title" id="rp-alerts-title">Alertas del producto</h5>
             <p class="report-product-lead" data-rp-alerts="summary"></p>
           </div>
@@ -1020,7 +1020,7 @@ render_head('Gestión de productos reportados');
 
 <div class="modal fade" id="rpHideModal" tabindex="-1" aria-labelledby="rp-hide-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <form method="post" class="modal-content suggestion-modal report-product-modal ad-confirm">
+    <form method="post" class="modal-content suggestion-modal report-product-modal dash-confirm">
       <input type="hidden" name="action" value="hide_product">
       <input type="hidden" name="product_id" value="" data-rp-hide="id">
 
@@ -1028,7 +1028,7 @@ render_head('Gestión de productos reportados');
         <div class="report-product-heading">
           <span class="report-product-icon" aria-hidden="true"><?= lucide_icon('eye-off', '', 18) ?></span>
           <div class="report-product-heading-text">
-            <p class="ad-confirm-kicker">Moderación del catálogo</p>
+            <p class="dash-confirm-kicker">Moderación del catálogo</p>
             <h5 class="modal-title" id="rp-hide-title">¿Retirar este producto?</h5>
             <p class="report-product-lead">Esta acción se puede deshacer.</p>
           </div>
@@ -1037,21 +1037,21 @@ render_head('Gestión de productos reportados');
       </div>
 
       <div class="modal-body">
-        <div class="ad-confirm-item">
-          <span class="ad-confirm-media" data-rp-hide="shot" aria-hidden="true">
+        <div class="dash-confirm-item">
+          <span class="dash-confirm-media" data-rp-hide="shot" aria-hidden="true">
             <?= lucide_icon('image-off', '', 22) ?>
           </span>
-          <div class="ad-confirm-copy">
-            <p class="ad-confirm-name" data-rp-hide="name"></p>
-            <div class="ad-confirm-meta">
-              <strong class="ad-confirm-price" data-rp-hide="price"></strong>
+          <div class="dash-confirm-copy">
+            <p class="dash-confirm-name" data-rp-hide="name"></p>
+            <div class="dash-confirm-meta">
+              <strong class="dash-confirm-price" data-rp-hide="price"></strong>
               <span><?= lucide_icon('store', '', 13) ?><span data-rp-hide="store"></span></span>
               <span><?= lucide_icon('hash', '', 13) ?><span data-rp-hide="label"></span></span>
             </div>
           </div>
         </div>
 
-        <ul class="ad-confirm-list">
+        <ul class="dash-confirm-list">
           <li>
             <?= lucide_icon('search-x', '', 16) ?>
             <span>Deja de aparecer en <strong>búsquedas y comparaciones</strong>.</span>

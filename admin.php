@@ -301,7 +301,7 @@ render_head('Panel de Administración');
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page" aria-labelledby="ad-title">
+<section class="dash-page" aria-labelledby="dash-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -317,38 +317,38 @@ render_head('Panel de Administración');
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel ad-intro animate-reveal-up">
-        <div class="ad-intro-main">
-          <div class="ad-intro-copy">
-            <div class="ad-intro-bar">
-              <span class="ad-intro-tag">
+      <header class="dash-panel dash-intro animate-reveal-up">
+        <div class="dash-intro-main">
+          <div class="dash-intro-copy">
+            <div class="dash-intro-bar">
+              <span class="dash-intro-tag">
                 <?= lucide_icon($greetIcon, '', 14) ?>
                 <?= e($greeting . ($firstName !== '' ? ', ' . $firstName : '')) ?>
-                <span class="ad-intro-role"><?= $isEmpresa ? 'Empresa' : 'Administrador' ?></span>
+                <span class="dash-intro-role"><?= $isEmpresa ? 'Empresa' : 'Administrador' ?></span>
               </span>
-              <span class="ad-live <?= $liveTone ?>"<?php if ($lastTouch): ?> title="<?= e(date('d/m/Y H:i', strtotime($lastTouch['at']))) ?>"<?php endif; ?>>
-                <span class="ad-dot" aria-hidden="true"></span>
+              <span class="dash-live <?= $liveTone ?>"<?php if ($lastTouch): ?> title="<?= e(date('d/m/Y H:i', strtotime($lastTouch['at']))) ?>"<?php endif; ?>>
+                <span class="dash-dot" aria-hidden="true"></span>
                 <?= $lastTouch ? 'Última ' . e($lastTouch['label']) . ' ' . e(ad_time_ago($lastTouch['at'])) : 'Sin interacciones registradas' ?>
               </span>
           </div>
 
-          <div class="ad-id">
+          <div class="dash-id">
             <?php if ($isEmpresa && $myStore): ?>
-              <img src="<?= e(image_url($myStore['tie_logo'], $myStore['tie_nombre'])) ?>" alt="" class="ad-id-logo">
+              <img src="<?= e(image_url($myStore['tie_logo'], $myStore['tie_nombre'])) ?>" alt="" class="dash-id-logo">
             <?php endif; ?>
-            <h1 id="ad-title" class="ad-title">
+            <h1 id="dash-title" class="dash-title">
               <?= $isEmpresa ? e($myStore['tie_nombre'] ?? 'Panel de empresa') : 'Panel de control' ?>
             </h1>
           </div>
 
-          <p class="ad-lead">
+          <p class="dash-lead">
             <?php if ($weekTotal > 0): ?>
               En los últimos 7 días <?= $isEmpresa ? 'tus productos recibieron' : 'el sitio recibió' ?> <?= $weekSummary ?>.
               <?php if ($prevWeekTotal > 0): ?>
                 En total,
-                <span class="ad-trend <?= $weekDiff > 0 ? 'is-up' : ($weekDiff < 0 ? 'is-down' : '') ?>" title="Semana anterior: <?= $fmt($prevWeekTotal) ?> interacciones"><?= lucide_icon($weekDiff > 0 ? 'trending-up' : ($weekDiff < 0 ? 'trending-down' : 'equal'), '', 13) ?><?= $weekDiff === 0 ? 'igual' : $fmt(abs($weekDiff)) . ($weekDiff > 0 ? ' más' : ' menos') ?></span> que la semana anterior.
+                <span class="dash-trend <?= $weekDiff > 0 ? 'is-up' : ($weekDiff < 0 ? 'is-down' : '') ?>" title="Semana anterior: <?= $fmt($prevWeekTotal) ?> interacciones"><?= lucide_icon($weekDiff > 0 ? 'trending-up' : ($weekDiff < 0 ? 'trending-down' : 'equal'), '', 13) ?><?= $weekDiff === 0 ? 'igual' : $fmt(abs($weekDiff)) . ($weekDiff > 0 ? ' más' : ' menos') ?></span> que la semana anterior.
               <?php endif; ?>
             <?php else: ?>
               En los últimos 7 días todavía no hubo visitas, clics ni favoritos.
@@ -356,17 +356,17 @@ render_head('Panel de Administración');
           </p>
           </div>
 
-          <section class="ad-checks" aria-label="Para revisar en el catálogo">
-            <ul class="ad-check-list">
+          <section class="dash-checks" aria-label="Para revisar en el catálogo">
+            <ul class="dash-check-list">
               <?php foreach ($checks as $check): ?>
                 <li>
-                  <a href="<?= e($check['href']) ?>" class="ad-check <?= $check['count'] === 0 ? 'is-clear' : '' ?>" style="--c-c: <?= $check['color'] ?>">
-                    <span class="ad-check-top">
-                      <span class="ad-check-icon" aria-hidden="true"><?= lucide_icon($check['count'] === 0 ? 'check' : $check['icon'], '', 15) ?></span>
-                      <span class="ad-check-count"><?= $fmt($check['count']) ?></span>
+                  <a href="<?= e($check['href']) ?>" class="dash-check <?= $check['count'] === 0 ? 'is-clear' : '' ?>" style="--c-c: <?= $check['color'] ?>">
+                    <span class="dash-check-top">
+                      <span class="dash-check-icon" aria-hidden="true"><?= lucide_icon($check['count'] === 0 ? 'check' : $check['icon'], '', 15) ?></span>
+                      <span class="dash-check-count"><?= $fmt($check['count']) ?></span>
                     </span>
-                    <strong class="ad-check-title"><?= e($check['title']) ?></strong>
-                    <small class="ad-check-desc"><?= e($check['desc']) ?></small>
+                    <strong class="dash-check-title"><?= e($check['title']) ?></strong>
+                    <small class="dash-check-desc"><?= e($check['desc']) ?></small>
                   </a>
                 </li>
               <?php endforeach; ?>
@@ -374,11 +374,11 @@ render_head('Panel de Administración');
           </section>
         </div>
 
-        <aside class="ad-peak" aria-labelledby="ad-peak-title">
-          <div class="ad-peak-top">
-            <div class="ad-peak-head">
-              <span id="ad-peak-title" class="ad-peak-label"><?= lucide_icon('alarm-clock', '', 14) ?>Hora pico de la semana</span>
-              <p class="ad-peak-value">
+        <aside class="dash-peak" aria-labelledby="dash-peak-title">
+          <div class="dash-peak-top">
+            <div class="dash-peak-head">
+              <span id="dash-peak-title" class="dash-peak-label"><?= lucide_icon('alarm-clock', '', 14) ?>Hora pico de la semana</span>
+              <p class="dash-peak-value">
                 <?php if ($bestHour !== null): ?>
                   <?= sprintf('%02d', $bestHour) ?><small>:00 h</small>
                 <?php else: ?>
@@ -387,29 +387,29 @@ render_head('Panel de Administración');
               </p>
           </div>
 
-          <div class="ad-peak-bars" role="img" aria-label="Interacciones acumuladas por hora del día">
+          <div class="dash-peak-bars" role="img" aria-label="Interacciones acumuladas por hora del día">
             <?php foreach ($hourTotals as $h => $value): ?>
               <span class="<?= $h === $bestHour ? 'is-peak' : '' ?><?= $value === 0 ? ' is-zero' : '' ?>" style="--h: <?= $value > 0 ? max(12, (int) round($value / $hourPeak * 100)) : 6 ?>%" title="<?= e(sprintf('%02d:00 · %s %s', $h, $fmt($value), $value === 1 ? 'interacción' : 'interacciones')) ?>"></span>
             <?php endforeach; ?>
           </div>
-          <div class="ad-peak-axis" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
+          <div class="dash-peak-axis" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
           </div>
 
-          <div class="ad-peak-foot">
-            <ul class="ad-peak-legend">
+          <div class="dash-peak-foot">
+            <ul class="dash-peak-legend">
               <li style="--l-c: var(--success)">
-                <span><i class="ad-peak-ico" aria-hidden="true"><?= lucide_icon('calendar-check', '', 13) ?></i>Mejor día</span>
+                <span><i class="dash-peak-ico" aria-hidden="true"><?= lucide_icon('calendar-check', '', 13) ?></i>Mejor día</span>
                 <strong><?= $bestDay !== null ? ($bestDay === $todayDate ? 'Hoy' : e(ucfirst($dayLong[(int) date('w', strtotime($bestDay))]))) : '—' ?></strong>
                 <small><?= $bestDay !== null ? $fmt($dayTotals[$bestDay]) : '0' ?></small>
               </li>
               <li style="--l-c: var(--accent-2)">
-                <span><i class="ad-peak-ico" aria-hidden="true"><?= lucide_icon('moon', '', 13) ?></i>Día más tranquilo</span>
+                <span><i class="dash-peak-ico" aria-hidden="true"><?= lucide_icon('moon', '', 13) ?></i>Día más tranquilo</span>
                 <strong><?= $quietDay !== null ? ($quietDay === $todayDate ? 'Hoy' : e(ucfirst($dayLong[(int) date('w', strtotime($quietDay))]))) : '—' ?></strong>
                 <small><?= $quietDay !== null ? $fmt($dayTotals[$quietDay]) : '0' ?></small>
               </li>
             </ul>
 
-            <p class="ad-peak-note">
+            <p class="dash-peak-note">
               <?= lucide_icon('lightbulb', '', 15) ?>
               <?php if ($bestHour === null): ?>
                 <span>Sin datos para sugerir un horario</span>
@@ -421,19 +421,19 @@ render_head('Panel de Administración');
         </aside>
       </header>
 
-      <div class="ad-grid">
+      <div class="dash-grid">
 
-        <section class="ad-panel ad-people animate-reveal-up" aria-labelledby="ad-people-title" style="--lane-accent: var(--success)">
-          <header class="ad-panel-head">
-            <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('users-round', '', 18) ?></span>
+        <section class="dash-panel dash-people animate-reveal-up" aria-labelledby="dash-people-title" style="--lane-accent: var(--success)">
+          <header class="dash-panel-head">
+            <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('users-round', '', 18) ?></span>
             <div>
-              <h2 id="ad-people-title" class="ad-panel-title"><?= $isEmpresa ? 'Tus clientes' : 'Movimiento de la comunidad' ?></h2>
-              <p class="ad-panel-caption"><?= $isEmpresa ? 'Favoritos, reseñas y reportes sobre tu tienda' : 'Favoritos, reseñas, reportes y sugerencias' ?></p>
+              <h2 id="dash-people-title" class="dash-panel-title"><?= $isEmpresa ? 'Tus clientes' : 'Movimiento de la comunidad' ?></h2>
+              <p class="dash-panel-caption"><?= $isEmpresa ? 'Favoritos, reseñas y reportes sobre tu tienda' : 'Favoritos, reseñas, reportes y sugerencias' ?></p>
             </div>
           </header>
 
           <?php if ($community): ?>
-            <ol class="ad-trail" style="--trail-rows: <?= $feedLimit ?>">
+            <ol class="dash-trail" style="--trail-rows: <?= $feedLimit ?>">
               <?php foreach ($community as $ev): ?>
                 <?php
                   $type = $communityTypes[$ev['type']];
@@ -453,27 +453,27 @@ render_head('Panel de Administración');
                   }
                 ?>
                 <li>
-                  <a href="<?= e($href) ?>" class="ad-trail-row" style="--e-c: <?= $type['color'] ?>">
-                    <span class="ad-trail-icon" aria-hidden="true"><?= lucide_icon($type['icon'], '', 14) ?></span>
-                    <span class="ad-trail-copy">
-                      <span class="ad-trail-line"><strong><?= e($actor) ?></strong> <?= e($verb) ?></span>
-                      <span class="ad-trail-object" title="<?= e($object) ?>"><?= e($object) ?></span>
+                  <a href="<?= e($href) ?>" class="dash-trail-row" style="--e-c: <?= $type['color'] ?>">
+                    <span class="dash-trail-icon" aria-hidden="true"><?= lucide_icon($type['icon'], '', 14) ?></span>
+                    <span class="dash-trail-copy">
+                      <span class="dash-trail-line"><strong><?= e($actor) ?></strong> <?= e($verb) ?></span>
+                      <span class="dash-trail-object" title="<?= e($object) ?>"><?= e($object) ?></span>
                     </span>
-                    <span class="ad-trail-side">
+                    <span class="dash-trail-side">
                       <?php if ($ev['type'] === 'review'): ?>
-                        <span class="ad-trail-tag is-stars"><?= lucide_icon('star', '', 11) ?><?= (int) $ev['extra'] ?></span>
+                        <span class="dash-trail-tag is-stars"><?= lucide_icon('star', '', 11) ?><?= (int) $ev['extra'] ?></span>
                       <?php elseif ($motive !== null): ?>
-                        <span class="ad-trail-tag"><?= e($motive) ?></span>
+                        <span class="dash-trail-tag"><?= e($motive) ?></span>
                       <?php endif; ?>
                       <time datetime="<?= e(date('c', strtotime((string) $ev['fecha']))) ?>" title="<?= e(date('d/m/Y H:i', strtotime((string) $ev['fecha']))) ?>"><?= e(ad_time_ago($ev['fecha'])) ?></time>
                     </span>
-                    <?= lucide_icon('chevron-right', 'ad-trail-arrow', 15) ?>
+                    <?= lucide_icon('chevron-right', 'dash-trail-arrow', 15) ?>
                   </a>
                 </li>
               <?php endforeach; ?>
             </ol>
           <?php else: ?>
-            <div class="ad-empty">
+            <div class="dash-empty">
               <?= lucide_icon('users-round', '', 22) ?>
               <strong>Todavía sin movimiento</strong>
               <span>Cuando alguien guarde, califique o reporte, lo vas a ver aquí.</span>
@@ -481,12 +481,12 @@ render_head('Panel de Administración');
           <?php endif; ?>
         </section>
 
-        <section class="ad-panel ad-side ad-queue animate-reveal-up" aria-labelledby="ad-queue-title" style="--lane-accent: var(--danger)">
-          <header class="ad-panel-head">
-            <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('inbox', '', 18) ?></span>
+        <section class="dash-panel dash-side dash-queue animate-reveal-up" aria-labelledby="dash-queue-title" style="--lane-accent: var(--danger)">
+          <header class="dash-panel-head">
+            <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('inbox', '', 18) ?></span>
             <div>
-              <h2 id="ad-queue-title" class="ad-panel-title"><?= $isEmpresa ? 'Avisos de tu tienda' : 'Bandeja de moderación' ?></h2>
-              <p class="ad-panel-caption">
+              <h2 id="dash-queue-title" class="dash-panel-title"><?= $isEmpresa ? 'Avisos de tu tienda' : 'Bandeja de moderación' ?></h2>
+              <p class="dash-panel-caption">
                 <?php if ($pendingTotal > 0): ?>
                   <?= $isEmpresa ? 'Novedades que conviene mirar' : 'Elementos esperando tu revisión' ?>
                 <?php else: ?>
@@ -494,10 +494,10 @@ render_head('Panel de Administración');
                 <?php endif; ?>
               </p>
             </div>
-            <strong class="ad-queue-total"><?= $fmt($pendingTotal) ?></strong>
+            <strong class="dash-queue-total"><?= $fmt($pendingTotal) ?></strong>
           </header>
 
-          <div class="ad-stack" aria-hidden="true">
+          <div class="dash-stack" aria-hidden="true">
             <?php if ($pendingTotal > 0): ?>
               <?php foreach ($queue as $q): ?>
                 <?php if ($q['count'] > 0): ?>
@@ -509,39 +509,39 @@ render_head('Panel de Administración');
             <?php endif; ?>
           </div>
 
-          <ul class="ad-queue-list">
+          <ul class="dash-queue-list">
             <?php foreach ($queue as $q): ?>
               <li>
-                <a href="<?= e($q['href']) ?>" class="ad-queue-item" style="--q-c: <?= $q['color'] ?>">
-                  <span class="ad-queue-icon" aria-hidden="true"><?= lucide_icon($q['icon'], '', 16) ?></span>
-                  <span class="ad-queue-copy">
+                <a href="<?= e($q['href']) ?>" class="dash-queue-item" style="--q-c: <?= $q['color'] ?>">
+                  <span class="dash-queue-icon" aria-hidden="true"><?= lucide_icon($q['icon'], '', 16) ?></span>
+                  <span class="dash-queue-copy">
                     <strong><?= e($q['title']) ?></strong>
                     <span><?= e($q['desc']) ?></span>
                   </span>
-                  <span class="ad-count <?= $q['count'] === 0 ? 'is-zero' : '' ?>">
+                  <span class="dash-count <?= $q['count'] === 0 ? 'is-zero' : '' ?>">
                     <?= $fmt($q['count']) ?><span class="visually-hidden"> <?= $q['unit'] ?? 'pendientes' ?></span>
                   </span>
-                  <?= lucide_icon('chevron-right', 'ad-queue-arrow', 16) ?>
+                  <?= lucide_icon('chevron-right', 'dash-queue-arrow', 16) ?>
                 </a>
               </li>
             <?php endforeach; ?>
           </ul>
         </section>
 
-        <nav class="ad-panel ad-side ad-launch animate-reveal-up" aria-labelledby="ad-launch-title" style="--lane-accent: var(--accent)">
-          <header class="ad-panel-head">
-            <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('zap', '', 18) ?></span>
+        <nav class="dash-panel dash-side dash-launch animate-reveal-up" aria-labelledby="dash-launch-title" style="--lane-accent: var(--accent)">
+          <header class="dash-panel-head">
+            <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('zap', '', 18) ?></span>
             <div>
-              <h2 id="ad-launch-title" class="ad-panel-title">Accesos rápidos</h2>
-              <p class="ad-panel-caption">Herramientas de gestión</p>
+              <h2 id="dash-launch-title" class="dash-panel-title">Accesos rápidos</h2>
+              <p class="dash-panel-caption">Herramientas de gestión</p>
             </div>
           </header>
-          <ul class="ad-tools <?= count($tools) <= 4 ? 'is-compact' : '' ?>">
+          <ul class="dash-tools <?= count($tools) <= 4 ? 'is-compact' : '' ?>">
             <?php foreach ($tools as $tool): ?>
               <li>
-                <a href="<?= e($tool['href']) ?>" class="ad-tool" style="--t-c: <?= $tool['color'] ?>">
-                  <span class="ad-tool-icon" aria-hidden="true"><?= lucide_icon($tool['icon'], '', 17) ?></span>
-                  <span class="ad-tool-copy">
+                <a href="<?= e($tool['href']) ?>" class="dash-tool" style="--t-c: <?= $tool['color'] ?>">
+                  <span class="dash-tool-icon" aria-hidden="true"><?= lucide_icon($tool['icon'], '', 17) ?></span>
+                  <span class="dash-tool-copy">
                     <strong><?= e($tool['title']) ?></strong>
                     <span><?= e($tool['desc']) ?></span>
                   </span>
@@ -551,18 +551,18 @@ render_head('Panel de Administración');
           </ul>
         </nav>
 
-        <section class="ad-panel ad-activity animate-reveal-up" aria-labelledby="ad-activity-title" style="--lane-accent: var(--brand)">
-          <header class="ad-panel-head">
-            <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('activity', '', 18) ?></span>
+        <section class="dash-panel dash-activity animate-reveal-up" aria-labelledby="dash-activity-title" style="--lane-accent: var(--brand)">
+          <header class="dash-panel-head">
+            <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('activity', '', 18) ?></span>
             <div>
-              <h2 id="ad-activity-title" class="ad-panel-title">Actividad reciente</h2>
-              <p class="ad-panel-caption"><?= $isEmpresa ? 'Tus productos actualizados por última vez' : 'Últimos productos actualizados en el catálogo' ?></p>
+              <h2 id="dash-activity-title" class="dash-panel-title">Actividad reciente</h2>
+              <p class="dash-panel-caption"><?= $isEmpresa ? 'Tus productos actualizados por última vez' : 'Últimos productos actualizados en el catálogo' ?></p>
             </div>
-            <a href="admin_productos.php" class="ad-panel-link">Ver todos<?= lucide_icon('arrow-right', '', 14) ?></a>
+            <a href="admin_productos.php" class="dash-panel-link">Ver todos<?= lucide_icon('arrow-right', '', 14) ?></a>
           </header>
 
           <?php if ($latestProducts): ?>
-            <ul class="ad-feed <?= $isEmpresa ? 'is-own' : '' ?>">
+            <ul class="dash-feed <?= $isEmpresa ? 'is-own' : '' ?>">
               <?php foreach ($latestProducts as $item): ?>
                 <?php
                   $price = $item['pro_precio'] !== null ? (float) $item['pro_precio'] : null;
@@ -575,33 +575,33 @@ render_head('Panel de Administración');
                   $category = trim((string) ($item['cat_nombre'] ?? ''));
                   $updatedTs = strtotime((string) $item['pro_fecha_scraping']);
                 ?>
-                <li class="ad-feed-row">
-                  <img src="<?= e(image_url($item['pro_imagen'], $item['pro_nombre'])) ?>" alt="" class="ad-thumb" loading="lazy" decoding="async">
-                  <div class="ad-feed-main">
-                    <a href="producto.php?id=<?= (int) $item['idproductos'] ?>" class="ad-feed-name" title="<?= e($item['pro_nombre']) ?>"><?= e($item['pro_nombre']) ?></a>
-                    <ul class="ad-feed-meta">
+                <li class="dash-feed-row">
+                  <img src="<?= e(image_url($item['pro_imagen'], $item['pro_nombre'])) ?>" alt="" class="dash-thumb" loading="lazy" decoding="async">
+                  <div class="dash-feed-main">
+                    <a href="producto.php?id=<?= (int) $item['idproductos'] ?>" class="dash-feed-name" title="<?= e($item['pro_nombre']) ?>"><?= e($item['pro_nombre']) ?></a>
+                    <ul class="dash-feed-meta">
                       <li title="Categoría"><?= lucide_icon('folder', '', 12) ?><span><?= $category !== '' ? e($category) : 'Sin categoría' ?></span></li>
                       <?php if ($brand !== '' && mb_strtolower($brand) !== 'genérico' && mb_strtolower($brand) !== 'generico'): ?>
                         <li title="Marca"><?= lucide_icon('tag', '', 12) ?><span><?= e($brand) ?></span></li>
                       <?php endif; ?>
                     </ul>
                   </div>
-                  <div class="ad-feed-facts">
+                  <div class="dash-feed-facts">
                     <?php if (!$isEmpresa): ?>
-                      <div class="ad-feed-field is-store">
+                      <div class="dash-feed-field is-store">
                         <small>Tienda</small>
                         <span title="<?= e($item['tie_nombre']) ?>"><?= lucide_icon('store', '', 13) ?><span><?= e($item['tie_nombre']) ?></span></span>
                       </div>
                     <?php endif; ?>
-                    <div class="ad-feed-field">
+                    <div class="dash-feed-field">
                       <small>Disponibilidad</small>
                       <?php if ($isHidden): ?>
-                        <span class="ad-pill is-warn"><?= lucide_icon('eye-off', '', 12) ?>Oculto</span>
+                        <span class="dash-pill is-warn"><?= lucide_icon('eye-off', '', 12) ?>Oculto</span>
                       <?php else: ?>
-                        <span class="ad-pill <?= $inStock ? 'is-in' : '' ?>"><span class="ad-stock <?= $inStock ? 'is-in' : '' ?>" aria-hidden="true"></span><?= e(stock_label($item['pro_en_stock'])) ?></span>
+                        <span class="dash-pill <?= $inStock ? 'is-in' : '' ?>"><span class="dash-stock <?= $inStock ? 'is-in' : '' ?>" aria-hidden="true"></span><?= e(stock_label($item['pro_en_stock'])) ?></span>
                       <?php endif; ?>
                     </div>
-                    <div class="ad-feed-field">
+                    <div class="dash-feed-field">
                       <small>Actualizado</small>
                       <?php if ($updatedTs): ?>
                         <time datetime="<?= e(date('c', $updatedTs)) ?>" title="<?= e(date('d/m/Y H:i', $updatedTs)) ?>"><?= lucide_icon('clock-3', '', 13) ?><span><?= e(ucfirst(ad_time_ago($item['pro_fecha_scraping']))) ?> <small><?= date('d/m', $updatedTs) ?></small></span></time>
@@ -610,26 +610,26 @@ render_head('Panel de Administración');
                       <?php endif; ?>
                     </div>
                   </div>
-                  <div class="ad-feed-price">
+                  <div class="dash-feed-price">
                     <strong><?= gs($item['pro_precio']) ?></strong>
                     <?php if ($off > 0): ?>
-                      <span class="ad-feed-change is-down" title="Antes: <?= e(gs($old)) ?>"><?= lucide_icon('arrow-down', '', 11) ?>Bajó <?= gs($old - $price) ?></span>
+                      <span class="dash-feed-change is-down" title="Antes: <?= e(gs($old)) ?>"><?= lucide_icon('arrow-down', '', 11) ?>Bajó <?= gs($old - $price) ?></span>
                     <?php elseif ($rise > 0): ?>
-                      <span class="ad-feed-change is-up" title="Antes: <?= e(gs($old)) ?>"><?= lucide_icon('arrow-up', '', 11) ?>Subió <?= gs($price - $old) ?></span>
+                      <span class="dash-feed-change is-up" title="Antes: <?= e(gs($old)) ?>"><?= lucide_icon('arrow-up', '', 11) ?>Subió <?= gs($price - $old) ?></span>
                     <?php elseif ($price === null): ?>
-                      <span class="ad-feed-change">Sin precio publicado</span>
+                      <span class="dash-feed-change">Sin precio publicado</span>
                     <?php else: ?>
-                      <span class="ad-feed-change">Sin cambio de precio</span>
+                      <span class="dash-feed-change">Sin cambio de precio</span>
                     <?php endif; ?>
                   </div>
-                  <a href="admin_productos.php?edit=<?= (int) $item['idproductos'] ?>" class="ad-icon-btn" title="Editar producto" aria-label="Editar <?= e($item['pro_nombre']) ?>">
+                  <a href="admin_productos.php?edit=<?= (int) $item['idproductos'] ?>" class="dash-icon-btn" title="Editar producto" aria-label="Editar <?= e($item['pro_nombre']) ?>">
                     <?= lucide_icon('square-pen', '', 15) ?>
                   </a>
                 </li>
               <?php endforeach; ?>
             </ul>
           <?php else: ?>
-            <div class="ad-empty">
+            <div class="dash-empty">
               <?= lucide_icon('package-open', '', 22) ?>
               <strong>Sin productos todavía</strong>
               <span><?= $isEmpresa ? 'Cuando cargues productos, vas a ver aquí sus últimas actualizaciones.' : 'Importa datos para empezar a poblar el catálogo.' ?></span>

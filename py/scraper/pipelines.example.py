@@ -2,9 +2,25 @@ import pymysql
 import re
 import unicodedata
 from itemadapter import ItemAdapter
+from scrapy import signals
 
 
 class MySQLPipeline:
+    # Si una corrida vio menos que esta fracción del catálogo activo de la
+    # tienda, se asume que algo falló y no se desactiva nada.
+    MIN_SEEN_RATIO = 0.5
+
+    def __init__(self, crawler=None):
+        self.crawler = crawler
+        self.seen_stores = set()
+        self.run_started = None
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls(crawler)
+        crawler.signals.connect(pipeline.spider_closed, signal=signals.spider_closed)
+        return pipeline
+
     def open_spider(self, spider=None):
         self.connection = pymysql.connect(
             host="localhost",
@@ -16,12 +32,83 @@ class MySQLPipeline:
             cursorclass=pymysql.cursors.Cursor,
         )
         self.cursor = self.connection.cursor()
+        self.cursor.execute("SELECT NOW()")
+        self.run_started = self.cursor.fetchone()[0]
 
     def close_spider(self, spider=None):
-        if getattr(self, "cursor", None):
-            self.cursor.close()
-        if getattr(self, "connection", None):
-            self.connection.close()
+        # La conexión se cierra en spider_closed, que es la señal que trae el
+        # motivo de cierre y se emite después de close_spider.
+        pass
+
+    def spider_closed(self, spider, reason):
+        try:
+            errors = self.crawler.stats.get_value("log_count/ERROR", 0) if self.crawler else 0
+            complete = reason == "finished" and not errors and bool(self.seen_stores)
+            if self.crawler:
+                self.crawler.stats.set_value("catalogo_completo", complete)
+
+            if complete:
+                for tienda_id in self.seen_stores:
+                    self.deactivate_unseen(tienda_id, spider)
+            elif spider:
+                spider.logger.warning(
+                    f"Corrida incompleta (motivo: {reason}, errores: {errors}); "
+                    "no se desactivan productos."
+                )
+        finally:
+            if getattr(self, "cursor", None):
+                self.cursor.close()
+            if getattr(self, "connection", None):
+                self.connection.close()
+
+    def deactivate_unseen(self, tienda_id, spider=None):
+        """Desactiva los productos que la tienda ya no publica: los que una
+        corrida completa no volvió a leer."""
+        self.cursor.execute(
+            """
+            SELECT COUNT(*), COALESCE(SUM(pro_fecha_scraping >= %s), 0)
+            FROM productos
+            WHERE tiendas_idtiendas = %s
+              AND pro_activo = 1
+            """,
+            (self.run_started, tienda_id),
+        )
+        activos, vistos = self.cursor.fetchone()
+        activos, vistos = int(activos), int(vistos)
+
+        if not activos or vistos < activos * self.MIN_SEEN_RATIO:
+            if spider:
+                spider.logger.warning(
+                    f"Solo se leyeron {vistos} de {activos} productos activos; "
+                    "no se desactiva nada por precaución."
+                )
+            return
+
+        self.cursor.execute(
+            """
+            UPDATE productos
+            SET pro_activo = 0
+            WHERE tiendas_idtiendas = %s
+              AND pro_activo = 1
+              AND pro_fecha_scraping < %s
+            """,
+            (tienda_id, self.run_started),
+        )
+        desactivados = self.cursor.rowcount
+
+        self.cursor.execute(
+            """
+            UPDATE productos_precios
+            SET prop_estado = 'inactivo'
+            WHERE tiendas_idtiendas = %s
+              AND prop_estado = 'activo'
+              AND proprecio_fecha_actualizacion < %s
+            """,
+            (tienda_id, self.run_started),
+        )
+
+        if spider:
+            spider.logger.info(f"{desactivados} productos que la tienda ya no publica quedaron inactivos.")
 
     def process_item(self, item, spider=None):
         adapter = ItemAdapter(item)
@@ -50,6 +137,7 @@ class MySQLPipeline:
 
         categoria_id = self.get_or_create_categoria(categoria)
         tienda_id = self.get_or_create_tienda(tienda)
+        self.seen_stores.add(tienda_id)
 
         self.cursor.execute(
             """

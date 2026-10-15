@@ -474,7 +474,7 @@ require __DIR__ . '/auth_toast.php';
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page ap-page" aria-labelledby="ap-title">
+<section class="dash-page ap-page" aria-labelledby="ap-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -495,9 +495,9 @@ require __DIR__ . '/auth_toast.php';
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel ap-hero animate-reveal-up">
+      <header class="dash-panel ap-hero animate-reveal-up">
         <div class="ap-hero-main">
           <div class="ap-hero-bar">
             <span class="ap-hero-tag">
@@ -506,7 +506,7 @@ require __DIR__ . '/auth_toast.php';
               <span class="ap-hero-role"><?= $isEmpresa ? 'Empresa' : 'Administrador' ?></span>
             </span>
             <span class="ap-sync <?= $syncTone ?>">
-              <span class="ad-dot" aria-hidden="true"></span>
+              <span class="dash-dot" aria-hidden="true"></span>
               <?= e($syncLabel) ?>
             </span>
           </div>
@@ -674,18 +674,18 @@ require __DIR__ . '/auth_toast.php';
               </span>
               <strong class="ap-view-value"><?= $fmt($view['value']) ?></strong>
               <span class="ap-view-share"><?= $share($view['value']) ?>% del catálogo</span>
-              <span class="ad-bar is-thin" aria-hidden="true"><span style="width: <?= $share($view['value']) ?>%"></span></span>
+              <span class="dash-bar is-thin" aria-hidden="true"><span style="width: <?= $share($view['value']) ?>%"></span></span>
             </a>
           </li>
         <?php endforeach; ?>
       </ul>
 
-      <section class="ad-panel ap-list animate-reveal-up" aria-labelledby="ap-list-title" style="--lane-accent: var(--brand)">
-        <header class="ad-panel-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('list', '', 18) ?></span>
+      <section class="dash-panel ap-list animate-reveal-up" aria-labelledby="ap-list-title" style="--lane-accent: var(--brand)">
+        <header class="dash-panel-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('list', '', 18) ?></span>
           <div>
-            <h2 id="ap-list-title" class="ad-panel-title">Listado de productos</h2>
-            <p class="ad-panel-caption">
+            <h2 id="ap-list-title" class="dash-panel-title">Listado de productos</h2>
+            <p class="dash-panel-caption">
               <?php if ($totalProducts > 0): ?>
                 Mostrando <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($totalProducts) ?> · <?= e(AP_ORDENES[$orden]) ?>
               <?php else: ?>
@@ -782,7 +782,7 @@ require __DIR__ . '/auth_toast.php';
                   <img
                     src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>"
                     alt=""
-                    class="ad-thumb ap-thumb-img"
+                    class="dash-thumb ap-thumb-img"
                     loading="lazy"
                     decoding="async"
                   >
@@ -810,9 +810,9 @@ require __DIR__ . '/auth_toast.php';
                     <span class="ap-pill is-alt"><?= lucide_icon('banknote-x', '', 12) ?>Sin precio</span>
                   <?php endif; ?>
                   <?php if ($off > 0): ?>
-                    <span><s><?= gs($old) ?></s><em class="ad-off">−<?= $off ?>%</em></span>
+                    <span><s><?= gs($old) ?></s><em class="dash-off">−<?= $off ?>%</em></span>
                   <?php elseif ($rise > 0): ?>
-                    <span><s><?= gs($old) ?></s><em class="ad-off is-up">+<?= $rise ?>%</em></span>
+                    <span><s><?= gs($old) ?></s><em class="dash-off is-up">+<?= $rise ?>%</em></span>
                   <?php else: ?>
                     <span class="ap-price-steady">Precio estable</span>
                   <?php endif; ?>
@@ -835,11 +835,11 @@ require __DIR__ . '/auth_toast.php';
                 </div>
 
                 <div class="ap-actions">
-                  <a href="producto.php?id=<?= $productId ?>" class="ad-icon-btn" title="Ver ficha pública" aria-label="Ver ficha de <?= e($product['pro_nombre']) ?>">
+                  <a href="producto.php?id=<?= $productId ?>" class="dash-icon-btn" title="Ver ficha pública" aria-label="Ver ficha de <?= e($product['pro_nombre']) ?>">
                     <?= lucide_icon('eye', '', 15) ?>
                   </a>
                   <?php if ($externalUrl !== ''): ?>
-                    <a href="<?= e($externalUrl) ?>" class="ad-icon-btn" target="_blank" rel="noopener" title="Abrir en la web de la tienda" aria-label="Abrir <?= e($product['pro_nombre']) ?> en la web de la tienda">
+                    <a href="<?= e($externalUrl) ?>" class="dash-icon-btn" target="_blank" rel="noopener" title="Abrir en la web de la tienda" aria-label="Abrir <?= e($product['pro_nombre']) ?> en la web de la tienda">
                       <?= lucide_icon('external-link', '', 15) ?>
                     </a>
                   <?php endif; ?>

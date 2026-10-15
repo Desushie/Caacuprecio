@@ -276,7 +276,7 @@ require __DIR__ . '/auth_toast.php';
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page at-page" aria-labelledby="at-title">
+<section class="dash-page at-page" aria-labelledby="at-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -295,9 +295,9 @@ require __DIR__ . '/auth_toast.php';
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel at-front animate-reveal-up">
+      <header class="dash-panel at-front animate-reveal-up">
         <div class="at-front-main">
           <div class="at-kicker">
             <span class="at-tag"><?= lucide_icon('store', '', 14) ?>Directorio comercial</span>
@@ -386,12 +386,12 @@ require __DIR__ . '/auth_toast.php';
         </aside>
       </header>
 
-      <section class="ad-panel at-list animate-reveal-up" aria-labelledby="at-list-title" style="--lane-accent: var(--brand)">
-        <header class="ad-panel-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('layout-grid', '', 18) ?></span>
+      <section class="dash-panel at-list animate-reveal-up" aria-labelledby="at-list-title" style="--lane-accent: var(--brand)">
+        <header class="dash-panel-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('layout-grid', '', 18) ?></span>
           <div>
-            <h2 id="at-list-title" class="ad-panel-title">Fichas de tienda</h2>
-            <p class="ad-panel-caption">
+            <h2 id="at-list-title" class="dash-panel-title">Fichas de tienda</h2>
+            <p class="dash-panel-caption">
               <?php if ($stores): ?>
                 <?= $fmt(count($stores)) ?> de <?= $fmt($storeTotal) ?> · ordenadas por <?= e(mb_strtolower(AT_ORDENES[$orden]['label'])) ?>
               <?php else: ?>
@@ -470,7 +470,7 @@ require __DIR__ . '/auth_toast.php';
                   <div class="at-store-id">
                     <h3 class="at-store-name" title="<?= e($store['tie_nombre']) ?>"><?= e($store['tie_nombre']) ?></h3>
                     <p class="at-store-status">
-                      <span class="at-pill <?= $status['tone'] ?>"><span class="ad-dot" aria-hidden="true"></span><?= e($status['state']) ?></span>
+                      <span class="at-pill <?= $status['tone'] ?>"><span class="dash-dot" aria-hidden="true"></span><?= e($status['state']) ?></span>
                       <?php if ($status['detail'] !== ''): ?><span><?= e($status['detail']) ?></span><?php endif; ?>
                     </p>
                   </div>
@@ -685,7 +685,7 @@ require __DIR__ . '/auth_toast.php';
                   <strong class="pe-preview-name" data-ts-out="name"><?= e($mName) ?></strong>
                   <span class="ts-place <?= $mPlace === '' ? 'is-missing' : '' ?>" data-ts-out="place"><?= lucide_icon('map-pin', '', 13) ?><span><?= e($mPlace !== '' ? $mPlace : 'Sin ubicación') ?></span></span>
                   <span class="ts-status" aria-live="polite">
-                    <span class="at-pill <?= $mStatus['tone'] ?>" data-ts-out="pill"><span class="ad-dot" aria-hidden="true"></span><span data-ts-out="state"><?= e($mStatus['state']) ?></span></span>
+                    <span class="at-pill <?= $mStatus['tone'] ?>" data-ts-out="pill"><span class="dash-dot" aria-hidden="true"></span><span data-ts-out="state"><?= e($mStatus['state']) ?></span></span>
                     <span data-ts-out="detail" <?= $mStatus['detail'] === '' ? 'hidden' : '' ?>><?= e($mStatus['detail']) ?></span>
                   </span>
                 </div>

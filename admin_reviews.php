@@ -377,7 +377,7 @@ render_head('Gestión de reseñas reportadas');
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page ar-page" aria-labelledby="ar-title">
+<section class="dash-page ar-page" aria-labelledby="ar-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -396,9 +396,9 @@ render_head('Gestión de reseñas reportadas');
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel ar-court animate-reveal-up">
+      <header class="dash-panel ar-court animate-reveal-up">
         <div class="ar-court-top">
           <div class="ar-brief">
             <div class="ar-brief-head">
@@ -519,12 +519,12 @@ render_head('Gestión de reseñas reportadas');
         </div>
       </header>
 
-      <section class="ad-panel ar-docket animate-reveal-up" aria-labelledby="ar-list-title" style="--lane-accent: <?= AR_ESTADOS[$status]['tone'] ?>">
-        <header class="ad-panel-head ar-docket-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('folder-open', '', 18) ?></span>
+      <section class="dash-panel ar-docket animate-reveal-up" aria-labelledby="ar-list-title" style="--lane-accent: <?= AR_ESTADOS[$status]['tone'] ?>">
+        <header class="dash-panel-head ar-docket-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('folder-open', '', 18) ?></span>
           <div>
-            <h2 id="ar-list-title" class="ad-panel-title">Expedientes</h2>
-            <p class="ad-panel-caption">
+            <h2 id="ar-list-title" class="dash-panel-title">Expedientes</h2>
+            <p class="dash-panel-caption">
               <?php if ($reviewGroups): ?>
                 <?= $fmt($resultTotal) ?> <?= $resultTotal === 1 ? 'reseña' : 'reseñas' ?> · por <?= e(mb_strtolower(AR_ORDENES[$order]['label'])) ?>
               <?php else: ?>
@@ -841,12 +841,12 @@ render_head('Gestión de reseñas reportadas');
 
 <div class="modal fade" id="arReportsModal" tabindex="-1" aria-labelledby="ar-reports-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content suggestion-modal report-product-modal ad-confirm rp-alerts-modal ar-reports-modal">
+    <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal">
       <div class="modal-header">
         <div class="report-product-heading">
           <span class="report-product-icon" aria-hidden="true"><?= lucide_icon('message-square-warning', '', 18) ?></span>
           <div class="report-product-heading-text">
-            <p class="ad-confirm-kicker">Moderación de opiniones</p>
+            <p class="dash-confirm-kicker">Moderación de opiniones</p>
             <h5 class="modal-title" id="ar-reports-title">Reportes de la reseña</h5>
             <p class="report-product-lead" data-ar-reports="summary"></p>
           </div>

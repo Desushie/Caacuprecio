@@ -262,7 +262,7 @@ render_head('Sugerencias');
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page sg-page" aria-labelledby="sg-title">
+<section class="dash-page sg-page" aria-labelledby="sg-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -281,9 +281,9 @@ render_head('Sugerencias');
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel sg-desk animate-reveal-up">
+      <header class="dash-panel sg-desk animate-reveal-up">
         <div class="sg-desk-top">
           <div class="sg-intro">
             <div class="sg-intro-head">
@@ -396,12 +396,12 @@ render_head('Sugerencias');
         </div>
       </header>
 
-      <section class="ad-panel rp-queue sg-queue animate-reveal-up" aria-labelledby="sg-list-title" style="--lane-accent: <?= SG_ESTADOS[$status]['tone'] ?>">
-        <header class="ad-panel-head rp-queue-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon(SG_ESTADOS[$status]['icon'], '', 18) ?></span>
+      <section class="dash-panel rp-queue sg-queue animate-reveal-up" aria-labelledby="sg-list-title" style="--lane-accent: <?= SG_ESTADOS[$status]['tone'] ?>">
+        <header class="dash-panel-head rp-queue-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon(SG_ESTADOS[$status]['icon'], '', 18) ?></span>
           <div>
-            <h2 id="sg-list-title" class="ad-panel-title">Correspondencia</h2>
-            <p class="ad-panel-caption">
+            <h2 id="sg-list-title" class="dash-panel-title">Correspondencia</h2>
+            <p class="dash-panel-caption">
               <?php if ($suggestions): ?>
                 <?= $fmt($resultTotal) ?> <?= $resultTotal === 1 ? 'sugerencia' : 'sugerencias' ?> · <?= e(mb_strtolower(SG_ORDENES[$order]['label'])) ?> primero
               <?php else: ?>
@@ -671,12 +671,12 @@ render_head('Sugerencias');
 
 <div class="modal fade" id="sgReadModal" tabindex="-1" aria-labelledby="sg-read-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content suggestion-modal report-product-modal ad-confirm rp-alerts-modal ar-reports-modal">
+    <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal">
       <div class="modal-header">
         <div class="report-product-heading">
           <span class="report-product-icon sg-read-icon" aria-hidden="true"><?= lucide_icon('mail-open', '', 18) ?></span>
           <div class="report-product-heading-text">
-            <p class="ad-confirm-kicker">Buzón de la comunidad</p>
+            <p class="dash-confirm-kicker">Buzón de la comunidad</p>
             <h5 class="modal-title" id="sg-read-title" data-sg-read="title">Sugerencia completa</h5>
             <p class="report-product-lead" data-sg-read="lead"></p>
           </div>
@@ -712,7 +712,7 @@ render_head('Sugerencias');
 
 <div class="modal fade" id="sgDeleteModal" tabindex="-1" aria-labelledby="sg-delete-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <form method="post" class="modal-content suggestion-modal report-product-modal ad-confirm">
+    <form method="post" class="modal-content suggestion-modal report-product-modal dash-confirm">
       <input type="hidden" name="action" value="delete">
       <input type="hidden" name="id" value="" data-sg-del="id">
 
@@ -720,7 +720,7 @@ render_head('Sugerencias');
         <div class="report-product-heading">
           <span class="report-product-icon" aria-hidden="true"><?= lucide_icon('trash-2', '', 18) ?></span>
           <div class="report-product-heading-text">
-            <p class="ad-confirm-kicker">Buzón de la comunidad</p>
+            <p class="dash-confirm-kicker">Buzón de la comunidad</p>
             <h5 class="modal-title" id="sg-delete-title">¿Eliminar esta sugerencia?</h5>
             <p class="report-product-lead">Esta acción no se puede deshacer.</p>
           </div>
@@ -729,18 +729,18 @@ render_head('Sugerencias');
       </div>
 
       <div class="modal-body">
-        <div class="ad-confirm-item">
+        <div class="dash-confirm-item">
           <span class="ar-avatar sg-avatar" data-sg-del="avatar" aria-hidden="true"></span>
-          <div class="ad-confirm-copy">
-            <p class="ad-confirm-name" data-sg-del="subject"></p>
-            <div class="ad-confirm-meta">
+          <div class="dash-confirm-copy">
+            <p class="dash-confirm-name" data-sg-del="subject"></p>
+            <div class="dash-confirm-meta">
               <span><?= lucide_icon('user-round', '', 13) ?><span data-sg-del="name"></span></span>
               <span><?= lucide_icon('calendar', '', 13) ?><span data-sg-del="date"></span></span>
             </div>
           </div>
         </div>
 
-        <ul class="ad-confirm-list">
+        <ul class="dash-confirm-list">
           <li>
             <?= lucide_icon('eraser', '', 16) ?>
             <span>El mensaje se borra <strong>de forma permanente</strong> del buzón.</span>

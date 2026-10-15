@@ -268,7 +268,7 @@ require __DIR__ . '/auth_toast.php';
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page au-page" aria-labelledby="au-title">
+<section class="dash-page au-page" aria-labelledby="au-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -287,9 +287,9 @@ require __DIR__ . '/auth_toast.php';
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel au-gate animate-reveal-up">
+      <header class="dash-panel au-gate animate-reveal-up">
         <div class="au-gate-main">
           <div class="au-head">
             <div class="au-head-copy">
@@ -411,12 +411,12 @@ require __DIR__ . '/auth_toast.php';
         </aside>
       </header>
 
-      <section class="ad-panel au-list animate-reveal-up" aria-labelledby="au-list-title" style="--lane-accent: var(--brand)">
-        <header class="ad-panel-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('users-round', '', 18) ?></span>
+      <section class="dash-panel au-list animate-reveal-up" aria-labelledby="au-list-title" style="--lane-accent: var(--brand)">
+        <header class="dash-panel-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('users-round', '', 18) ?></span>
           <div>
-            <h2 id="au-list-title" class="ad-panel-title">Cuentas</h2>
-            <p class="ad-panel-caption">
+            <h2 id="au-list-title" class="dash-panel-title">Cuentas</h2>
+            <p class="dash-panel-caption">
               <?php if ($usuarios): ?>
                 <?php if ($totalPages > 1): ?>
                   <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($resultTotal) ?> resultados · por <?= e(mb_strtolower(AU_ORDENES[$orden]['label'])) ?>
@@ -757,7 +757,7 @@ require __DIR__ . '/auth_toast.php';
 
   <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="au-delete-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-      <form action="<?= e($returnUrl) ?>" method="POST" class="modal-content suggestion-modal report-product-modal ad-confirm">
+      <form action="<?= e($returnUrl) ?>" method="POST" class="modal-content suggestion-modal report-product-modal dash-confirm">
         <input type="hidden" name="action" value="delete_user">
         <input type="hidden" name="idusuario" value="" data-au-del="id">
 
@@ -765,7 +765,7 @@ require __DIR__ . '/auth_toast.php';
           <div class="report-product-heading">
             <span class="report-product-icon" aria-hidden="true"><?= lucide_icon('trash-2', '', 18) ?></span>
             <div class="report-product-heading-text">
-              <p class="ad-confirm-kicker">Zona sensible</p>
+              <p class="dash-confirm-kicker">Zona sensible</p>
               <h5 class="modal-title" id="au-delete-title">¿Eliminar esta cuenta?</h5>
               <p class="report-product-lead">Esta acción es definitiva y no se puede deshacer.</p>
             </div>
@@ -774,20 +774,20 @@ require __DIR__ . '/auth_toast.php';
         </div>
 
         <div class="modal-body">
-          <div class="ad-confirm-item" data-au-del="card">
-            <span class="au-avatar ad-confirm-avatar" data-au-del="initials" aria-hidden="true">?</span>
-            <div class="ad-confirm-copy">
-              <p class="ad-confirm-name" data-au-del="name"></p>
-              <div class="ad-confirm-meta">
+          <div class="dash-confirm-item" data-au-del="card">
+            <span class="au-avatar dash-confirm-avatar" data-au-del="initials" aria-hidden="true">?</span>
+            <div class="dash-confirm-copy">
+              <p class="dash-confirm-name" data-au-del="name"></p>
+              <div class="dash-confirm-meta">
                 <span><?= lucide_icon('mail', '', 13) ?><span data-au-del="email"></span></span>
               </div>
             </div>
             <?php foreach (AU_ROLES as $roleKey => $roleData): ?>
-              <span class="au-role-pill ad-confirm-pill" data-au-del-role="<?= e($roleKey) ?>" hidden><?= lucide_icon($roleData['icon'], '', 13) ?><?= e($roleData['single']) ?></span>
+              <span class="au-role-pill dash-confirm-pill" data-au-del-role="<?= e($roleKey) ?>" hidden><?= lucide_icon($roleData['icon'], '', 13) ?><?= e($roleData['single']) ?></span>
             <?php endforeach; ?>
           </div>
 
-          <ul class="ad-confirm-list">
+          <ul class="dash-confirm-list">
             <li>
               <?= lucide_icon('log-in', '', 16) ?>
               <span>Ya no podrá <strong>iniciar sesión</strong> en Caacuprecio.</span>

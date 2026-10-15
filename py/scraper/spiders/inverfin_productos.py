@@ -22,8 +22,9 @@ class InverfinProductosSpider(scrapy.Spider):
 
     base_url = "https://inverfin.com.py"
     page_size = 250
-    max_rate_limit_waits = 6
+    max_rate_limit_waits = 8
     default_retry_after = 60
+    max_retry_after = 600
 
     collections = {
         "motos": "Motos",
@@ -40,8 +41,10 @@ class InverfinProductosSpider(scrapy.Spider):
     # reintentaría al instante y solo alargaría el bloqueo.
     handle_httpstatus_list = [429]
 
+    # Son unas 10 peticiones por corrida; una pausa larga entre ellas evita el
+    # 429 y cuesta pocos minutos.
     custom_settings = {
-        "DOWNLOAD_DELAY": 3,
+        "DOWNLOAD_DELAY": 45,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
         "CONCURRENT_REQUESTS": 1,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
@@ -58,15 +61,26 @@ class InverfinProductosSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.seen_handles = set()
+        self.pending_collections = list(self.collections.items())
 
+    # Las colecciones van de a una: si se piden todas juntas, cada 429 las
+    # reintenta en ráfaga y Inverfin sigue bloqueando.
     async def start(self):
-        for handle, title in self.collections.items():
-            yield self.collection_request(handle, title, 1)
+        request = self.next_collection_request()
+        if request:
+            yield request
+
+    def next_collection_request(self):
+        if not self.pending_collections:
+            return None
+        handle, title = self.pending_collections.pop(0)
+        return self.collection_request(handle, title, 1)
 
     def collection_request(self, handle, title, page, waits=0):
         return scrapy.Request(
             f"{self.base_url}/collections/{handle}/products.json?limit={self.page_size}&page={page}",
             callback=self.parse_collection,
+            errback=self.collection_failed,
             dont_filter=True,
             meta={"collection": handle, "categoria_origen": title, "page": page, "rl_waits": waits},
         )
@@ -78,8 +92,11 @@ class InverfinProductosSpider(scrapy.Spider):
             waits = meta["rl_waits"] + 1
             if waits > self.max_rate_limit_waits:
                 self.logger.error(f"[{meta['collection']} p{meta['page']}] Inverfin sigue limitando (429); se omite.")
+                next_request = self.next_collection_request()
+                if next_request:
+                    yield next_request
                 return
-            delay = self.retry_after(response)
+            delay = self.retry_after(response, waits)
             self.logger.warning(f"[{meta['collection']} p{meta['page']}] 429: esperando {delay} s ({waits}/{self.max_rate_limit_waits})")
             await asyncio.sleep(delay)
             yield self.collection_request(meta["collection"], meta["categoria_origen"], meta["page"], waits)
@@ -89,6 +106,9 @@ class InverfinProductosSpider(scrapy.Spider):
             products = json.loads(response.text).get("products") or []
         except ValueError:
             self.logger.error(f"[{response.url}] respuesta sin JSON válido")
+            next_request = self.next_collection_request()
+            if next_request:
+                yield next_request
             return
 
         self.logger.info(f"[{meta['collection']} p{meta['page']}] {len(products)} productos")
@@ -105,13 +125,28 @@ class InverfinProductosSpider(scrapy.Spider):
 
         if len(products) >= self.page_size:
             yield self.collection_request(meta["collection"], meta["categoria_origen"], meta["page"] + 1)
+        else:
+            next_request = self.next_collection_request()
+            if next_request:
+                yield next_request
 
-    def retry_after(self, response):
+    def collection_failed(self, failure):
+        meta = failure.request.meta
+        self.logger.error(f"[{meta['collection']} p{meta['page']}] falló: {failure.getErrorMessage()}; se omite.")
+        next_request = self.next_collection_request()
+        if next_request:
+            yield next_request
+
+    def retry_after(self, response, waits=1):
+        """Inverfin siempre responde Retry-After: 60, pero reintentar cada 60 s
+        mantiene el bloqueo; la espera se duplica en cada intento."""
+        backoff = self.default_retry_after * 2 ** (waits - 1)
         raw = response.headers.get("Retry-After")
         try:
-            return max(5, min(300, int(float(raw.decode()))))
+            header = int(float(raw.decode()))
         except (AttributeError, ValueError):
-            return self.default_retry_after
+            header = 0
+        return min(self.max_retry_after, max(header, backoff))
 
     def build_item(self, product, categoria_origen):
         nombre = self.clean_product_title(product.get("title"))

@@ -394,39 +394,29 @@ if ($tableExists) {
 }
 
 /*
-| Frescura del catálogo: productos con precio leído en las últimas 24 h.
-| El catálogo de cada tienda son los productos que vio su última corrida
-| completa; los que la tienda ya no publica nunca se vuelven a leer y no
-| deben impedir que la barra llegue al 100 %.
+| Frescura del catálogo: productos activos con precio leído en las últimas 24 h.
+| Los que la tienda deja de publicar los desactiva el pipeline al cerrar una
+| corrida completa, así que no quedan pendientes para siempre.
 */
 $catalog = ['total' => 0, 'fresh' => 0];
 $storeCatalog = [];
 try {
-    $lastSuccessByKey = [];
-    if ($tableExists) {
-        foreach ($pdo->query("SELECT job_key, MAX(started_at) AS started FROM scraper_jobs WHERE status = 'done' GROUP BY job_key") as $row) {
-            $lastSuccessByKey[$row['job_key']] = sx_ts($row['started']);
-        }
-    }
-
     $storeStmt = $pdo->prepare("
         SELECT
             COUNT(*) AS total,
-            SUM(pro_fecha_scraping >= :fresh_from) AS fresh,
+            COALESCE(SUM(pro_fecha_scraping >= :fresh_from), 0) AS fresh,
             MAX(pro_fecha_scraping) AS ultima
         FROM productos
         WHERE tiendas_idtiendas = :id
-          AND pro_fecha_scraping >= :catalog_from
+          AND pro_activo = 1
     ");
 
     foreach ($pdo->query('SELECT idtiendas, tie_nombre FROM tiendas') as $tienda) {
         $key = preg_replace('/[^a-z0-9]/', '', mb_strtolower((string) $tienda['tie_nombre']));
-        $catalogFrom = max($lastSuccessByKey[$key] ?? 0, $lastSuccessByKey['all'] ?? 0);
 
         $storeStmt->execute([
-            ':id'           => (int) $tienda['idtiendas'],
-            ':catalog_from' => date('Y-m-d H:i:s', $catalogFrom),
-            ':fresh_from'   => date('Y-m-d H:i:s', max($catalogFrom, $now - 86400)),
+            ':id'         => (int) $tienda['idtiendas'],
+            ':fresh_from' => date('Y-m-d H:i:s', $now - 86400),
         ]);
         $storeCatalog[$key] = $storeStmt->fetch();
     }
@@ -607,7 +597,7 @@ render_head($tabTitle);
   <span class="bg-grid"></span>
 </div>
 
-<section class="ad-page sx-page" aria-labelledby="sx-title">
+<section class="dash-page sx-page" aria-labelledby="sx-title">
   <div class="container position-relative z-1">
     <nav aria-label="breadcrumb" class="pd-crumb">
       <ol class="breadcrumb custom-breadcrumb pd-crumb-list mb-0">
@@ -626,9 +616,9 @@ render_head($tabTitle);
       </ol>
     </nav>
 
-    <div class="ad-board">
+    <div class="dash-board">
 
-      <header class="ad-panel sx-console animate-reveal-up">
+      <header class="dash-panel sx-console animate-reveal-up">
         <div class="sx-console-main">
           <div class="sx-head">
             <div class="sx-head-copy">
@@ -871,12 +861,12 @@ render_head($tabTitle);
         </aside>
       </header>
 
-      <section class="ad-panel sx-stores animate-reveal-up" aria-labelledby="sx-stores-title" style="--lane-accent: var(--accent)">
-        <header class="ad-panel-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('store', '', 18) ?></span>
+      <section class="dash-panel sx-stores animate-reveal-up" aria-labelledby="sx-stores-title" style="--lane-accent: var(--accent)">
+        <header class="dash-panel-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('store', '', 18) ?></span>
           <div>
-            <h2 id="sx-stores-title" class="ad-panel-title">Por tienda</h2>
-            <p class="ad-panel-caption">
+            <h2 id="sx-stores-title" class="dash-panel-title">Por tienda</h2>
+            <p class="dash-panel-caption">
               <?php if ($fullActive): ?>
                 <?= lucide_icon('info', '', 13) ?>La actualización completa en curso ya incluye estas tiendas.
               <?php else: ?>
@@ -884,7 +874,7 @@ render_head($tabTitle);
               <?php endif; ?>
             </p>
           </div>
-          <a href="admin_tiendas.php" class="ad-panel-link">Gestionar tiendas<?= lucide_icon('arrow-right', '', 14) ?></a>
+          <a href="admin_tiendas.php" class="dash-panel-link">Gestionar tiendas<?= lucide_icon('arrow-right', '', 14) ?></a>
         </header>
 
         <ul class="sx-store-grid">
@@ -899,7 +889,7 @@ render_head($tabTitle);
                   </span>
                 </div>
                 <span class="sx-fresh-chip <?= $store['tone'] ?>" title="Última lectura de precios">
-                  <span class="ad-dot" aria-hidden="true"></span>
+                  <span class="dash-dot" aria-hidden="true"></span>
                   <?= $store['lastTs'] !== null ? e(sx_ago($store['lastTs'], $now)) : 'Sin leer' ?>
                 </span>
               </div>
@@ -963,12 +953,12 @@ render_head($tabTitle);
         </ul>
       </section>
 
-      <section class="ad-panel sx-history animate-reveal-up" aria-labelledby="sx-history-title" style="--lane-accent: var(--brand)">
-        <header class="ad-panel-head">
-          <span class="ad-panel-icon" aria-hidden="true"><?= lucide_icon('history', '', 18) ?></span>
+      <section class="dash-panel sx-history animate-reveal-up" aria-labelledby="sx-history-title" style="--lane-accent: var(--brand)">
+        <header class="dash-panel-head">
+          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('history', '', 18) ?></span>
           <div>
-            <h2 id="sx-history-title" class="ad-panel-title">Historial</h2>
-            <p class="ad-panel-caption">
+            <h2 id="sx-history-title" class="dash-panel-title">Historial</h2>
+            <p class="dash-panel-caption">
               <?php if ($historyTotal > 0): ?>
                 <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($historyTotal) ?> tareas · abre el registro para ver qué devolvió cada una
               <?php else: ?>
@@ -1129,7 +1119,7 @@ render_head($tabTitle);
             </nav>
           <?php endif; ?>
         <?php elseif ($tableExists): ?>
-          <div class="ad-empty">
+          <div class="dash-empty">
             <?= lucide_icon($estado === 'todas' ? 'inbox' : 'filter-x', '', 28) ?>
             <strong><?= $estado === 'todas' ? 'Todavía no hay tareas' : 'Nada con este filtro' ?></strong>
             <span>
@@ -1141,7 +1131,7 @@ render_head($tabTitle);
             </span>
           </div>
         <?php else: ?>
-          <div class="ad-empty">
+          <div class="dash-empty">
             <?= lucide_icon('database-zap', '', 28) ?>
             <strong>Historial no disponible</strong>
             <span>Falta la tabla de tareas en la base de datos.</span>
