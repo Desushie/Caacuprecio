@@ -828,51 +828,84 @@ function render_footer(): void
         echo '</div>';
     }
 
+    $suggestionTopics = [
+        ['Idea', 'sparkles'],
+        ['Error', 'bug'],
+        ['Nueva tienda', 'store'],
+        ['Precio incorrecto', 'tag'],
+        ['Diseño', 'palette'],
+    ];
+
     echo '<div class="modal fade" id="suggestionModal" tabindex="-1" aria-labelledby="suggestionModalLabel" aria-hidden="true">';
-    echo '  <div class="modal-dialog modal-dialog-centered">';
-    echo '    <div class="modal-content suggestion-modal">';
-    echo '      <form method="post" action="guardar_sugerencia.php">';
-    echo '        <div class="modal-header">';
-    echo '          <h5 class="modal-title" id="suggestionModalLabel">Enviar sugerencia</h5>';
-    echo '          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>';
+    echo '  <div class="modal-dialog modal-dialog-centered sg-dialog">';
+    echo '    <form method="post" action="guardar_sugerencia.php" class="modal-content suggestion-modal report-product-modal sg-modal">';
+    echo '      <div class="modal-header">';
+    echo '        <div class="report-product-heading">';
+    echo '          <span class="report-product-icon sg-icon" aria-hidden="true">' . lucide_icon('lightbulb', '', 18) . '</span>';
+    echo '          <div class="report-product-heading-text">';
+    echo '            <p class="sg-kicker">Buzón de ideas</p>';
+    echo '            <h5 class="modal-title" id="suggestionModalLabel">Enviar sugerencia</h5>';
+    echo '            <p class="report-product-lead">Leemos cada mensaje para mejorar ' . e(APP_NAME) . '.</p>';
+    echo '          </div>';
     echo '        </div>';
-    echo '        <div class="modal-body">';
+    echo '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>';
+    echo '      </div>';
+
+    echo '      <div class="modal-body">';
 
     if ($suggestionError !== '') {
-        echo '          <div class="alert alert-danger">' . e($suggestionError) . '</div>';
+        echo '        <div class="sg-alert" role="alert">' . lucide_icon('circle-alert', '', 16) . '<span>' . e($suggestionError) . '</span></div>';
     }
 
-    echo '          <input type="hidden" name="redirect" value="' . e($_SERVER['REQUEST_URI'] ?? 'index.php') . '">';
+    echo '        <input type="hidden" name="redirect" value="' . e($_SERVER['REQUEST_URI'] ?? 'index.php') . '">';
 
-    echo '          <div class="mb-3">';
-    echo '            <label class="form-label" for="sug_nombre">Tu nombre <span class="text-body-secondary">(opcional)</span></label>';
-    echo '            <input type="text" id="sug_nombre" name="sug_nombre" class="form-control" maxlength="120" autocomplete="name">';
+    echo '        <div class="sg-field">';
+    echo '          <label class="sg-label" for="sug_asunto">¿Sobre qué es?</label>';
+    echo '          <div class="sg-chips" role="group" aria-label="Temas sugeridos">';
+    foreach ($suggestionTopics as [$topicLabel, $topicIcon]) {
+        echo '            <button type="button" class="sg-chip" data-sg-topic="' . e($topicLabel) . '" aria-pressed="false">' . lucide_icon($topicIcon, '', 14) . e($topicLabel) . '</button>';
+    }
     echo '          </div>';
-
-    echo '          <div class="mb-3">';
-    echo '            <label class="form-label" for="sug_email">Correo electrónico <span class="text-body-secondary">(opcional, solo si quieres respuesta)</span></label>';
-    echo '            <input type="email" id="sug_email" name="sug_email" class="form-control" maxlength="150" autocomplete="email">';
-    echo '          </div>';
-
-    echo '          <div class="mb-3">';
-    echo '            <label class="form-label" for="sug_asunto">Asunto <span class="text-body-secondary">(opcional)</span></label>';
-    echo '            <input type="text" id="sug_asunto" name="sug_asunto" class="form-control" maxlength="150" placeholder="Ej: Mejorar filtros, nueva tienda, error visual">';
-    echo '          </div>';
-
-    echo '          <div class="mb-3">';
-    echo '            <label class="form-label" for="sug_detalle">Sugerencia</label>';
-    echo '            <textarea id="sug_detalle" name="sug_detalle" class="form-control" rows="5" maxlength="2000" required placeholder="Escribe tu sugerencia aquí..."></textarea>';
-    echo '          </div>';
-    echo '          ' . consent_field('sug_consent');
-    echo '          <div class="mt-3">' . turnstile_widget() . '</div>';
+    echo '          <input type="text" id="sug_asunto" name="sug_asunto" class="form-control" maxlength="150" placeholder="Elige un tema o escribe el tuyo">';
     echo '        </div>';
 
-    echo '        <div class="modal-footer">';
-    echo '          <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>';
-    echo '          <button type="submit" class="btn btn-primary px-4">Enviar sugerencia</button>';
+    echo '        <div class="sg-field">';
+    echo '          <label class="sg-label" for="sug_detalle">Tu sugerencia <span class="sg-req" aria-hidden="true">*</span></label>';
+    echo '          <textarea id="sug_detalle" name="sug_detalle" class="form-control" rows="3" maxlength="2000" required aria-describedby="sug_detalle_hint" placeholder="Cuéntanos qué mejorarías, qué falló o qué tienda te gustaría ver…"></textarea>';
+    echo '          <div class="sg-field-foot">';
+    echo '            <span id="sug_detalle_hint">Mientras más detalles, mejor.</span>';
+    echo '            <span class="sg-count" data-sg-count aria-live="polite">0 / 2000</span>';
+    echo '          </div>';
     echo '        </div>';
-    echo '      </form>';
-    echo '    </div>';
+
+    echo '        <fieldset class="sg-contact">';
+    echo '          <legend class="sg-contact-title">' . lucide_icon('mail', '', 14) . '¿Quieres respuesta? <span class="sg-opt">Déjanos tus datos</span></legend>';
+    echo '          <div class="report-product-row">';
+    echo '            <div class="sg-field">';
+    echo '              <label class="visually-hidden" for="sug_nombre">Tu nombre</label>';
+    echo '              <input type="text" id="sug_nombre" name="sug_nombre" class="form-control" maxlength="120" autocomplete="name" placeholder="Tu nombre">';
+    echo '            </div>';
+    echo '            <div class="sg-field">';
+    echo '              <label class="visually-hidden" for="sug_email">Correo electrónico</label>';
+    echo '              <input type="email" id="sug_email" name="sug_email" class="form-control" maxlength="150" autocomplete="email" placeholder="tu@correo.com">';
+    echo '            </div>';
+    echo '          </div>';
+    echo '        </fieldset>';
+
+    echo '        ' . consent_field('sug_consent');
+
+    $suggestionCaptcha = turnstile_widget();
+    if ($suggestionCaptcha !== '') {
+        echo '        <div class="sg-captcha">' . $suggestionCaptcha . '</div>';
+    }
+    echo '      </div>';
+
+    echo '      <div class="modal-footer">';
+    echo '        <p class="sg-foot-note">' . lucide_icon('lock', '', 13) . 'No publicamos tus datos.</p>';
+    echo '        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>';
+    echo '        <button type="submit" class="btn btn-primary">' . lucide_icon('send', '', 16) . 'Enviar</button>';
+    echo '      </div>';
+    echo '    </form>';
     echo '  </div>';
     echo '</div>';
 
@@ -883,6 +916,28 @@ function render_footer(): void
     echo '            document.body.appendChild(event.target);';
     echo '        }';
     echo '    });';
+    echo '    const modal = document.getElementById("suggestionModal");';
+    echo '    if (!modal) return;';
+    echo '    const subject = modal.querySelector("#sug_asunto");';
+    echo '    const detail = modal.querySelector("#sug_detalle");';
+    echo '    const counter = modal.querySelector("[data-sg-count]");';
+    echo '    const chips = modal.querySelectorAll("[data-sg-topic]");';
+    echo '    const syncChips = function() {';
+    echo '        chips.forEach(function(chip) { chip.setAttribute("aria-pressed", String(chip.dataset.sgTopic === subject.value.trim())); });';
+    echo '    };';
+    echo '    chips.forEach(function(chip) {';
+    echo '        chip.addEventListener("click", function() {';
+    echo '            subject.value = chip.getAttribute("aria-pressed") === "true" ? "" : chip.dataset.sgTopic;';
+    echo '            syncChips();';
+    echo '            detail.focus();';
+    echo '        });';
+    echo '    });';
+    echo '    subject.addEventListener("input", syncChips);';
+    echo '    const syncCount = function() {';
+    echo '        counter.textContent = detail.value.length + " / " + detail.maxLength;';
+    echo '        counter.classList.toggle("is-near", detail.value.length > detail.maxLength * 0.9);';
+    echo '    };';
+    echo '    detail.addEventListener("input", syncCount);';
     echo '})();';
     echo '</script>';
 
