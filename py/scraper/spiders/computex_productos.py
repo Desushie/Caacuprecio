@@ -1163,65 +1163,112 @@ class ComputexProductosSpider(scrapy.Spider):
         return encontrados
 
     def extraer_imagen(self, response):
-        candidatos = []
+        """Obtiene la imagen principal, priorizando la galería de Computex.
 
-        # 1. Metas principales
-        for sel in [
+        La web actual sirve archivos como /storage/productos/<slug>-xxxxx.webp.
+        No se toma la primera imagen global: puede ser el logo, el menú o
+        un producto relacionado.
+        """
+        slug = response.url.rstrip("/").split("/")[-1].lower()
+        candidatos = []
+        orden = 0
+
+        def agregar(raw, origen, prioridad=0):
+            nonlocal orden
+            if not isinstance(raw, str):
+                return
+            raw = html.unescape(raw).strip().strip('\"\'')
+            if not raw or raw.startswith(('data:', 'blob:', '#')):
+                return
+            if raw.startswith('//'):
+                raw = 'https:' + raw
+            url = response.urljoin(raw.replace('\\/', '/'))
+            parsed = urlparse(url)
+            path = parsed.path.lower()
+            if not path.endswith(('.webp', '.jpg', '.jpeg', '.png', '.avif')):
+                return
+            if any(x in path for x in ('logo', 'favicon', 'placeholder', 'loader', 'sprite', 'banner', 'icon-')):
+                return
+            # Los candidatos de toda la página solo se aceptan si su archivo
+            # coincide con el slug exacto de este producto.
+            propio = bool(slug and slug in path.split('/')[-1])
+            almacen = '/storage/productos/' in path
+            if origen == 'global' and not propio:
+                return
+            puntuacion = prioridad + (120 if propio else 0) + (35 if almacen else 0)
+            candidatos.append((puntuacion, orden, url))
+            orden += 1
+
+        # 1. Galería actual, y galerías de versiones anteriores.
+        galeria = (
+            '[class*="gallery"], [class*="Gallery"], '
+            '[class*="product-image"], [class*="product_image"], '
+            '[class*="product-media"], [class*="productMedia"], '
+            '[class*="product-photo"], [class*="productPhoto"], '
+            '[class*="product-detail"]'
+        )
+        for bloque in response.css(galeria):
+            for a in bloque.css('a[href]'):
+                agregar(a.attrib.get('href'), 'galeria', 90)
+            for img in bloque.css('img'):
+                for atributo in ('data-large_image', 'data-full', 'data-zoom-image',
+                                 'data-original', 'data-src', 'src', 'data-lazy-src'):
+                    agregar(img.attrib.get(atributo), 'galeria', 85)
+                for atributo in ('srcset', 'data-srcset'):
+                    srcset = img.attrib.get(atributo, '')
+                    for parte in srcset.split(','):
+                        agregar(parte.strip().split(' ')[0], 'galeria', 75)
+
+        # 2. Imágenes del artículo identificadas por su propio slug.
+        # Sirve incluso si Computex cambia otra vez las clases CSS.
+        for img in response.css('img'):
+            for atributo in ('data-large_image', 'data-full', 'data-src',
+                             'src', 'data-original', 'data-lazy-src'):
+                agregar(img.attrib.get(atributo), 'global', 65)
+            for atributo in ('srcset', 'data-srcset'):
+                for parte in img.attrib.get(atributo, '').split(','):
+                    agregar(parte.strip().split(' ')[0], 'global', 55)
+        for a in response.css('a[href*="/storage/productos/"]'):
+            agregar(a.attrib.get('href'), 'global', 75)
+
+        # 3. Metadatos y schema.org Product.
+        for sel in (
             'meta[property="og:image"]::attr(content)',
+            'meta[property="og:image:secure_url"]::attr(content)',
             'meta[name="twitter:image"]::attr(content)',
             'meta[itemprop="image"]::attr(content)',
-        ]:
-            val = response.css(sel).get()
-            if val:
-                candidatos.append(val)
+        ):
+            for raw in response.css(sel).getall():
+                agregar(raw, 'meta', 45)
 
-        # 2. Imágenes del producto y lazy-load
-        for sel in [
-            '.woocommerce-product-gallery__image a::attr(href)',
-            '.woocommerce-product-gallery__image img::attr(src)',
-            '.woocommerce-product-gallery__image img::attr(data-src)',
-            '.woocommerce-product-gallery__image img::attr(data-large_image)',
-            '.product img::attr(src)',
-            '.product img::attr(data-src)',
-            '.product img::attr(data-lazy-src)',
-            '.product img::attr(data-large_image)',
-            'img.wp-post-image::attr(src)',
-            'img.wp-post-image::attr(data-src)',
-            'img::attr(src)',
-            'img::attr(data-src)',
-            'img::attr(data-lazy-src)',
-            'img::attr(data-original)',
-        ]:
-            candidatos.extend(response.css(sel).getall())
-
-        # 3. Srcset
-        for srcset in response.css('img::attr(srcset)').getall():
-            partes = [p.strip() for p in srcset.split(',') if p.strip()]
-            for parte in partes:
-                url = parte.split(' ')[0].strip()
-                if url:
-                    candidatos.append(url)
-
-        # 4. JSON-LD image
         for raw in response.css('script[type="application/ld+json"]::text').getall():
             try:
                 data = json.loads(raw)
-            except Exception:
+            except (ValueError, TypeError):
                 continue
-            candidatos.extend(self._buscar_imagenes_jsonld(data))
+            for url in self._buscar_imagenes_jsonld(data):
+                agregar(url, 'jsonld', 50)
 
-        for img in candidatos:
-            img = (img or "").strip()
-            if not img or img.startswith("data:image"):
+        # 4. Imágenes en scripts embebidos, siempre exigiendo slug coincidente.
+        # No escanea archivos JS externos ni inventa URLs.
+        for contenido in response.css('script:not([src])::text').getall():
+            if slug not in contenido.lower():
                 continue
-            img_l = img.lower()
-            if any(x in img_l for x in ["logo", "icon", "favicon", "placeholder", "loader", "banner"]):
-                continue
-            if img.startswith("//"):
-                img = f"https:{img}"
-            return response.urljoin(img)
+            for raw in re.findall(
+                r'(?:https?:)?(?:\\/|/){2}[^\"\'\s<>]+?\.(?:webp|jpe?g|png|avif)|'
+                r'/storage/productos/[^\"\'\s<>]+?\.(?:webp|jpe?g|png|avif)',
+                contenido, flags=re.I
+            ):
+                agregar(raw, 'global', 35)
 
-        return ""
+        if not candidatos:
+            self.logger.warning('Sin imagen de producto: %s', response.url)
+            return ''
+
+        # Mayor puntuación primero; entre imágenes igualmente válidas, primera
+        # aparición en la galería (usualmente la imagen principal).
+        candidatos.sort(key=lambda c: (-c[0], c[1]))
+        return candidatos[0][2]
 
     def _buscar_imagenes_jsonld(self, data):
         encontrados = []
