@@ -21,6 +21,14 @@ if (!$data) {
     $data = $_POST;
 }
 
+// sendBeacon a veces llega como text/plain y PHP no llena $_POST.
+if (!$data && is_string($raw) && $raw !== '') {
+    parse_str($raw, $parsed);
+    if (is_array($parsed) && $parsed) {
+        $data = $parsed;
+    }
+}
+
 const CP_EVENT_ACTIONS = ['view', 'search_click', 'product_click'];
 const CP_EVENT_SOURCES = ['inicio', 'producto', 'buscar', 'busqueda', 'tienda', 'favoritos'];
 const CP_EVENT_SOURCE_ALIASES = ['index' => 'inicio'];
@@ -195,6 +203,7 @@ if ($action === '' || $productId <= 0) {
 $viewTracked = false;
 $searchClickTracked = false;
 $productClickTracked = false;
+$requestedAction = $action;
 
 $allowed = $action === 'product_click'
     ? cp_should_track('clicks', 30)
@@ -202,6 +211,16 @@ $allowed = $action === 'product_click'
 
 if (!$allowed) {
     $action = 'ignored';
+}
+
+// Historial personal de la sesión aunque el tracking analítico esté bloqueado.
+if (
+    in_array($requestedAction, ['view', 'search_click'], true)
+    && $productId > 0
+    && function_exists('cp_remember_viewed_product')
+    && !cp_is_bot_request()
+) {
+    cp_remember_viewed_product($productId);
 }
 
 if ($action === 'view') {

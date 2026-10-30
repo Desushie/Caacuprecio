@@ -18,6 +18,7 @@
   .topbar,
   .navbar,
   .footer,
+  .site-footer-push,
   .breadcrumb,
   .no-print,
   #themeToggle,
@@ -73,6 +74,8 @@
 @media print {
   html, body {
     height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
     overflow: visible !important;
   }
 

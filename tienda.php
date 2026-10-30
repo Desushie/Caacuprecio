@@ -731,33 +731,9 @@ body.theme-light .ts-page svg.lucide * {
   overflow: hidden;
 }
 
-.ts-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 3px;
-  background: color-mix(in srgb, var(--lane-accent) 38%, var(--bg-card));
-  z-index: 2;
-}
-
 .ts-panel[data-tone="warm"] { --lane-accent: var(--ts-accent-warm); --lane-soft: var(--ts-soft-warm); }
 .ts-panel[data-tone="rose"] { --lane-accent: var(--ts-accent-rose); --lane-soft: var(--ts-soft-rose); }
 .ts-panel[data-tone="sage"] { --lane-accent: var(--ts-accent-sage); --lane-soft: var(--ts-soft-sage); }
-
-.ts-mark {
-  position: absolute;
-  right: -0.25rem;
-  top: -0.6rem;
-  color: var(--lane-accent);
-  opacity: 0.08;
-  pointer-events: none;
-}
-
-.ts-mark svg.lucide {
-  width: 5rem;
-  height: 5rem;
-}
 
 .ts-kicker,
 .ts-overline {
@@ -791,10 +767,6 @@ body.theme-light .ts-page svg.lucide * {
   padding: 1.15rem 1.15rem 1rem;
 }
 
-.ts-summary > *:not(.ts-mark) {
-  position: relative;
-  z-index: 1;
-}
 
 .ts-summary-top {
   display: grid;
@@ -834,6 +806,39 @@ body.theme-light .ts-page svg.lucide * {
   font-size: 1.6rem;
   font-weight: var(--fw-bold);
   letter-spacing: var(--ls-heading);
+}
+
+.ts-logo.is-fallback,
+.ts-logo:has(.img-fallback) {
+  background: color-mix(in srgb, var(--lane-accent) 12%, #ffffff);
+  border-color: color-mix(in srgb, var(--lane-accent) 28%, var(--border-soft));
+  color: color-mix(in srgb, var(--lane-accent) 70%, #94a3b8);
+}
+
+.ts-logo .img-fallback,
+.ts-logo .ts-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: inherit;
+}
+
+.ts-logo .img-fallback svg.lucide,
+.ts-logo .ts-logo-fallback svg.lucide {
+  width: 2.65rem;
+  height: 2.65rem;
+  max-width: none;
+  max-height: none;
+  flex-shrink: 0;
+  color: #94a3b8 !important;
+  stroke: #94a3b8 !important;
+  stroke-width: 1.55;
+  opacity: 0.9;
 }
 
 .ts-identity {
@@ -902,6 +907,15 @@ body.theme-light .ts-page svg.lucide * {
   line-height: 1.6;
   letter-spacing: var(--ls-body);
   white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ts-lead-source {
+  margin: 0.35rem 0 0;
+  color: color-mix(in srgb, var(--text-soft) 82%, transparent);
+  font-size: var(--fs-overline);
+  line-height: 1.45;
+  letter-spacing: var(--ls-overline);
 }
 
 /* Descripción + categorías */
@@ -1081,8 +1095,38 @@ body.theme-light .ts-page svg.lucide * {
   transition: transform 0.25s ease;
 }
 
+.ts-featured-media .img-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: #94a3b8;
+}
+
+.ts-featured-media .img-fallback svg.lucide {
+  width: 2.75rem;
+  height: 2.75rem;
+  max-width: none;
+  max-height: none;
+  color: #94a3b8 !important;
+  stroke: #94a3b8 !important;
+  stroke-width: 1.6;
+  opacity: 0.8;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
 .ts-featured-item:hover .ts-featured-media img {
   transform: scale(1.04);
+}
+
+.ts-featured-item:hover .ts-featured-media .img-fallback svg.lucide {
+  transform: scale(1.06);
+  opacity: 1;
 }
 
 .ts-featured-badge {
@@ -1217,7 +1261,8 @@ body.theme-light .ts-page svg.lucide * {
   min-height: 0;
 }
 
-.ts-side > .ts-info-panel:only-child {
+.ts-side > .ts-info-panel:only-child,
+.ts-side > .ts-map-panel:only-child {
   flex: 1 1 auto;
 }
 
@@ -1628,11 +1673,6 @@ a.ts-contact-row:focus-visible .ts-contact-go {
 .ts-lane {
   padding: 1.15rem 1.15rem 1.2rem;
   scroll-margin-top: 5.5rem;
-}
-
-.ts-lane > *:not(.ts-mark) {
-  position: relative;
-  z-index: 1;
 }
 
 .ts-lane-head {
@@ -2976,15 +3016,61 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
 }
 
 /* ── Responsive ── */
+.ts-page,
+.ts-page .container,
+.ts-board,
+.ts-summary,
+.ts-side,
+.ts-content,
+.ts-lane,
+.ts-products-grid,
+.ts-toolbar {
+  min-width: 0;
+}
+
+.ts-page {
+  overflow-x: clip;
+}
+
+html.has-mobile-search-dock .ts-page {
+  padding-bottom: calc(var(--mobile-search-dock-space, 7.25rem) + 1.75rem);
+}
+
+.ts-page .products-pager {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (max-width: 1199.98px) {
   .ts-products-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ts-board {
+    grid-template-columns: minmax(0, 1.2fr) minmax(16.5rem, 0.85fr);
   }
 }
 
 @media (max-width: 991.98px) {
   .ts-board {
     grid-template-columns: 1fr;
+  }
+
+  .ts-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: stretch;
+  }
+
+  .ts-side > .ts-info-panel,
+  .ts-side > .ts-map-panel {
+    min-height: 0;
+  }
+
+  .ts-side > .ts-info-panel:only-child,
+  .ts-side > .ts-map-panel:only-child {
+    grid-column: 1 / -1;
   }
 
   .ts-map-panel {
@@ -3003,40 +3089,307 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
   .ts-review-item {
     flex-basis: calc((100% - var(--ts-review-gap)) / 2);
   }
+
+  .ts-products-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ts-summary-top {
+    grid-template-columns: 5rem minmax(0, 1fr) auto;
+    gap: 0.85rem;
+  }
+
+  .ts-logo {
+    width: 5rem;
+    height: 5rem;
+  }
 }
 
 @media (max-width: 767.98px) {
+  .ts-page {
+    padding: 0.85rem 0 2.6rem;
+  }
+
+  html.has-mobile-search-dock .ts-page {
+    padding-bottom: calc(var(--mobile-search-dock-space, 7.25rem) + 1.75rem);
+  }
+
+  .ts-board {
+    gap: 0.7rem;
+    margin-bottom: 0.95rem;
+  }
+
+  .ts-content {
+    gap: 0.95rem;
+  }
+
+  .ts-panel {
+    border-radius: 1.05rem;
+  }
+
+  .ts-summary,
+  .ts-lane {
+    padding: 0.95rem 0.9rem 1rem;
+  }
+
+  .ts-lane {
+    scroll-margin-top: 5rem;
+  }
+
+  .ts-side {
+    grid-template-columns: 1fr;
+  }
+
   .ts-products-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .ts-page .sr-card {
+    border-radius: 1rem;
+  }
+
+  .ts-page .sr-card-media {
+    height: 8.75rem;
+    aspect-ratio: auto;
+    max-height: none;
+  }
+
+  .ts-page .sr-card-desc {
+    display: none;
+  }
+
+  .ts-page .sr-card-body {
+    padding: 0.65rem 0.7rem 0.7rem;
+    gap: 0.35rem;
+  }
+
+  .ts-page .sr-card-name {
+    font-size: 0.8125rem;
+    min-height: 0;
+  }
+
+  .ts-page .sr-card-price {
+    font-size: 1.05rem;
+  }
+
+  .ts-page .sr-card-fresh {
+    max-width: min(9.5rem, 55%);
   }
 
   .ts-toolbar,
   .ts-toolbar:has(.ts-toolbar-clear) {
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
   }
 
   .ts-toolbar .ts-field--search {
     grid-column: 1 / -1;
   }
 
+  .ts-toolbar-clear {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .ts-featured-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ts-panel-head {
+    flex-wrap: wrap;
+    padding: 0.8rem 0.85rem 0.65rem;
+  }
+
+  .ts-map-wrap {
+    height: 13rem;
+    margin: 0.6rem 0.85rem 0.85rem;
+  }
+
+  .ts-hours-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.25rem 0.75rem;
+  }
+
+  .ts-hours-time {
+    text-align: left;
+  }
+
   .ts-review-item {
     flex-basis: 100%;
+    height: auto;
+    min-height: 11.5rem;
+  }
+
+  .ts-reviews-carousel-head {
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .ts-review-form .btn-primary {
+    align-self: stretch;
+    width: 100%;
+  }
+
+  .ts-subcard {
+    padding: 0.9rem;
+  }
+
+  .ts-rating-score-value {
+    font-size: 2rem;
+  }
+
+  .ts-page .products-pager {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+  }
+
+  .ts-page .products-pager-status {
+    width: 100%;
+    text-align: center;
+  }
+
+  .ts-page .products-pager-controls {
+    margin-left: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .ts-summary-top {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .ts-summary-tools {
+    grid-column: 1 / -1;
+  }
+
+  .ts-summary-tools .ts-link-chip {
+    width: 100%;
+    justify-content: center;
+    min-height: 2.25rem;
+  }
+
+  .ts-logo {
+    width: 4.5rem;
+    height: 4.5rem;
   }
 }
 
 @media (max-width: 575.98px) {
+  .ts-page {
+    padding: 0.7rem 0 2.25rem;
+  }
+
+  html.has-mobile-search-dock .ts-page {
+    padding-bottom: calc(var(--mobile-search-dock-space, 7.25rem) + 1.5rem);
+  }
+
+  .ts-summary,
+  .ts-lane {
+    padding: 0.85rem 0.75rem 0.9rem;
+  }
+
+  .ts-summary-top {
+    grid-template-columns: 4rem minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .ts-logo {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 0.9rem;
+    padding: 0.4rem;
+  }
+
+  .ts-logo .img-fallback svg.lucide,
+  .ts-logo .ts-logo-fallback svg.lucide {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .ts-title {
+    font-size: clamp(1.2rem, 5.5vw, 1.55rem);
+  }
+
+  .ts-rating-inline {
+    gap: 0.2rem 0.35rem;
+    font-size: 0.72rem;
+  }
+
+  .ts-about {
+    padding: 0.75rem 0.8rem;
+    border-radius: 0.8rem;
+    gap: 0.65rem;
+  }
+
   .ts-cats {
     grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .ts-chip {
+    min-height: 1.55rem;
+    padding: 0.12rem 0.5rem;
+    font-size: 0.72rem;
+  }
+
+  .ts-stats {
+    gap: 0.4rem;
+  }
+
+  .ts-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 0.6rem 0.55rem;
+    border-radius: 0.75rem;
+    text-align: left;
+  }
+
+  .ts-stat-icon {
+    display: none;
+  }
+
+  .ts-stat dt {
+    font-size: 0.58rem;
+  }
+
+  .ts-stat dd {
+    font-size: 0.88rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.25;
+  }
+
+  .ts-stat dd small {
+    font-size: 0.62rem;
+  }
+
+  .ts-featured {
+    padding-top: 0.75rem;
   }
 
   .ts-featured-list {
     grid-template-columns: none;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(9.5rem, 62%);
+    grid-auto-columns: minmax(9.5rem, 72%);
+    gap: 0.55rem;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     scroll-snap-type: x mandatory;
+    scroll-padding-inline: 0.15rem;
     scrollbar-width: none;
-    padding-bottom: 0.1rem;
+    padding: 0.05rem 0.15rem 0.35rem;
+    margin-inline: -0.15rem;
+    -webkit-overflow-scrolling: touch;
   }
 
   .ts-featured-list::-webkit-scrollbar {
@@ -3047,31 +3400,139 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
     scroll-snap-align: start;
   }
 
-  .ts-summary-top {
-    grid-template-columns: 4.25rem minmax(0, 1fr);
-    gap: 0.8rem;
+  .ts-featured-media {
+    height: 5.75rem;
   }
 
-  .ts-summary-tools {
-    grid-column: 1 / -1;
+  .ts-tablist {
+    margin: 0.8rem 0.75rem 0;
   }
 
-  .ts-logo {
-    width: 4.25rem;
-    height: 4.25rem;
+  .ts-tabs-content {
+    height: auto;
+    max-height: calc(
+      0.75rem
+      + var(--ts-hours-visible) * var(--ts-hours-row-h)
+      + var(--ts-hours-visible) * var(--ts-hours-gap)
+    );
+    padding: 0.7rem 0.3rem 0.8rem 0.75rem;
   }
 
-  .ts-stats {
-    grid-template-columns: 1fr;
+  .ts-contact-row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .ts-contact-go {
+    display: none;
+  }
+
+  .ts-contact-value {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .ts-lane-head {
-    grid-template-columns: 2.55rem minmax(0, 1fr);
+    grid-template-columns: 2.35rem minmax(0, 1fr);
+    gap: 0.6rem;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.8rem;
+  }
+
+  .ts-lane-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.75rem;
+  }
+
+  .ts-lane-icon svg.lucide {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .ts-lane-title {
+    font-size: clamp(1rem, 4.2vw, 1.15rem);
+  }
+
+  .ts-lane-caption {
+    font-size: 0.72rem;
   }
 
   .ts-lane-head .ts-count {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .ts-toolbar,
+  .ts-toolbar:has(.ts-toolbar-clear) {
+    grid-template-columns: 1fr;
+  }
+
+  .ts-toolbar .ts-field--search,
+  .ts-toolbar .ts-field--select {
+    grid-column: 1 / -1;
+  }
+
+  .ts-toolbar .btn {
+    width: 100%;
+    min-height: 2.55rem;
+    padding-inline: 0.85rem;
+  }
+
+  .ts-toolbar-clear {
+    min-height: 2.4rem;
+  }
+
+  .ts-products-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .ts-page .sr-card {
+    display: grid;
+    grid-template-columns: 7.25rem minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .ts-page .sr-card-media {
+    height: 100%;
+    min-height: 8.5rem;
+    border-radius: 0;
+    border-bottom: 0;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  .ts-page .sr-card-media .img-fallback svg.lucide {
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .ts-page .sr-card-body {
+    padding: 0.7rem 0.75rem 0.75rem;
+    gap: 0.3rem;
+  }
+
+  .ts-page .sr-card-name {
+    font-size: 0.875rem;
+    -webkit-line-clamp: 2;
+  }
+
+  .ts-page .sr-card-price {
+    font-size: 1.1rem;
+  }
+
+  .ts-page .sr-card-foot {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: auto;
+  }
+
+  .ts-page .sr-card-fresh {
+    max-width: none;
+  }
+
+  .ts-page .sr-card-desc {
+    display: none;
   }
 
   .ts-rating-layout,
@@ -3080,18 +3541,212 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
     grid-template-columns: 1fr;
   }
 
+  .ts-rating-bar {
+    grid-template-columns: auto minmax(0, 1fr) 1.75rem;
+    gap: 0.45rem;
+  }
+
+  .ts-rating-bar-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+  }
+
+  .ts-toast-stack {
+    top: 4.5rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    align-items: stretch;
+  }
+
+  .ts-toast {
+    max-width: none;
+  }
+
+  .report-review-modal .modal-header,
+  .report-review-modal .modal-body,
+  .report-review-modal .modal-footer {
+    padding-inline: 1rem;
+  }
+
   .report-review-modal .modal-footer {
     flex-direction: column-reverse;
   }
 
   .report-review-modal .modal-footer .btn {
     width: 100%;
+    min-width: 0;
+  }
+
+  .report-review-dialog {
+    width: calc(100% - 1rem);
+    margin-inline: auto;
   }
 }
 
-@media (max-width: 479.98px) {
-  .ts-products-grid {
+@media (max-width: 419.98px) {
+  .ts-summary,
+  .ts-lane {
+    padding: 0.75rem 0.65rem 0.8rem;
+  }
+
+  .ts-summary-top {
+    grid-template-columns: 3.6rem minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+
+  .ts-logo {
+    width: 3.6rem;
+    height: 3.6rem;
+  }
+
+  .ts-logo.is-initials {
+    font-size: 1.25rem;
+  }
+
+  .ts-stats {
+    gap: 0.35rem;
+  }
+
+  .ts-stat {
+    padding: 0.55rem 0.4rem;
+  }
+
+  .ts-stat dt {
+    font-size: 0.55rem;
+  }
+
+  .ts-stat dd {
+    font-size: 0.82rem;
+  }
+
+  .ts-featured-list {
+    grid-auto-columns: minmax(8.75rem, 82%);
+  }
+
+  .ts-toolbar .btn {
+    min-height: 2.5rem;
+  }
+
+  .ts-toolbar-btn-label {
+    display: inline;
+  }
+
+  .ts-page .sr-card {
+    grid-template-columns: 6.35rem minmax(0, 1fr);
+  }
+
+  .ts-page .sr-card-media {
+    min-height: 7.75rem;
+  }
+
+  .ts-page .sr-card-tags {
+    gap: 0.15rem;
+  }
+
+  .ts-page .sr-card-cat,
+  .ts-page .sr-card-brand {
+    font-size: 0.62rem;
+  }
+
+  .ts-page .sr-card-name {
+    font-size: 0.8125rem;
+  }
+
+  .ts-tab-btn {
+    min-height: 2.15rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.75rem;
+    gap: 0.3rem;
+  }
+
+  .ts-panel-head {
+    gap: 0.45rem;
+  }
+
+  .ts-link-chip {
+    min-height: 1.85rem;
+    padding: 0 0.55rem;
+    font-size: 0.68rem;
+  }
+
+  .ts-map-wrap {
+    height: 12rem;
+  }
+
+  .ts-page .products-pager-pages .products-pager-num:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (max-width: 359.98px) {
+  .ts-page .sr-card {
     grid-template-columns: 1fr;
+  }
+
+  .ts-page .sr-card-media {
+    height: 9rem;
+    min-height: 9rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .ts-page .sr-card-desc {
+    display: -webkit-box;
+  }
+
+  .ts-featured-list {
+    grid-auto-columns: minmax(8.25rem, 88%);
+  }
+
+  .ts-chip {
+    max-width: 100%;
+  }
+
+  .ts-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 767.98px) {
+  .ts-products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ts-featured-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .ts-side > .ts-info-panel,
+  .ts-side > .ts-map-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ts-map-wrap {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 12.5rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ts-chip,
+  .ts-link-chip,
+  .ts-tab-btn,
+  .ts-featured-item,
+  .ts-contact-row,
+  .ts-toolbar .btn,
+  .ts-reviews-carousel-btn,
+  .ts-review-action-btn {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ts-featured-item:hover,
+  .ts-featured-item:focus-visible {
+    transform: none;
   }
 }
 </style>
@@ -3172,7 +3827,17 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
         <div class="ts-summary-top">
           <div class="ts-logo<?= empty($store['tie_logo']) ? ' is-initials' : '' ?>">
             <?php if (!empty($store['tie_logo'])): ?>
-              <img src="<?= h($store['tie_logo']) ?>" alt="<?= h($store['tie_nombre']) ?>">
+              <img
+                src="<?= h($store['tie_logo']) ?>"
+                alt="<?= h($store['tie_nombre']) ?>"
+                loading="lazy"
+                decoding="async"
+                data-no-fallback="true"
+                onerror="this.onerror=null;var p=this.parentElement;this.remove();if(!p)return;p.classList.add('is-fallback');var f=p.querySelector('.ts-logo-fallback');if(f){f.hidden=false;f.removeAttribute('aria-hidden');}"
+              >
+              <span class="ts-logo-fallback" hidden aria-hidden="true">
+                <?= lucide_icon('image', '', 42) ?>
+              </span>
             <?php else: ?>
               <?= h(mb_strtoupper(mb_substr((string) $store['tie_nombre'], 0, 2))) ?>
             <?php endif; ?>
@@ -3267,7 +3932,9 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
                         onerror="this.onerror=null;if(window.applyProductImageFallback){applyProductImageFallback(this);}else{this.style.display='none';}"
                       >
                     <?php else: ?>
-                      <?= lucide_icon('image', '', 20) ?>
+                      <span class="img-fallback" role="img" aria-label="Sin imagen">
+                        <?= lucide_icon('image', '', 44) ?>
+                      </span>
                     <?php endif; ?>
                     <?php if ($featuredDiscount > 0): ?>
                       <span class="ts-featured-badge">−<?= $featuredDiscount ?>%</span>
@@ -3393,8 +4060,6 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
     <div class="ts-content">
 
       <section class="ts-panel ts-lane" id="productos" aria-labelledby="ts-products-title">
-        <span class="ts-mark" aria-hidden="true"><?= lucide_icon('package', '', 88) ?></span>
-
         <div class="ts-lane-head">
           <span class="ts-lane-icon" aria-hidden="true"><?= lucide_icon('package', '', 20) ?></span>
           <div>
@@ -3424,8 +4089,9 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
             </select>
             <?= lucide_icon('chevron-down', '', 16) ?>
           </label>
-          <button type="submit" class="btn btn-primary">
-            <?= lucide_icon('search', '', 15) ?> Buscar
+          <button type="submit" class="btn btn-primary" aria-label="Buscar">
+            <?= lucide_icon('search', '', 15) ?>
+            <span class="ts-toolbar-btn-label">Buscar</span>
           </button>
           <?php if ($hasSearch): ?>
             <a class="ts-toolbar-clear" href="<?= h(build_store_page_url($id, ['orden' => $sort === 'recientes' ? '' : $sort])) ?>#productos">
@@ -3582,8 +4248,6 @@ body.theme-light .report-review-modal .modal-footer .btn svg.lucide * {
       </section>
 
       <section class="ts-panel ts-lane" id="reviews" data-tone="warm" aria-labelledby="ts-reviews-title">
-        <span class="ts-mark" aria-hidden="true"><?= lucide_icon('message-square-quote', '', 88) ?></span>
-
         <div class="ts-lane-head">
           <span class="ts-lane-icon" aria-hidden="true"><?= lucide_icon('message-square-quote', '', 20) ?></span>
           <div>

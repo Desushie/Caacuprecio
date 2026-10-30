@@ -9,12 +9,8 @@ $emailPrellenado = $_GET['email'] ?? '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $emailPrellenado = $email;
-    $captchaError = turnstile_error();
 
-    if ($captchaError !== '') {
-        $msg = $captchaError;
-        $msgType = 'danger';
-    } elseif ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $stmt = $pdo->prepare('SELECT idusuario FROM usuario WHERE usu_email = :email LIMIT 1');
         $stmt->execute([':email' => $email]);
         $user = $stmt->fetch();
@@ -149,7 +145,10 @@ render_navbar('login');
   --rp-tint: color-mix(in srgb, var(--brand) 10%, transparent);
   --rp-amber: var(--accent);
   --rp-nav: 4.35rem;
-  padding: 1.15rem 0 3.5rem;
+  --rp-pad-x: clamp(0.85rem, 2.4vw, 1.6rem);
+  --rp-pad-y: clamp(1rem, 2vw, 1.45rem);
+  padding: 1.15rem 0 max(3.5rem, env(safe-area-inset-bottom, 0px) + 2rem);
+  overflow-x: clip;
 }
 
 .rp-page svg.lucide,
@@ -179,17 +178,19 @@ body.theme-light .rp-page svg.lucide * {
 /* ── Tablero ── */
 .rp-board {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(19rem, 0.85fr);
-  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(17.5rem, 0.85fr);
+  gap: clamp(0.7rem, 1.5vw, 0.95rem);
   align-items: stretch;
+  width: 100%;
 }
 
 .rp-panel {
   position: relative;
   min-width: 0;
+  width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--rp-line);
-  border-radius: 1.15rem;
+  border-radius: clamp(0.95rem, 2.2vw, 1.15rem);
   overflow: hidden;
   scrollbar-width: thin;
 }
@@ -198,7 +199,7 @@ body.theme-light .rp-page svg.lucide * {
 .rp-main {
   display: flex;
   flex-direction: column;
-  padding: 1.45rem 1.6rem 1.15rem;
+  padding: var(--rp-pad-y) var(--rp-pad-x) 1.15rem;
 }
 
 .rp-mark {
@@ -226,11 +227,12 @@ body.theme-light .rp-page svg.lucide * {
 
 .rp-title {
   margin: 0.15rem 0 0.3rem;
-  font-size: var(--fs-h1);
+  font-size: clamp(1.35rem, 1.05rem + 1.4vw, var(--fs-h1));
   font-weight: var(--fw-bold);
   letter-spacing: var(--ls-heading);
   line-height: var(--lh-heading);
   color: var(--text-main);
+  text-wrap: balance;
 }
 
 .rp-lead {
@@ -526,7 +528,6 @@ body:not(.theme-light) .rp-page .rp-input.is-invalid:focus {
 }
 
 .rp-sent-actions form { display: contents; }
-.rp-sent-actions .cf-turnstile-slot { grid-column: 1 / -1; }
 
 .rp-page .rp-btn:disabled { opacity: 0.5; }
 
@@ -619,12 +620,6 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
   min-width: 0;
 }
 
-.rp-help-list li > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .rp-help-list strong {
   color: var(--text-main);
   font-size: var(--fs-small);
@@ -637,6 +632,7 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
   font-size: var(--fs-caption);
   line-height: 1.45;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
 /* Pie del panel */
@@ -921,7 +917,7 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
   margin-top: calc((var(--lh-small) * 1em - 15px) / 2);
 }
 
-/* Escritorio: el tablero ocupa exactamente el alto disponible de la pantalla */
+/* Escritorio: el tablero ocupa el alto disponible de la pantalla */
 @media (min-width: 992px) and (min-height: 620px) {
   .rp-page {
     display: flex;
@@ -941,7 +937,7 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
     flex: 1 1 0;
     grid-template-rows: minmax(0, 1fr);
     min-height: 0;
-    max-height: 35rem;
+    max-height: min(35rem, calc(100dvh - var(--rp-nav) - 5.5rem));
   }
 
   .rp-main,
@@ -951,11 +947,11 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
 /* Ambos paneles comparten filas: el bloque gris queda a la altura de las tarjetas de ayuda */
 @media (min-width: 992px) {
   .rp-board {
+    grid-template-columns: minmax(0, 1.35fr) minmax(17.5rem, 0.8fr);
     grid-template-rows: auto auto 1fr auto auto;
     row-gap: 0;
   }
 
-  /* overflow auto + subgrid hace que Chrome reserve el ancho de una barra de scroll invisible */
   .rp-main,
   .rp-guide {
     display: grid;
@@ -986,31 +982,236 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
   .rp-help-list { flex: 1 1 auto; }
 }
 
+/* Tablet y móvil: una columna fluida */
 @media (max-width: 991.98px) {
-  .rp-board { grid-template-columns: minmax(0, 1fr); }
+  .rp-page {
+    --rp-pad-x: clamp(0.95rem, 3.2vw, 1.35rem);
+    padding-top: 0.95rem;
+    padding-bottom: max(2.75rem, env(safe-area-inset-bottom, 0px) + 1.5rem);
+  }
+
+  .rp-board {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    max-width: 42rem;
+    margin-inline: auto;
+  }
+
+  .rp-body {
+    padding: 0.95rem 0;
+  }
+
+  .rp-help-list {
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  }
+
+  .rp-guide-head {
+    padding: 1rem var(--rp-pad-x) 0.9rem;
+  }
+
+  .rp-steps {
+    padding: 1.1rem var(--rp-pad-x) 0.95rem;
+  }
+
+  .rp-step:not(:last-child) {
+    max-height: none;
+    padding-bottom: 1rem;
+  }
+
+  .rp-facts {
+    margin: 0 var(--rp-pad-x);
+  }
+
+  .rp-note {
+    padding: 1rem var(--rp-pad-x) 1.05rem;
+  }
+
+  .rp-page .pd-crumb-current {
+    max-width: min(18rem, 52vw);
+  }
 }
 
+/* Móvil */
 @media (max-width: 575.98px) {
-  .rp-main { padding: 1.2rem 1rem 1.1rem; }
+  .rp-page {
+    --rp-pad-x: 1rem;
+    --rp-pad-y: 1.15rem;
+    padding-top: 0.75rem;
+  }
+
+  .rp-board {
+    gap: 0.7rem;
+    max-width: none;
+  }
+
+  .rp-main {
+    padding-bottom: 1rem;
+  }
+
   .rp-head { padding-right: 0; }
   .rp-mark { display: none; }
-  .rp-combo { flex-direction: column; }
-  .rp-sent-card { flex-wrap: wrap; }
-  .rp-page .rp-btn--lg { width: 100%; }
-  .rp-guide-head,
-  .rp-steps,
-  .rp-note { padding-left: 1rem; padding-right: 1rem; }
-  .rp-facts { margin: 0 1rem; }
+
+  .rp-combo {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .rp-combo + .rp-hint {
+    margin-top: 0.75rem;
+  }
+
+  .rp-page .rp-input {
+    min-height: 3rem;
+    font-size: 1rem; /* evita zoom iOS */
+  }
+
+  .rp-page .rp-btn--lg {
+    width: 100%;
+    min-height: 3rem;
+  }
+
+  .rp-sent-card {
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
   .rp-sent-actions,
-  .rp-help-list { grid-template-columns: minmax(0, 1fr); }
-  .rp-foot { flex-direction: column; align-items: flex-start; }
+  .rp-help-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rp-help-list {
+    padding: 0.9rem 0.65rem 0.65rem;
+    gap: 0.45rem;
+  }
+
+  .rp-help-list li {
+    padding: 0.55rem 0.7rem 0.6rem;
+  }
+
+  .rp-foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+
+  .rp-alt {
+    flex-wrap: wrap;
+  }
+
+  .rp-guide-deco span:nth-child(1) {
+    width: 7rem;
+    height: 7rem;
+    right: -3rem;
+    top: -3.5rem;
+  }
+
+  .rp-guide-deco span:nth-child(2) {
+    width: 3.6rem;
+    height: 3.6rem;
+    right: 2.2rem;
+    top: 1.35rem;
+  }
+
+  .rp-guide-icon {
+    width: 2.45rem;
+    height: 2.45rem;
+    border-radius: 0.75rem;
+  }
+
+  .rp-guide-icon svg.lucide {
+    width: 1.3rem !important;
+    height: 1.3rem !important;
+  }
+
+  .rp-steps {
+    padding-top: 1rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .rp-step {
+    gap: 0.65rem;
+  }
+
+  .rp-step:not(:last-child) {
+    padding-bottom: 0.85rem;
+  }
+
   .rp-toast-stack {
-    top: 4.5rem;
+    top: max(4.25rem, env(safe-area-inset-top, 0px) + 3.5rem);
     right: 0.75rem;
     left: 0.75rem;
     align-items: stretch;
   }
+
   .rp-toast { max-width: none; }
+
+  .rp-page .pd-crumb {
+    margin-bottom: 0.65rem;
+  }
+
+  .rp-page .pd-crumb-current {
+    max-width: min(11.5rem, 48vw);
+  }
+}
+
+/* Móviles muy angostos */
+@media (max-width: 379.98px) {
+  .rp-page {
+    --rp-pad-x: 0.85rem;
+    --rp-pad-y: 1rem;
+  }
+
+  .rp-kicker {
+    font-size: 0.65rem;
+  }
+
+  .rp-title {
+    font-size: clamp(1.2rem, 6.5vw, 1.4rem);
+  }
+
+  .rp-lead {
+    font-size: var(--fs-caption);
+  }
+
+  .rp-page .pd-crumb-list .breadcrumb-item:nth-child(2) {
+    display: none;
+  }
+
+  .rp-page .pd-crumb-current {
+    max-width: min(10rem, 55vw);
+  }
+
+  .rp-guide-title {
+    font-size: var(--fs-small);
+  }
+}
+
+/* Landscape bajo: compactar verticalmente */
+@media (max-height: 560px) and (orientation: landscape) {
+  .rp-page {
+    padding-top: 0.55rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .rp-body {
+    padding: 0.55rem 0;
+    justify-content: flex-start;
+  }
+
+  .rp-help {
+    margin-top: 0.35rem;
+  }
+
+  .rp-steps {
+    padding-top: 0.75rem;
+    padding-bottom: 0.65rem;
+  }
+
+  .rp-step:not(:last-child) {
+    max-height: none;
+    padding-bottom: 0.65rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1054,7 +1255,7 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
           <a href="<?= $backHref ?>" class="pd-crumb-link"><?= e($backLabel) ?></a>
         </li>
         <li class="breadcrumb-item active" aria-current="page">
-          <span class="pd-crumb-current">Recuperar contraseña</span>
+          <span class="pd-crumb-current" title="Recuperar contraseña">Recuperar contraseña</span>
         </li>
       </ol>
     </nav>
@@ -1092,7 +1293,6 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
             <div class="rp-sent-actions">
               <form method="post" action="olvide_password.php" data-rp-resend>
                 <input type="hidden" name="email" value="<?= e($emailPrellenado) ?>">
-                <?= turnstile_widget() ?>
                 <button type="submit" class="btn rp-btn rp-btn--ghost" data-rp-resend-btn data-cooldown="30" disabled>
                   <?= lucide_icon('refresh-cw', '', 16) ?>
                   <span data-rp-resend-label>Reenviar en 30 s</span>
@@ -1134,7 +1334,6 @@ body.theme-light .rp-page .rp-btn--ghost { border-color: #dde3ec; }
                   <span data-rp-hint-text>Usa el correo con el que te registraste.</span>
                 </p>
               </div>
-              <?= turnstile_widget() ?>
             </form>
           <?php endif; ?>
         </div>

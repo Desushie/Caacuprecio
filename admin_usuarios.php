@@ -293,14 +293,16 @@ require __DIR__ . '/auth_toast.php';
         <div class="au-gate-main">
           <div class="au-head">
             <div class="au-head-copy">
-              <span class="au-tag"><?= lucide_icon('key-round', '', 14) ?>Control de accesos</span>
+              <div class="au-head-kicker">
+                <span class="au-tag"><?= lucide_icon('key-round', '', 14) ?>Control de accesos</span>
+                <p class="au-total">
+                  <?= lucide_icon('users-round', '', 14) ?>
+                  <strong><?= $fmt($userTotal) ?></strong>
+                  <span><?= $userTotal === 1 ? 'cuenta registrada' : 'cuentas registradas' ?></span>
+                </p>
+              </div>
               <h1 id="au-title" class="au-title">Usuarios</h1>
             </div>
-            <p class="au-total">
-              <?= lucide_icon('users-round', '', 14) ?>
-              <strong><?= $fmt($userTotal) ?></strong>
-              <span><?= $userTotal === 1 ? 'cuenta registrada' : 'cuentas registradas' ?></span>
-            </p>
           </div>
 
           <p class="au-lead">
@@ -414,19 +416,47 @@ require __DIR__ . '/auth_toast.php';
       <section class="dash-panel au-list animate-reveal-up" aria-labelledby="au-list-title" style="--lane-accent: var(--brand)">
         <header class="dash-panel-head">
           <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('users-round', '', 18) ?></span>
-          <div>
-            <h2 id="au-list-title" class="dash-panel-title">Cuentas</h2>
-            <p class="dash-panel-caption">
-              <?php if ($usuarios): ?>
-                <?php if ($totalPages > 1): ?>
-                  <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($resultTotal) ?> resultados · por <?= e(mb_strtolower(AU_ORDENES[$orden]['label'])) ?>
-                <?php else: ?>
-                  <?= $fmt($resultTotal) ?> <?= $resultTotal === 1 ? 'resultado' : 'resultados' ?> · por <?= e(mb_strtolower(AU_ORDENES[$orden]['label'])) ?>
-                <?php endif; ?>
-              <?php else: ?>
-                Ninguna cuenta coincide
-              <?php endif; ?>
-            </p>
+          <div class="au-list-heading">
+            <div class="au-list-heading-top">
+              <div class="au-list-heading-copy">
+                <h2 id="au-list-title" class="dash-panel-title">Cuentas</h2>
+                <p class="dash-panel-caption">
+                  <?php if ($usuarios): ?>
+                    <?php if ($totalPages > 1): ?>
+                      <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($resultTotal) ?> resultados · por <?= e(mb_strtolower(AU_ORDENES[$orden]['label'])) ?>
+                    <?php else: ?>
+                      <?= $fmt($resultTotal) ?> <?= $resultTotal === 1 ? 'resultado' : 'resultados' ?> · por <?= e(mb_strtolower(AU_ORDENES[$orden]['label'])) ?>
+                    <?php endif; ?>
+                  <?php else: ?>
+                    Ninguna cuenta coincide
+                  <?php endif; ?>
+                </p>
+              </div>
+              <?php
+                $auRowsForm = static function (string $slot) use ($q, $rol, $estado, $orden, $filas): void {
+              ?>
+              <form method="get" class="au-rows-form is-<?= e($slot) ?>">
+                <?php foreach (['q' => $q, 'rol' => $rol, 'estado' => $estado, 'orden' => $orden !== 'recientes' ? $orden : ''] as $name => $value): ?>
+                  <?php if ($value !== ''): ?><input type="hidden" name="<?= $name ?>" value="<?= e($value) ?>"><?php endif; ?>
+                <?php endforeach; ?>
+                <label class="ap-rows-select <?= $filas !== AU_FILAS_DEFAULT ? 'is-set' : '' ?>" title="Filas por página">
+                  <?= lucide_icon('rows-3', 'ap-rows-select-icon', 15) ?>
+                  <span class="ap-rows-select-label">Filas</span>
+                  <span class="ap-rows-select-value" aria-hidden="true"><?= $filas ?></span>
+                  <select name="filas" class="ap-rows-select-input" aria-label="Filas por página" data-au-rows>
+                    <?php foreach (AU_FILAS as $option): ?>
+                      <option value="<?= $option ?>" <?= $option === $filas ? 'selected' : '' ?>><?= $option ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                  <?= lucide_icon('chevron-down', 'ap-rows-select-caret', 13) ?>
+                </label>
+                <noscript><button type="submit" class="at-search-go" aria-label="Aplicar"><?= lucide_icon('arrow-right', '', 15) ?></button></noscript>
+              </form>
+              <?php
+                };
+                $auRowsForm('head');
+              ?>
+            </div>
           </div>
 
           <form method="get" class="at-search" role="search">
@@ -472,24 +502,7 @@ require __DIR__ . '/auth_toast.php';
                 <?php endif; ?>
               </div>
             <?php endif; ?>
-
-            <form method="get" class="au-rows-form">
-              <?php foreach (['q' => $q, 'rol' => $rol, 'estado' => $estado, 'orden' => $orden !== 'recientes' ? $orden : ''] as $name => $value): ?>
-                <?php if ($value !== ''): ?><input type="hidden" name="<?= $name ?>" value="<?= e($value) ?>"><?php endif; ?>
-              <?php endforeach; ?>
-              <label class="ap-rows-select <?= $filas !== AU_FILAS_DEFAULT ? 'is-set' : '' ?>" title="Filas por página">
-                <?= lucide_icon('rows-3', 'ap-rows-select-icon', 15) ?>
-                <span class="ap-rows-select-label">Filas</span>
-                <span class="ap-rows-select-value" aria-hidden="true"><?= $filas ?></span>
-                <select name="filas" class="ap-rows-select-input" aria-label="Filas por página" data-au-rows>
-                  <?php foreach (AU_FILAS as $option): ?>
-                    <option value="<?= $option ?>" <?= $option === $filas ? 'selected' : '' ?>><?= $option ?></option>
-                  <?php endforeach; ?>
-                </select>
-                <?= lucide_icon('chevron-down', 'ap-rows-select-caret', 13) ?>
-              </label>
-              <noscript><button type="submit" class="at-search-go" aria-label="Aplicar"><?= lucide_icon('arrow-right', '', 15) ?></button></noscript>
-            </form>
+            <?php $auRowsForm('bar'); ?>
           </div>
         </div>
 
@@ -529,22 +542,23 @@ require __DIR__ . '/auth_toast.php';
                   </div>
                 </div>
 
-                <div class="au-role">
-                  <span class="au-role-pill"><?= lucide_icon($role['icon'], '', 13) ?><?= e($role['single']) ?></span>
-                </div>
-
-                <div class="au-store">
-                  <?php if ($user['rol'] === 'empresa' && !empty($user['tie_nombre'])): ?>
-                    <a href="tienda.php?id=<?= (int) $user['tiendas_idtiendas'] ?>" class="au-store-link" target="_blank" rel="noopener" title="Ver página de la tienda">
-                      <?= lucide_icon('store', '', 15) ?><span><?= e($user['tie_nombre']) ?></span>
-                    </a>
-                  <?php elseif ($user['rol'] === 'empresa'): ?>
-                    <button type="button" class="au-store-missing" data-bs-toggle="modal" data-bs-target="#editUserModal<?= $userId ?>">
-                      <?= lucide_icon('unplug', '', 15) ?><span>Asignar tienda</span>
-                    </button>
-                  <?php else: ?>
-                    <span class="au-store-none">—</span>
-                  <?php endif; ?>
+                <div class="au-corner">
+                  <div class="au-role">
+                    <span class="au-role-pill"><?= lucide_icon($role['icon'], '', 13) ?><?= e($role['single']) ?></span>
+                  </div>
+                  <div class="au-store">
+                    <?php if ($user['rol'] === 'empresa' && !empty($user['tie_nombre'])): ?>
+                      <a href="tienda.php?id=<?= (int) $user['tiendas_idtiendas'] ?>" class="au-store-link" target="_blank" rel="noopener" title="Ver página de la tienda">
+                        <?= lucide_icon('store', '', 15) ?><span><?= e($user['tie_nombre']) ?></span>
+                      </a>
+                    <?php elseif ($user['rol'] === 'empresa'): ?>
+                      <button type="button" class="au-store-missing" data-bs-toggle="modal" data-bs-target="#editUserModal<?= $userId ?>">
+                        <?= lucide_icon('unplug', '', 15) ?><span>Asignar tienda</span>
+                      </button>
+                    <?php else: ?>
+                      <span class="au-store-none">—</span>
+                    <?php endif; ?>
+                  </div>
                 </div>
 
                 <div class="au-activity">
@@ -814,13 +828,13 @@ require __DIR__ . '/auth_toast.php';
 
 
 <script>
-const rowsSelect = document.querySelector('[data-au-rows]');
-if (rowsSelect) {
+document.querySelectorAll('[data-au-rows]').forEach(function(rowsSelect) {
   rowsSelect.addEventListener('change', function() {
-    rowsSelect.parentElement.querySelector('.ap-rows-select-value').textContent = rowsSelect.value;
+    const value = rowsSelect.parentElement.querySelector('.ap-rows-select-value');
+    if (value) value.textContent = rowsSelect.value;
     rowsSelect.form.requestSubmit();
   });
-}
+});
 
 document.querySelectorAll('[data-au-edit]').forEach(function(form) {
   const store = form.querySelector('[data-au-store]');

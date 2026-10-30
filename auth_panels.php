@@ -138,8 +138,6 @@ require __DIR__ . '/auth_toast.php';
         <?php endif; ?>
       </div>
 
-      <?= turnstile_widget() ?>
-
       <button class="btn btn-primary auth-submit" type="submit">Entrar</button>
     </form>
 

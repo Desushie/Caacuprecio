@@ -583,6 +583,15 @@ if ($stalest && $now - $stalest['lastTs'] < 86400) {
     $stalest = null;
 }
 
+$isHistoryPartial = (string) ($_GET['partial'] ?? '') === 'history';
+
+if ($isHistoryPartial) {
+    header('Content-Type: text/html; charset=UTF-8');
+    header('Cache-Control: no-store');
+    require __DIR__ . '/admin_scraper_history.php';
+    exit;
+}
+
 render_head($tabTitle);
 ?>
 <link rel="stylesheet" href="./css/admin.css?v=<?= filemtime(__DIR__ . '/css/admin.css') ?>">
@@ -868,9 +877,10 @@ render_head($tabTitle);
             <h2 id="sx-stores-title" class="dash-panel-title">Por tienda</h2>
             <p class="dash-panel-caption">
               <?php if ($fullActive): ?>
-                <?= lucide_icon('info', '', 13) ?>La actualización completa en curso ya incluye estas tiendas.
+                <?= lucide_icon('info', '', 13) ?>
+                <span>La actualización completa en curso ya incluye estas tiendas.</span>
               <?php else: ?>
-                Actualiza una tienda específica sin esperar la actualización completa.
+                <span>Actualiza una tienda específica sin esperar la actualización completa.</span>
               <?php endif; ?>
             </p>
           </div>
@@ -953,217 +963,163 @@ render_head($tabTitle);
         </ul>
       </section>
 
-      <section class="dash-panel sx-history animate-reveal-up" aria-labelledby="sx-history-title" style="--lane-accent: var(--brand)">
-        <header class="dash-panel-head">
-          <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('history', '', 18) ?></span>
-          <div>
-            <h2 id="sx-history-title" class="dash-panel-title">Historial</h2>
-            <p class="dash-panel-caption">
-              <?php if ($historyTotal > 0): ?>
-                <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($historyTotal) ?> tareas · abre el registro para ver qué devolvió cada una
-              <?php else: ?>
-                Abre el registro de una tarea para ver qué devolvió
-              <?php endif; ?>
-            </p>
-          </div>
-        </header>
-
-        <?php if ($tableExists): ?>
-          <div class="sx-history-bar">
-            <nav class="sx-chips" aria-label="Filtrar historial">
-              <?php foreach ($historyFilters as $fKey => $filter): ?>
-                <a
-                  href="<?= e(sx_url($fKey, $filas)) ?>"
-                  class="sx-filter <?= $estado === $fKey ? 'is-active' : '' ?>"
-                  <?= $estado === $fKey ? 'aria-current="true"' : '' ?>
-                >
-                  <?= e($filter['label']) ?>
-                  <span class="sx-filter-count"><?= $fmt($filterCounts[$fKey]) ?></span>
-                </a>
-              <?php endforeach; ?>
-            </nav>
-
-            <form method="get" class="sx-rows-form">
-              <?php if ($estado !== 'todas'): ?>
-                <input type="hidden" name="estado" value="<?= e($estado) ?>">
-              <?php endif; ?>
-              <label class="ap-rows-select <?= $filas !== SX_FILAS_DEFAULT ? 'is-set' : '' ?>" title="Filas por página">
-                <?= lucide_icon('rows-3', 'ap-rows-select-icon', 15) ?>
-                <span class="ap-rows-select-label">Filas</span>
-                <span class="ap-rows-select-value" aria-hidden="true"><?= $filas ?></span>
-                <select name="filas" class="ap-rows-select-input" aria-label="Filas por página" data-sx-rows>
-                  <?php foreach (SX_FILAS as $option): ?>
-                    <option value="<?= $option ?>" <?= $option === $filas ? 'selected' : '' ?>><?= $option ?></option>
-                  <?php endforeach; ?>
-                </select>
-                <?= lucide_icon('chevron-down', 'ap-rows-select-caret', 13) ?>
-              </label>
-              <noscript><button type="submit" class="sx-btn is-sm">Aplicar</button></noscript>
-            </form>
-          </div>
-        <?php endif; ?>
-
-        <?php if ($jobHistory): ?>
-          <div class="sx-table">
-            <div class="sx-cols" aria-hidden="true">
-              <span>Tarea</span>
-              <span>Estado</span>
-              <span>Espera</span>
-              <span>Duración</span>
-              <span>Finalizó</span>
-              <span></span>
-            </div>
-
-            <ul class="sx-rows">
-              <?php foreach ($jobHistory as $job): ?>
-                <?php
-                  $st = sx_status((string) $job['status']);
-                  $created = sx_ts($job['created_at']);
-                  $started = sx_ts($job['started_at']);
-                  $finished = sx_ts($job['finished_at']);
-                  $isActive = in_array($job['status'], ['pending', 'running'], true);
-                  $waitEnd = $started ?? ($job['status'] === 'pending' ? $now : null);
-                  $wait = $created !== null && $waitEnd !== null ? $waitEnd - $created : null;
-                  $runEnd = $finished ?? ($job['status'] === 'running' ? $now : null);
-                  $duration = $started !== null && $runEnd !== null ? $runEnd - $started : null;
-                  $hasLog = (int) $job['output_len'] > 0;
-                  $logId = 'sx-log-' . (int) $job['id'];
-                ?>
-                <li class="sx-item">
-                  <div class="sx-row <?= $st['tone'] ?>">
-                    <div class="sx-task">
-                      <span class="sx-task-icon <?= $job['status'] === 'running' ? 'sx-spin' : '' ?>" aria-hidden="true"><?= lucide_icon($st['icon'], '', 16) ?></span>
-                      <div class="sx-task-copy">
-                        <span class="sx-task-name"><?= e($jobName($job)) ?></span>
-                        <span class="sx-task-meta">
-                          <span class="sx-task-id">#<?= (int) $job['id'] ?></span>
-                          <span title="<?= e((string) $job['created_at']) ?>">Creada <?= e(sx_ago($created, $now)) ?></span>
-                        </span>
-                      </div>
-                    </div>
-                    <span class="sx-cell-status"><span class="sx-chip <?= $st['tone'] ?>"><?= e($st['label']) ?></span></span>
-                    <span class="sx-cell" data-label="Espera"><?= e(sx_duration($wait)) ?></span>
-                    <span class="sx-cell" data-label="Duración">
-                      <?= e(sx_duration($duration)) ?><?php if ($job['status'] === 'running'): ?><small> y sigue</small><?php endif; ?>
-                    </span>
-                    <span class="sx-cell" data-label="Finalizó" title="<?= e((string) ($job['finished_at'] ?? '')) ?>">
-                      <?= $finished !== null ? e(date('d/m H:i', $finished)) : '—' ?>
-                    </span>
-                    <div class="sx-actions">
-                      <?php if ($hasLog): ?>
-                        <button
-                          type="button"
-                          class="sx-log-toggle"
-                          aria-expanded="false"
-                          aria-controls="<?= $logId ?>"
-                          data-sx-log
-                        >
-                          <?= lucide_icon('terminal', '', 14) ?><span>Registro</span><?= lucide_icon('chevron-down', 'sx-log-caret', 14) ?>
-                        </button>
-                      <?php endif; ?>
-                      <?php if ($isActive): ?>
-                        <form method="post" class="m-0">
-                          <input type="hidden" name="action" value="cancel_job">
-                          <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">
-                          <?= $returnFields ?>
-                          <button type="submit" class="sx-btn is-stop is-sm"><?= lucide_icon('square', '', 13) ?>Detener</button>
-                        </form>
-                      <?php endif; ?>
-                    </div>
-                  </div>
-
-                  <?php if ($hasLog): ?>
-                    <div class="sx-log" id="<?= $logId ?>" hidden>
-                      <div class="sx-log-bar">
-                        <span><?= lucide_icon('file-code-2', '', 13) ?><?= e(basename((string) $job['command_path'])) ?></span>
-                        <?php if ((int) $job['output_len'] > SX_LOG_TAIL): ?>
-                          <span>Últimos <?= $fmt(SX_LOG_TAIL) ?> de <?= $fmt((int) $job['output_len']) ?> caracteres</span>
-                        <?php endif; ?>
-                      </div>
-                      <pre class="sx-log-output"><?= e((string) $job['output_tail']) ?></pre>
-                    </div>
-                  <?php endif; ?>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-          </div>
-
-          <?php if ($totalPages > 1): ?>
-            <nav class="ap-pager" aria-label="Paginación del historial">
-              <span class="ap-pager-info">Página <strong><?= $fmt($page) ?></strong> de <?= $fmt($totalPages) ?></span>
-              <div class="ap-pages">
-                <a
-                  class="ap-page-btn <?= $page <= 1 ? 'is-disabled' : '' ?>"
-                  href="<?= e(sx_url($estado, $filas, max(1, $page - 1))) ?>"
-                  aria-label="Página anterior"
-                  <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : '' ?>
-                ><?= lucide_icon('chevron-left', '', 15) ?></a>
-                <?php foreach ($pageItems as $item): ?>
-                  <?php if ($item === null): ?>
-                    <span class="ap-page-gap" aria-hidden="true">…</span>
-                  <?php else: ?>
-                    <a
-                      class="ap-page-btn <?= $item === $page ? 'is-current' : '' ?>"
-                      href="<?= e(sx_url($estado, $filas, $item)) ?>"
-                      <?= $item === $page ? 'aria-current="page"' : '' ?>
-                    ><?= $fmt($item) ?></a>
-                  <?php endif; ?>
-                <?php endforeach; ?>
-                <a
-                  class="ap-page-btn <?= $page >= $totalPages ? 'is-disabled' : '' ?>"
-                  href="<?= e(sx_url($estado, $filas, min($totalPages, $page + 1))) ?>"
-                  aria-label="Página siguiente"
-                  <?= $page >= $totalPages ? 'aria-disabled="true" tabindex="-1"' : '' ?>
-                ><?= lucide_icon('chevron-right', '', 15) ?></a>
-              </div>
-            </nav>
-          <?php endif; ?>
-        <?php elseif ($tableExists): ?>
-          <div class="dash-empty">
-            <?= lucide_icon($estado === 'todas' ? 'inbox' : 'filter-x', '', 28) ?>
-            <strong><?= $estado === 'todas' ? 'Todavía no hay tareas' : 'Nada con este filtro' ?></strong>
-            <span>
-              <?php if ($estado === 'todas'): ?>
-                Inicia una actualización y su avance aparecerá aquí.
-              <?php else: ?>
-                <a href="<?= e(sx_url('todas', $filas)) ?>">Ver todas las tareas</a>
-              <?php endif; ?>
-            </span>
-          </div>
-        <?php else: ?>
-          <div class="dash-empty">
-            <?= lucide_icon('database-zap', '', 28) ?>
-            <strong>Historial no disponible</strong>
-            <span>Falta la tabla de tareas en la base de datos.</span>
-          </div>
-        <?php endif; ?>
-      </section>
+      <?php require __DIR__ . '/admin_scraper_history.php'; ?>
     </div>
   </div>
 </section>
 
 <script>
 (function() {
-  document.querySelectorAll('[data-sx-log]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      const log = document.getElementById(btn.getAttribute('aria-controls'));
-      const open = btn.getAttribute('aria-expanded') !== 'true';
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  const FILAS_DEFAULT = '<?= SX_FILAS_DEFAULT ?>';
+  let historyRequest = 0;
+
+  function historyPartialUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.set('partial', 'history');
+    next.hash = '';
+    return next.toString();
+  }
+
+  function publicHistoryUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.delete('partial');
+    return next.pathname + next.search + next.hash;
+  }
+
+  function isScraperUrl(url) {
+    try {
+      const next = new URL(url, window.location.href);
+      return next.origin === window.location.origin && /\/admin_scraper\.php$/i.test(next.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function buildHistoryUrlFromForm(form) {
+    const data = new FormData(form);
+    const params = new URLSearchParams();
+    data.forEach(function(value, key) {
+      const text = String(value);
+      if (text === '') return;
+      if (key === 'filas' && text === FILAS_DEFAULT) return;
+      if (key === 'page') return;
+      params.set(key, text);
+    });
+    const query = params.toString();
+    return 'admin_scraper.php' + (query ? '?' + query : '');
+  }
+
+  function loadHistory(url, options) {
+    const opts = options || {};
+    const panel = document.querySelector('[data-sx-history]');
+    if (!panel) return Promise.resolve();
+
+    const scrollY = window.scrollY;
+    const requestId = ++historyRequest;
+    panel.classList.add('is-loading');
+    panel.setAttribute('aria-busy', 'true');
+
+    return fetch(historyPartialUrl(url), {
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'text/html'
+      }
+    })
+      .then(function(response) {
+        if (!response.ok) throw new Error('No se pudo cargar el historial.');
+        return response.text();
+      })
+      .then(function(html) {
+        if (requestId !== historyRequest) return;
+
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const next = doc.querySelector('[data-sx-history]');
+        if (!next) throw new Error('Respuesta de historial inválida.');
+
+        panel.replaceWith(document.importNode(next, true));
+        if (window.refreshLucideIcons) window.refreshLucideIcons();
+
+        const publicUrl = publicHistoryUrl(url);
+        if (opts.replace) {
+          history.replaceState({ adminScraper: true }, '', publicUrl);
+        } else {
+          history.pushState({ adminScraper: true }, '', publicUrl);
+        }
+
+        window.scrollTo(0, scrollY);
+      })
+      .catch(function() {
+        if (requestId !== historyRequest) return;
+        window.location.href = publicHistoryUrl(url);
+      })
+      .finally(function() {
+        if (requestId !== historyRequest) return;
+        const current = document.querySelector('[data-sx-history]');
+        if (current) {
+          current.classList.remove('is-loading');
+          current.removeAttribute('aria-busy');
+        }
+      });
+  }
+
+  document.addEventListener('click', function(event) {
+    const logBtn = event.target.closest('[data-sx-history] [data-sx-log]');
+    if (logBtn) {
+      const log = document.getElementById(logBtn.getAttribute('aria-controls'));
+      if (!log) return;
+      const open = logBtn.getAttribute('aria-expanded') !== 'true';
+      logBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       log.hidden = !open;
       if (open) {
         const pre = log.querySelector('pre');
-        pre.scrollTop = pre.scrollHeight;
+        if (pre) pre.scrollTop = pre.scrollHeight;
       }
-    });
+      return;
+    }
+
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const link = event.target.closest(
+      '[data-sx-history] .ap-pager a.ap-page-btn[href], [data-sx-history] .sx-chips a.sx-filter[href], [data-sx-history] .dash-empty a[href]'
+    );
+    if (!link) return;
+    if (link.target === '_blank' || link.hasAttribute('download')) return;
+    if (link.classList.contains('is-disabled') || link.getAttribute('aria-disabled') === 'true') {
+      event.preventDefault();
+      return;
+    }
+    if (!isScraperUrl(link.href)) return;
+
+    event.preventDefault();
+    loadHistory(link.href);
   });
 
-  const rowsSelect = document.querySelector('[data-sx-rows]');
-  if (rowsSelect) {
-    rowsSelect.addEventListener('change', function() {
-      rowsSelect.parentElement.querySelector('.ap-rows-select-value').textContent = rowsSelect.value;
-      rowsSelect.form.requestSubmit();
-    });
-  }
+  document.addEventListener('change', function(event) {
+    const rowsSelect = event.target.closest('[data-sx-history] [data-sx-rows]');
+    if (!rowsSelect || !rowsSelect.form) return;
+
+    const valueEl = rowsSelect.parentElement.querySelector('.ap-rows-select-value');
+    if (valueEl) valueEl.textContent = rowsSelect.value;
+    rowsSelect.parentElement.classList.toggle('is-set', rowsSelect.value !== FILAS_DEFAULT);
+
+    event.preventDefault();
+    loadHistory(buildHistoryUrlFromForm(rowsSelect.form));
+  });
+
+  document.addEventListener('submit', function(event) {
+    const form = event.target.closest('[data-sx-history] [data-sx-rows-form]');
+    if (!form) return;
+    event.preventDefault();
+    loadHistory(buildHistoryUrlFromForm(form));
+  });
+
+  window.addEventListener('popstate', function() {
+    if (!document.querySelector('[data-sx-history]')) return;
+    loadHistory(window.location.href, { replace: true });
+  });
 
   <?php if ($hasActive): ?>
   const INTERVAL = 20;
@@ -1240,8 +1196,8 @@ render_head($tabTitle);
   });
 
   document.addEventListener('selectionchange', function() { render(currentReason()); });
-  document.querySelectorAll('[data-sx-log]').forEach(function(btn) {
-    btn.addEventListener('click', function() { render(currentReason()); });
+  document.addEventListener('click', function(event) {
+    if (event.target.closest('[data-sx-log]')) render(currentReason());
   });
 
   render(currentReason());

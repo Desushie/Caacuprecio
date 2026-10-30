@@ -38,7 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastQuery = '';
     let requestId = 0;
     let liveRequestId = 0;
+    let lastLiveScrollQuery = '';
     const livePanel = liveBox ? liveBox.closest('[data-live-panel]') : null;
+    const liveSection = liveBox
+      ? (liveBox.closest('#home-live-section') || document.getElementById('home-live-section'))
+      : null;
     const liveTileWash = ['#8ba4c4', '#c9a87a', '#c48b8e', '#8fad97', '#a89bc4', '#7eb8b0', '#c4a88b', '#9bb0c9'];
 
     input.addEventListener('focus', () => loadSuggestions(input.value.trim()));
@@ -104,23 +108,62 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    function setLiveSectionActive(isActive) {
+      if (!liveSection) return;
+
+      liveSection.classList.toggle('is-active', isActive);
+      if (isActive) {
+        liveSection.removeAttribute('hidden');
+      } else {
+        liveSection.setAttribute('hidden', '');
+        lastLiveScrollQuery = '';
+      }
+    }
+
+    function scrollToLiveSection(q) {
+      if (!liveSection || !q) return;
+
+      const normalized = q.trim().toLowerCase();
+      if (!normalized || normalized === lastLiveScrollQuery) return;
+
+      const rect = liveSection.getBoundingClientRect();
+      const offset = 96;
+      const alreadyInView = rect.top >= offset && rect.top <= window.innerHeight * 0.42;
+      if (alreadyInView) {
+        lastLiveScrollQuery = normalized;
+        return;
+      }
+
+      lastLiveScrollQuery = normalized;
+      liveSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     async function loadLiveResults(q) {
       if (!liveBox) return;
+
+      const query = (q || '').trim();
+      if (!query) {
+        setLiveSectionActive(false);
+        return;
+      }
+
+      setLiveSectionActive(true);
 
       const currentId = ++liveRequestId;
       const params = new URLSearchParams({
         mode: 'live',
-        q,
+        q: query,
         categoria: category ? category.value : '0',
         orden: sort ? sort.value : 'recientes',
         limit: '8'
       });
 
       if (stateBox) {
-        stateBox.textContent = q ? 'Buscando...' : 'Mostrando resultados recientes...';
+        stateBox.textContent = 'Buscando...';
       }
 
       setLiveLoading(true);
+      requestAnimationFrame(() => scrollToLiveSection(query));
 
       try {
         const res = await fetch(`${endpoint}?${params.toString()}`, {
@@ -128,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const data = await res.json();
         if (currentId !== liveRequestId) return;
-        renderLiveResults(data, q);
+        renderLiveResults(data, query);
       } catch (err) {
         console.error('Error búsqueda en vivo', err);
         if (currentId === liveRequestId) setLiveLoading(false);
@@ -136,6 +179,10 @@ document.addEventListener('DOMContentLoaded', () => {
           stateBox.textContent = 'No se pudo actualizar la búsqueda en vivo.';
         }
       }
+    }
+
+    if (liveBox && input.value.trim()) {
+      loadLiveResults(input.value.trim());
     }
 
     async function trackSearch(q) {
@@ -382,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function itemRow(icon, label, meta) {
       const tone = icon === 'flame' ? 'hot' : (icon === 'history' ? 'history' : 'hit');
       return `
-        <button type="button" class="search-suggest-item" data-tone="${tone}" data-search-value="${escapeHtml(label || '')}">
+        <button type="button" class="search-suggest-item" data-tone="${tone}" data-search-value="${escapeHtml(label || '')}" data-search-action="submit">
           <span class="search-suggest-icon" aria-hidden="true"><i data-lucide="${escapeHtml(icon)}"></i></span>
           <span class="search-suggest-copy">
             <span class="search-suggest-label">${escapeHtml(label || '')}</span>

@@ -49,13 +49,18 @@ function auth_render_footer(): void
       const storageKey = 'caacuprecio-theme';
       const toggleButtons = [document.getElementById('themeToggle')].filter(Boolean);
 
-      function applyTheme(theme) {
+      function paintThemeCore(theme) {
         const isDark = theme !== 'light';
         root.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+        root.classList.toggle('theme-dark', isDark);
+        root.classList.toggle('theme-light', !isDark);
         body.classList.toggle('theme-dark', isDark);
         body.classList.toggle('theme-light', !isDark);
         body.classList.add('auth-page');
+      }
 
+      function paintThemeChrome(theme) {
+        const isDark = theme !== 'light';
         toggleButtons.forEach(function(btn) {
           const host = btn.querySelector('[data-lucide-host]');
           const text = btn.querySelector('span:not([data-lucide-host])');
@@ -66,20 +71,51 @@ function auth_render_footer(): void
             text.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
           }
         });
+      }
 
-        if (window.refreshLucideIcons) {
-          refreshLucideIcons();
+      function supportsColorTween() {
+        try {
+          return CSS && CSS.registerProperty && CSS.supports('(color: color-mix(in srgb, red, blue))');
+        } catch (e) {
+          return false;
         }
       }
 
+      function applyTheme(theme, animate) {
+        const run = function() {
+          paintThemeCore(theme);
+          paintThemeChrome(theme);
+        };
+        if (!animate) {
+          run();
+          return;
+        }
+        if (document.startViewTransition) {
+          root.classList.add('theme-vt-active');
+          const vt = document.startViewTransition(function() { paintThemeCore(theme); });
+          Promise.resolve(vt.finished).catch(function() {}).then(function() {
+            root.classList.remove('theme-vt-active');
+            paintThemeChrome(theme);
+          });
+          return;
+        }
+        if (supportsColorTween()) {
+          paintThemeCore(theme);
+          requestAnimationFrame(function() { paintThemeChrome(theme); });
+          return;
+        }
+        run();
+      }
+
       const savedTheme = localStorage.getItem(storageKey) || 'dark';
-      applyTheme(savedTheme);
+      applyTheme(savedTheme, false);
+      requestAnimationFrame(function() { body.classList.add('theme-animated'); });
 
       toggleButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
           const next = root.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
           localStorage.setItem(storageKey, next);
-          applyTheme(next);
+          applyTheme(next, true);
         });
       });
     })();
@@ -143,10 +179,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($password === '') {
         $errors[] = 'Ingresa tu contraseña.';
-    }
-
-    if (!$errors && ($captchaError = turnstile_error()) !== '') {
-        $errors[] = $captchaError;
     }
 
     if (!$errors) {
@@ -233,7 +265,7 @@ $visualTagIcons = [
 if ($authStats['productos'] > 0 && $authStats['tiendas'] > 0) {
     $visualSlides[] = [
         'tags' => ['Catálogo', 'Caacupé'],
-        'quote' => 'Hoy puedes comparar ' . $fmtCount($authStats['productos']) . ' productos en ' . $fmtCount($authStats['tiendas']) . ' tiendas de la ciudad, en un solo lugar.',
+        'quote' => 'Compara ' . $fmtCount($authStats['productos']) . ' productos en ' . $fmtCount($authStats['tiendas']) . ' tiendas de Caacupé.',
         'name' => 'Catálogo actual',
         'role' => 'Tiendas locales',
     ];
@@ -242,7 +274,7 @@ if ($authStats['productos'] > 0 && $authStats['tiendas'] > 0) {
 if ($authStats['bajas'] > 0) {
     $visualSlides[] = [
         'tags' => ['Novedad', 'Precios'],
-        'quote' => 'Hay ' . $fmtCount($authStats['bajas']) . ' productos con el precio más bajo que el registro anterior. Conviene revisar antes de salir.',
+        'quote' => 'Hay ' . $fmtCount($authStats['bajas']) . ' productos con el precio más bajo que antes.',
         'name' => 'Bajas de precio',
         'role' => 'Historial reciente',
     ];
@@ -250,14 +282,14 @@ if ($authStats['bajas'] > 0) {
 
 $visualSlides[] = [
     'tags' => ['Comparar', 'Mejor precio'],
-    'quote' => 'Mismo producto, distintas tiendas. Mira precio y stock juntos y elige con más claridad.',
+    'quote' => 'Mismo producto, distintas tiendas: compara precio y stock juntos.',
     'name' => 'Caacuprecio',
     'role' => 'Comparador de precios',
 ];
 
 $visualSlides[] = [
     'tags' => ['Favoritos', 'Tu cuenta'],
-    'quote' => 'Guarda lo que te interesa y vuelve a tus comparaciones cuando decidas comprar.',
+    'quote' => 'Guarda lo que te interesa y vuelve cuando decidas comprar.',
     'name' => 'Tu cuenta',
     'role' => 'Favoritos y seguimiento',
 ];
@@ -265,7 +297,7 @@ $visualSlides[] = [
 if ($authStats['categorias'] > 0 && count($visualSlides) < 4) {
     $visualSlides[] = [
         'tags' => ['Categorías', 'Explorar'],
-        'quote' => 'El catálogo está ordenado en ' . $fmtCount($authStats['categorias']) . ' categorías para encontrar más rápido lo que buscas.',
+        'quote' => 'Explora el catálogo en ' . $fmtCount($authStats['categorias']) . ' categorías y encuentra más rápido.',
         'name' => 'Por rubro',
         'role' => 'Navegación del catálogo',
     ];
@@ -309,61 +341,7 @@ $regStartStep = 1;
   <div class="container">
     <div class="auth-board" data-auth-board data-auth-mode="login">
       <?php require __DIR__ . '/auth_panels.php'; ?>
-
-      <div
-        class="auth-visual-shell"
-        data-auth-visual
-        aria-label="Novedades de Caacuprecio"
-        aria-roledescription="carrusel"
-      >
-        <aside class="auth-board-visual">
-          <div class="auth-visual-wash" aria-hidden="true">
-            <span class="auth-shape auth-shape-blob-a"></span>
-            <span class="auth-shape auth-shape-blob-b"></span>
-            <span class="auth-shape auth-shape-ring"></span>
-            <span class="auth-shape auth-shape-pill"></span>
-            <span class="auth-shape auth-shape-dot-a"></span>
-            <span class="auth-shape auth-shape-dot-b"></span>
-            <span class="auth-shape auth-shape-dot-c"></span>
-            <span class="auth-shape auth-shape-arc"></span>
-            <span class="auth-shape auth-shape-square"></span>
-            <span class="auth-shape auth-shape-bar"></span>
-            <span class="auth-shape auth-shape-petal"></span>
-          </div>
-
-          <div class="auth-visual-stage" aria-live="polite">
-            <?php foreach ($visualSlides as $index => $slide): ?>
-              <article
-                class="auth-visual-slide<?= $index === 0 ? ' is-active' : '' ?>"
-                data-auth-slide
-                <?= $index === 0 ? '' : 'hidden' ?>
-              >
-                <div class="auth-visual-tags">
-                  <?php foreach ($slide['tags'] as $tag): ?>
-                    <span><?= lucide_icon($visualTagIcons[$tag] ?? 'tag', 'auth-visual-tag-icon', 14) ?><?= e($tag) ?></span>
-                  <?php endforeach; ?>
-                </div>
-                <div class="auth-visual-card">
-                  <p class="auth-visual-quote"><?= e($slide['quote']) ?></p>
-                  <p class="auth-visual-name"><?= e($slide['name']) ?></p>
-                  <p class="auth-visual-role"><?= e($slide['role']) ?></p>
-                </div>
-              </article>
-            <?php endforeach; ?>
-          </div>
-        </aside>
-
-        <?php if (count($visualSlides) > 1): ?>
-          <div class="auth-visual-nav">
-            <button type="button" class="auth-visual-nav-btn" data-auth-prev aria-label="Novedad anterior">
-              <?= lucide_icon('arrow-left', '', 18) ?>
-            </button>
-            <button type="button" class="auth-visual-nav-btn" data-auth-next aria-label="Novedad siguiente">
-              <?= lucide_icon('arrow-right', '', 18) ?>
-            </button>
-          </div>
-        <?php endif; ?>
-      </div>
+      <?php require __DIR__ . '/auth_visual.php'; ?>
     </div>
   </div>
 </section>

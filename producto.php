@@ -261,21 +261,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') =
 
 
 /**
- * Tracking de vista: con cookie de sesión se registra acá; en la primera visita
- * (sin cookie) lo hace el navegador vía event.php, así los bots sin JS no cuentan.
+ * Historial personal (sesión) siempre; tracking analítico solo si corresponde.
+ * Con cookie de sesión se registra en servidor; en la primera visita (sin cookie)
+ * lo hace el navegador vía event.php, así los bots sin JS no cuentan.
  */
+$viewedProductId = (int) ($product['idproductos'] ?? 0);
+if ($viewedProductId > 0 && !cp_is_bot_request()) {
+    cp_remember_viewed_product($viewedProductId);
+}
+
 $trackViewInBrowser = !cp_is_bot_request() && !cp_has_session_cookie() && !cp_privacy_signal();
 $trackViewOnServer = cp_should_track('views', 60);
 
-if ($trackViewOnServer) {
+if ($trackViewOnServer && $viewedProductId > 0) {
     try {
         $stmtTrack = $pdo->prepare("
-            INSERT INTO productos_vistos (usuario_idusuario, session_id, productos_idproductos)
-            VALUES (:uid, :sid, :pid)
+            INSERT INTO productos_vistos (usuario_idusuario, session_id, productos_idproductos, visto_en)
+            VALUES (:uid, :sid, :pid, NOW())
         ");
         $stmtTrack->bindValue(':uid', $userId ?: null, $userId ? PDO::PARAM_INT : PDO::PARAM_NULL);
-        $stmtTrack->bindValue(':sid', $sessionId);
-        $stmtTrack->bindValue(':pid', (int) $product['idproductos'], PDO::PARAM_INT);
+        $stmtTrack->bindValue(':sid', $sessionId !== '' ? $sessionId : null, $sessionId !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
+        $stmtTrack->bindValue(':pid', $viewedProductId, PDO::PARAM_INT);
         $stmtTrack->execute();
     } catch (Throwable $e) {
         // ignorar
@@ -893,9 +899,19 @@ render_navbar('producto');
       <div class="pd-media-panel">
         <div class="product-gallery-main" id="productGallery">
           <?php foreach ($galleryImages as $idx => $img): ?>
-            <div class="product-gallery-slide <?= $idx === 0 ? 'active' : '' ?>">
-              <img src="<?= e($img['src']) ?>" alt="<?= e($img['alt']) ?>">
-            </div>
+            <button
+              type="button"
+              class="product-gallery-slide <?= $idx === 0 ? 'active' : '' ?>"
+              data-gallery-zoom
+              data-index="<?= $idx ?>"
+              data-fullsrc="<?= e($img['src']) ?>"
+              data-fullalt="<?= e($img['alt']) ?>"
+              data-zoom-ready="0"
+              aria-label="Ampliar imagen: <?= e($img['alt']) ?>"
+            >
+              <img src="<?= e($img['src']) ?>" alt="<?= e($img['alt']) ?>" draggable="false">
+              <span class="gallery-zoom-hint" aria-hidden="true"><?= lucide_icon('zoom-in', '', 16) ?></span>
+            </button>
           <?php endforeach; ?>
 
           <?php if (count($galleryImages) > 1): ?>
@@ -931,8 +947,6 @@ render_navbar('producto');
       </div>
 
       <div class="pd-summary-panel">
-        <span class="pd-mark" aria-hidden="true"><?= lucide_icon('scale', '', 88) ?></span>
-
         <div class="pd-summary-top">
           <div class="pd-tags">
             <span class="pd-tag"><?= e($product['cat_nombre'] ?? 'Sin categoría') ?></span>
@@ -1052,61 +1066,77 @@ render_navbar('producto');
                 <span class="pd-offer-rank"><?= str_pad((string) ($offerIndex + 1), 2, '0', STR_PAD_LEFT) ?></span>
               </div>
 
-              <div class="pd-offer-store">
-                <span class="pd-offer-store-name"><?= e($offer['tie_nombre']) ?></span>
-                <span class="pd-offer-store-date">
-                  <?= !empty($offer['pro_fecha_scraping']) ? e(date('d/m/Y H:i', strtotime((string) $offer['pro_fecha_scraping']))) : 'Sin fecha' ?>
-                </span>
-              </div>
-
-              <div class="pd-offer-copy">
-                <span class="pd-offer-name"><?= e($offer['pro_nombre'] ?: 'Sin nombre') ?></span>
-                <?php if (!empty($offer['pro_marca'])): ?>
-                  <span class="pd-offer-brand"><?= e($offer['pro_marca']) ?></span>
-                <?php endif; ?>
-              </div>
-
-              <div class="pd-offer-priceblock">
-                <div class="pd-offer-price-top">
-                  <span class="pd-offer-price-label">Precio</span>
+              <div class="pd-offer-body">
+                <div class="pd-offer-head">
+                  <div class="pd-offer-store">
+                    <span class="pd-offer-store-name"><?= e($offer['tie_nombre']) ?></span>
+                    <span class="pd-offer-store-date">
+                      <?= !empty($offer['pro_fecha_scraping']) ? e(date('d/m/Y H:i', strtotime((string) $offer['pro_fecha_scraping']))) : 'Sin fecha' ?>
+                    </span>
+                  </div>
                   <span class="pd-offer-stock <?= $offerInStock ? 'is-stock' : 'is-wait' ?>">
                     <?= e($offerInStock ? 'Stock' : 'Consultar') ?>
                   </span>
                 </div>
-                <strong class="pd-offer-price"><?= gs_precio($offer['pro_precio']) ?></strong>
-              </div>
 
-              <div class="pd-offer-actions">
-                <?php if ($favoritesEnabled): ?>
+                <div class="pd-offer-copy">
+                  <span class="pd-offer-name"><?= e($offer['pro_nombre'] ?: 'Sin nombre') ?></span>
+                  <?php if (!empty($offer['pro_marca'])): ?>
+                    <span class="pd-offer-brand"><?= e($offer['pro_marca']) ?></span>
+                  <?php endif; ?>
+                </div>
+
+                <div class="pd-offer-priceblock">
+                  <span class="pd-offer-price-label">Precio</span>
+                  <strong class="pd-offer-price"><?= gs_precio($offer['pro_precio']) ?></strong>
+                </div>
+
+                <div class="pd-offer-actions">
+                  <?php if ($favoritesEnabled): ?>
+                    <?php if ($userLogged): ?>
+                      <a
+                        href="<?= e(favorite_toggle_url((int) $offer['idproductos'], $_SERVER['REQUEST_URI'])) ?>"
+                        class="pd-offer-icon is-fav<?= $offerIsFavorite ? ' is-on' : '' ?>"
+                        data-fav-toggle
+                        data-product-id="<?= (int) $offer['idproductos'] ?>"
+                        title="<?= $offerIsFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                        aria-label="<?= $offerIsFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                        aria-pressed="<?= $offerIsFavorite ? 'true' : 'false' ?>"
+                      >
+                        <?= lucide_icon('heart', $offerIsFavorite ? 'lucide-fill' : '', 15) ?>
+                      </a>
+                    <?php else: ?>
+                      <a
+                        href="login.php"
+                        class="pd-offer-icon is-fav"
+                        title="Inicia sesión para guardar favoritos"
+                        aria-label="Inicia sesión para guardar favoritos"
+                      >
+                        <?= lucide_icon('heart', '', 15) ?>
+                      </a>
+                    <?php endif; ?>
+                  <?php endif; ?>
+
                   <a
-                    href="<?= $userLogged ? e(favorite_toggle_url((int) $offer['idproductos'], $_SERVER['REQUEST_URI'])) : 'login.php' ?>"
-                    class="pd-offer-icon is-fav<?= $userLogged && $offerIsFavorite ? ' is-on' : '' ?>"
-                    title="<?= $userLogged ? ($offerIsFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos') : 'Inicia sesión para guardar favoritos' ?>"
-                    aria-label="<?= $userLogged ? ($offerIsFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos') : 'Inicia sesión para guardar favoritos' ?>"
+                    href="go.php?id=<?= (int) $offer['idproductos'] ?>&source=producto&click_type=ir_oferta<?= $searchTerm !== '' ? '&term=' . rawurlencode($searchTerm) : '' ?><?= !empty($offer['pro_url']) ? '&target_url=' . rawurlencode((string) $offer['pro_url']) : '' ?>"
+                    target="_blank"
+                    rel="noopener nofollow"
+                    class="pd-offer-cta"
                   >
-                    <?= lucide_icon('heart', $userLogged && $offerIsFavorite ? 'lucide-fill' : '', 15) ?>
+                    Ver <?= lucide_icon('arrow-up-right', '', 14) ?>
                   </a>
-                <?php endif; ?>
 
-                <a
-                  href="go.php?id=<?= (int) $offer['idproductos'] ?>&source=producto&click_type=ir_oferta<?= $searchTerm !== '' ? '&term=' . rawurlencode($searchTerm) : '' ?><?= !empty($offer['pro_url']) ? '&target_url=' . rawurlencode((string) $offer['pro_url']) : '' ?>"
-                  target="_blank"
-                  rel="noopener nofollow"
-                  class="pd-offer-cta"
-                >
-                  Ver <?= lucide_icon('arrow-up-right', '', 14) ?>
-                </a>
-
-                <button
-                  type="button"
-                  class="pd-offer-icon is-report"
-                  data-bs-toggle="modal"
-                  data-bs-target="#reportProductModal<?= (int) $offer['idproductos'] ?>"
-                  title="Reportar producto"
-                  aria-label="Reportar producto"
-                >
-                  <?= lucide_icon('flag', '', 15) ?>
-                </button>
+                  <button
+                    type="button"
+                    class="pd-offer-icon is-report"
+                    data-bs-toggle="modal"
+                    data-bs-target="#reportProductModal<?= (int) $offer['idproductos'] ?>"
+                    title="Reportar producto"
+                    aria-label="Reportar producto"
+                  >
+                    <?= lucide_icon('flag', '', 15) ?>
+                  </button>
+                </div>
               </div>
             </article>
 
@@ -1438,15 +1468,13 @@ render_navbar('producto');
     </div>
 
     <section class="pd-lane pd-store-lane" data-tone="store" aria-labelledby="pd-store-title">
-      <span class="pd-lane-mark" aria-hidden="true"><?= lucide_icon('store', '', 88) ?></span>
       <div class="pd-lane-head pd-store-head">
         <div class="pd-store-head-copy">
           <span class="pd-lane-icon"><?= lucide_icon('store', '', 20) ?></span>
           <div>
             <h2 id="pd-store-title" class="pd-lane-title">Más de esta tienda</h2>
             <p class="pd-lane-caption">
-              Otros productos de <strong><?= e($product['tie_nombre']) ?></strong>
-              para seguir explorando su catálogo y comparar precios sin salir de esta ficha.
+              Más productos de <strong><?= e($product['tie_nombre']) ?></strong>.
             </p>
           </div>
         </div>
@@ -1496,17 +1524,17 @@ render_navbar('producto');
                 >
                   <span class="pd-store-media">
                     <span class="pd-store-rank" aria-hidden="true"><?= str_pad((string) ($storeIndex + 1), 2, '0', STR_PAD_LEFT) ?></span>
-                    <span class="pd-store-stock <?= $storeInStock ? 'is-stock' : 'is-wait' ?>" title="<?= e($storeInStock ? 'En stock' : 'Consultar stock') ?>">
-                      <?= e($storeInStock ? 'Stock' : 'Consultar') ?>
-                    </span>
                     <img src="<?= e(image_url($item['pro_imagen'], $storeName)) ?>" alt="" loading="lazy" decoding="async">
                   </span>
                   <span class="pd-store-copy">
-                    <?php if ($storeBrand !== ''): ?>
-                      <span class="pd-store-tags" title="<?= e($storeBrand) ?>">
+                    <span class="pd-store-tags"<?= $storeBrand !== '' ? ' title="' . e($storeBrand) . '"' : '' ?>>
+                      <?php if ($storeBrand !== ''): ?>
                         <span class="pd-store-brand"><?= e($storeBrand) ?></span>
+                      <?php endif; ?>
+                      <span class="pd-store-stock <?= $storeInStock ? 'is-stock' : 'is-wait' ?>" title="<?= e($storeInStock ? 'En stock' : 'Consultar stock') ?>">
+                        <?= e($storeInStock ? 'Stock' : 'Consultar') ?>
                       </span>
-                    <?php endif; ?>
+                    </span>
                     <span class="pd-store-name" title="<?= e($storeName) ?>"><?= e($storeName) ?></span>
                     <span class="pd-store-foot">
                       <span class="pd-store-price"><?= gs_precio($item['pro_precio']) ?></span>
@@ -1527,6 +1555,50 @@ render_navbar('producto');
     </section>
   </div>
 </section>
+
+<div
+  class="pd-lightbox"
+  id="productLightbox"
+  hidden
+  role="dialog"
+  aria-modal="true"
+  aria-label="Vista ampliada del producto"
+>
+  <div class="pd-lightbox-backdrop" data-lightbox-close></div>
+  <div class="pd-lightbox-stage">
+    <img
+      id="productLightboxImg"
+      class="pd-lightbox-img"
+      alt=""
+      draggable="false"
+      data-no-fallback="true"
+      decoding="async"
+    >
+  </div>
+  <div class="pd-lightbox-toolbar">
+    <button type="button" class="pd-lightbox-btn" id="lightboxZoomOut" aria-label="Alejar">
+      <?= lucide_icon('zoom-out', '', 18) ?>
+    </button>
+    <button type="button" class="pd-lightbox-btn" id="lightboxZoomReset" aria-label="Restablecer zoom">
+      <span class="pd-lightbox-zoom-label" id="lightboxZoomLabel">100%</span>
+    </button>
+    <button type="button" class="pd-lightbox-btn" id="lightboxZoomIn" aria-label="Acercar">
+      <?= lucide_icon('zoom-in', '', 18) ?>
+    </button>
+    <span class="pd-lightbox-sep" aria-hidden="true"></span>
+    <button type="button" class="pd-lightbox-btn" id="lightboxClose" aria-label="Cerrar" data-lightbox-close>
+      <?= lucide_icon('x', '', 18) ?>
+    </button>
+  </div>
+  <?php if (count($galleryImages) > 1): ?>
+    <button type="button" class="pd-lightbox-nav prev" id="lightboxPrev" aria-label="Imagen anterior">
+      <?= lucide_icon('chevron-left', '', 22) ?>
+    </button>
+    <button type="button" class="pd-lightbox-nav next" id="lightboxNext" aria-label="Imagen siguiente">
+      <?= lucide_icon('chevron-right', '', 22) ?>
+    </button>
+  <?php endif; ?>
+</div>
 
 <?php ob_start(); ?>
 <div class="modal fade" id="reportProductModalMain" tabindex="-1" aria-labelledby="reportProductModalLabelMain" aria-hidden="true">
@@ -1807,8 +1879,14 @@ document.addEventListener('DOMContentLoaded', function () {
     stopProgress();
   }
 
+  function isLightboxOpen() {
+    const el = document.getElementById('productLightbox');
+    return !!(el && !el.hidden && el.classList.contains('is-open'));
+  }
+
   function startAutoplay() {
     if (slides.length <= 1) return;
+    if (isLightboxOpen()) return;
     stopAutoplay();
     startProgress();
     autoplayTimer = setInterval(function () {
@@ -1864,6 +1942,490 @@ document.addEventListener('DOMContentLoaded', function () {
   updateThumbsNav();
   window.addEventListener('load', updateThumbsNav);
   startAutoplay();
+
+  const lightbox = document.getElementById('productLightbox');
+  const lightboxStage = lightbox ? lightbox.querySelector('.pd-lightbox-stage') : null;
+  const lightboxZoomLabel = document.getElementById('lightboxZoomLabel');
+  const lightboxZoomInBtn = document.getElementById('lightboxZoomIn');
+  const lightboxZoomOutBtn = document.getElementById('lightboxZoomOut');
+  const lightboxZoomResetBtn = document.getElementById('lightboxZoomReset');
+  const lightboxPrev = document.getElementById('lightboxPrev');
+  const lightboxNext = document.getElementById('lightboxNext');
+  const zoomTriggers = Array.from(document.querySelectorAll('[data-gallery-zoom]'));
+  const lightboxMinZoom = 1;
+  const lightboxMaxZoom = 4;
+  const lightboxZoomStep = 0.35;
+  let lightboxZoom = 1;
+  let lightboxPanX = 0;
+  let lightboxPanY = 0;
+  let lightboxDragging = false;
+  let lightboxDragStartX = 0;
+  let lightboxDragStartY = 0;
+  let lightboxPanStartX = 0;
+  let lightboxPanStartY = 0;
+  let lightboxOpenIndex = 0;
+
+  function clampLightboxPan() {
+    const lightboxImg = getLightboxImg();
+    if (!lightboxImg || !lightboxStage || lightboxZoom <= 1) {
+      lightboxPanX = 0;
+      lightboxPanY = 0;
+      return;
+    }
+
+    const stageRect = lightboxStage.getBoundingClientRect();
+    const naturalW = lightboxImg.naturalWidth || lightboxImg.clientWidth;
+    const naturalH = lightboxImg.naturalHeight || lightboxImg.clientHeight;
+    if (!naturalW || !naturalH) return;
+
+    const fit = Math.min(stageRect.width / naturalW, stageRect.height / naturalH);
+    const baseW = naturalW * fit;
+    const baseH = naturalH * fit;
+    const scaledW = baseW * lightboxZoom;
+    const scaledH = baseH * lightboxZoom;
+    const maxX = Math.max(0, (scaledW - stageRect.width) / 2);
+    const maxY = Math.max(0, (scaledH - stageRect.height) / 2);
+    lightboxPanX = Math.max(-maxX, Math.min(maxX, lightboxPanX));
+    lightboxPanY = Math.max(-maxY, Math.min(maxY, lightboxPanY));
+  }
+
+  function applyLightboxTransform() {
+    const lightboxImg = getLightboxImg();
+    if (!lightboxImg || !lightboxStage) return;
+    clampLightboxPan();
+    lightboxImg.style.transform =
+      'translate(' + lightboxPanX + 'px, ' + lightboxPanY + 'px) scale(' + lightboxZoom + ')';
+    lightboxStage.classList.toggle('is-zoomed', lightboxZoom > 1.01);
+    if (lightboxZoomLabel) {
+      lightboxZoomLabel.textContent = Math.round(lightboxZoom * 100) + '%';
+    }
+  }
+
+  function setLightboxZoom(nextZoom, anchorX, anchorY) {
+    if (!lightboxStage) return;
+    const prev = lightboxZoom;
+    lightboxZoom = Math.max(lightboxMinZoom, Math.min(lightboxMaxZoom, nextZoom));
+
+    if (typeof anchorX === 'number' && typeof anchorY === 'number' && prev > 0) {
+      const rect = lightboxStage.getBoundingClientRect();
+      const cx = anchorX - rect.left - rect.width / 2;
+      const cy = anchorY - rect.top - rect.height / 2;
+      const ratio = lightboxZoom / prev;
+      lightboxPanX = cx - (cx - lightboxPanX) * ratio;
+      lightboxPanY = cy - (cy - lightboxPanY) * ratio;
+    }
+
+    if (lightboxZoom <= 1.01) {
+      lightboxZoom = 1;
+      lightboxPanX = 0;
+      lightboxPanY = 0;
+    }
+
+    applyLightboxTransform();
+  }
+
+  function isImageReady(img) {
+    return !!(img && img.tagName === 'IMG' && img.complete && img.naturalWidth > 0);
+  }
+
+  function isSlideZoomable(slide) {
+    if (!slide) return false;
+    if (slide.querySelector('.img-fallback')) return false;
+    return isImageReady(slide.querySelector('img'));
+  }
+
+  function syncSlideZoomReady(slide) {
+    if (!slide) return;
+    const ready = isSlideZoomable(slide);
+    slide.dataset.zoomReady = ready ? '1' : '0';
+    slide.classList.toggle('is-zoomable', ready);
+    if (!ready) {
+      slide.setAttribute('aria-disabled', 'true');
+    } else {
+      slide.removeAttribute('aria-disabled');
+    }
+  }
+
+  function bindSlideZoomReady(slide) {
+    if (!slide) return;
+    syncSlideZoomReady(slide);
+
+    const img = slide.querySelector('img');
+    if (!img) return;
+
+    img.addEventListener('load', function () {
+      syncSlideZoomReady(slide);
+    });
+    img.addEventListener('error', function () {
+      slide.dataset.zoomReady = '0';
+      slide.classList.remove('is-zoomable');
+      slide.setAttribute('aria-disabled', 'true');
+      window.setTimeout(function () {
+        syncSlideZoomReady(slide);
+      }, 0);
+    });
+  }
+
+  slides.forEach(bindSlideZoomReady);
+
+  if (typeof MutationObserver === 'function') {
+    slides.forEach(function (slide) {
+      const observer = new MutationObserver(function () {
+        syncSlideZoomReady(slide);
+      });
+      observer.observe(slide, { childList: true, subtree: true });
+    });
+  }
+
+  function getLightboxImg() {
+    let img = document.getElementById('productLightboxImg');
+    if (img) return img;
+
+    if (!lightboxStage) return null;
+    lightboxStage.querySelectorAll('.img-fallback, .pd-lightbox-img').forEach(function (node) {
+      node.remove();
+    });
+
+    img = document.createElement('img');
+    img.id = 'productLightboxImg';
+    img.className = 'pd-lightbox-img';
+    img.alt = '';
+    img.draggable = false;
+    img.dataset.noFallback = 'true';
+    img.setAttribute('decoding', 'async');
+    lightboxStage.appendChild(img);
+    return img;
+  }
+
+  function findZoomableIndex(fromIndex, direction) {
+    if (!slides.length) return -1;
+    const total = slides.length;
+    for (let step = 0; step < total; step += 1) {
+      const idx = (fromIndex + direction * step + total * 10) % total;
+      if (isSlideZoomable(slides[idx])) return idx;
+    }
+    return -1;
+  }
+
+  function loadLightboxImage(index, options) {
+    const opts = options || {};
+    const imgEl = getLightboxImg();
+    if (!imgEl || !slides.length) return false;
+
+    let targetIndex = (index + slides.length) % slides.length;
+    if (!isSlideZoomable(slides[targetIndex])) {
+      if (opts.allowBroken) return false;
+      const fallbackIndex = findZoomableIndex(targetIndex, opts.direction || 1);
+      if (fallbackIndex < 0) return false;
+      targetIndex = fallbackIndex;
+    }
+
+    const slide = slides[targetIndex];
+    const slideImg = slide.querySelector('img');
+    const src = (slideImg && (slideImg.currentSrc || slideImg.getAttribute('src')))
+      || slide.getAttribute('data-fullsrc')
+      || '';
+    const alt = (slideImg && (slideImg.getAttribute('alt') || ''))
+      || slide.getAttribute('data-fullalt')
+      || '';
+
+    if (!src || !slideImg || !isImageReady(slideImg)) return false;
+
+    lightboxOpenIndex = targetIndex;
+    imgEl.onload = null;
+    imgEl.onerror = null;
+
+    imgEl.onerror = function () {
+      syncSlideZoomReady(slide);
+      if (!lightbox.hidden && lightbox.classList.contains('is-open')) {
+        const nextReady = findZoomableIndex(lightboxOpenIndex + 1, 1);
+        if (nextReady >= 0 && nextReady !== lightboxOpenIndex) {
+          loadLightboxImage(nextReady, { direction: 1 });
+        } else {
+          closeLightbox();
+        }
+      }
+    };
+
+    imgEl.src = src;
+    imgEl.alt = alt;
+    lightboxZoom = 1;
+    lightboxPanX = 0;
+    lightboxPanY = 0;
+    applyLightboxTransform();
+    showSlide(lightboxOpenIndex);
+    return true;
+  }
+
+  function openLightbox(index) {
+    if (!lightbox || !slides.length) return;
+    const slide = slides[(index + slides.length) % slides.length];
+    if (!isSlideZoomable(slide)) return;
+    if (!loadLightboxImage(index)) return;
+    stopAutoplay();
+    lightbox.hidden = false;
+    requestAnimationFrame(function () {
+      lightbox.classList.add('is-open');
+    });
+    document.body.classList.add('lightbox-open');
+    const closeBtn = document.getElementById('lightboxClose');
+    if (closeBtn) closeBtn.focus();
+  }
+
+  function closeLightbox() {
+    if (!lightbox || lightbox.hidden || !lightbox.classList.contains('is-open')) return;
+    lightbox.classList.remove('is-open');
+    document.body.classList.remove('lightbox-open');
+    lightboxDragging = false;
+    if (lightboxStage) lightboxStage.classList.remove('is-dragging');
+
+    let closed = false;
+    const finishClose = function () {
+      if (closed) return;
+      closed = true;
+      lightbox.hidden = true;
+      lightbox.removeEventListener('transitionend', finishClose);
+      startAutoplay();
+    };
+    lightbox.addEventListener('transitionend', finishClose);
+    window.setTimeout(finishClose, 280);
+  }
+
+  zoomTriggers.forEach(function (trigger) {
+    trigger.addEventListener('click', function () {
+      if (!isSlideZoomable(trigger)) return;
+      const idx = parseInt(trigger.getAttribute('data-index') || '0', 10);
+      openLightbox(Number.isNaN(idx) ? current : idx);
+    });
+  });
+
+  if (lightbox) {
+    lightbox.querySelectorAll('[data-lightbox-close]').forEach(function (el) {
+      el.addEventListener('click', closeLightbox);
+    });
+  }
+
+  if (lightboxZoomInBtn) {
+    lightboxZoomInBtn.addEventListener('click', function () {
+      setLightboxZoom(lightboxZoom + lightboxZoomStep);
+    });
+  }
+
+  if (lightboxZoomOutBtn) {
+    lightboxZoomOutBtn.addEventListener('click', function () {
+      setLightboxZoom(lightboxZoom - lightboxZoomStep);
+    });
+  }
+
+  if (lightboxZoomResetBtn) {
+    lightboxZoomResetBtn.addEventListener('click', function () {
+      setLightboxZoom(1);
+    });
+  }
+
+  if (lightboxPrev) {
+    lightboxPrev.addEventListener('click', function () {
+      loadLightboxImage(lightboxOpenIndex - 1, { direction: -1 });
+    });
+  }
+
+  if (lightboxNext) {
+    lightboxNext.addEventListener('click', function () {
+      loadLightboxImage(lightboxOpenIndex + 1, { direction: 1 });
+    });
+  }
+
+  if (lightboxStage) {
+    let lightboxPointerActive = false;
+    let lightboxDidPan = false;
+    let lightboxPinchActive = false;
+    let lightboxPinchStartDist = 0;
+    let lightboxPinchStartZoom = 1;
+    let lightboxPointers = new Map();
+
+    function toggleLightboxZoomAt(clientX, clientY) {
+      if (lightboxZoom > 1.01) {
+        setLightboxZoom(1);
+      } else {
+        setLightboxZoom(2.2, clientX, clientY);
+      }
+    }
+
+    function pointerDistance(a, b) {
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    function pointerMidpoint(a, b) {
+      return {
+        x: (a.clientX + b.clientX) / 2,
+        y: (a.clientY + b.clientY) / 2
+      };
+    }
+
+    function syncPinchFromPointers() {
+      if (lightboxPointers.size !== 2) {
+        lightboxPinchActive = false;
+        lightboxPinchStartDist = 0;
+        return;
+      }
+
+      const pts = Array.from(lightboxPointers.values());
+      const dist = pointerDistance(pts[0], pts[1]);
+      if (!lightboxPinchActive) {
+        lightboxPinchActive = true;
+        lightboxDidPan = true;
+        lightboxDragging = false;
+        lightboxStage.classList.remove('is-dragging');
+        lightboxPinchStartDist = dist;
+        lightboxPinchStartZoom = lightboxZoom;
+        return;
+      }
+
+      if (lightboxPinchStartDist <= 0) return;
+      const mid = pointerMidpoint(pts[0], pts[1]);
+      setLightboxZoom(lightboxPinchStartZoom * (dist / lightboxPinchStartDist), mid.x, mid.y);
+    }
+
+    lightboxStage.addEventListener('wheel', function (event) {
+      if (lightbox.hidden) return;
+      event.preventDefault();
+      const delta = event.deltaY < 0 ? lightboxZoomStep : -lightboxZoomStep;
+      setLightboxZoom(lightboxZoom + delta, event.clientX, event.clientY);
+    }, { passive: false });
+
+    lightboxStage.addEventListener('click', function (event) {
+      if (lightbox.hidden || lightboxDidPan || lightboxPinchActive) return;
+      event.preventDefault();
+      toggleLightboxZoomAt(event.clientX, event.clientY);
+    });
+
+    lightboxStage.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      lightboxPointers.set(event.pointerId, {
+        clientX: event.clientX,
+        clientY: event.clientY
+      });
+
+      if (lightboxPointers.size >= 2) {
+        lightboxPointerActive = false;
+        lightboxDragging = false;
+        lightboxStage.classList.remove('is-dragging');
+        syncPinchFromPointers();
+        return;
+      }
+
+      lightboxPointerActive = true;
+      lightboxDidPan = false;
+      lightboxDragStartX = event.clientX;
+      lightboxDragStartY = event.clientY;
+      lightboxPanStartX = lightboxPanX;
+      lightboxPanStartY = lightboxPanY;
+
+      if (lightboxZoom > 1.01) {
+        lightboxDragging = true;
+        lightboxStage.classList.add('is-dragging');
+        try {
+          lightboxStage.setPointerCapture(event.pointerId);
+        } catch (err) { /* ignore */ }
+      }
+    });
+
+    lightboxStage.addEventListener('pointermove', function (event) {
+      if (lightboxPointers.has(event.pointerId)) {
+        lightboxPointers.set(event.pointerId, {
+          clientX: event.clientX,
+          clientY: event.clientY
+        });
+      }
+
+      if (lightboxPointers.size >= 2) {
+        event.preventDefault();
+        syncPinchFromPointers();
+        return;
+      }
+
+      if (!lightboxPointerActive) return;
+
+      const dx = event.clientX - lightboxDragStartX;
+      const dy = event.clientY - lightboxDragStartY;
+      if (!lightboxDidPan && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        lightboxDidPan = true;
+      }
+
+      if (!lightboxDragging || lightboxZoom <= 1.01) return;
+      lightboxPanX = lightboxPanStartX + dx;
+      lightboxPanY = lightboxPanStartY + dy;
+      applyLightboxTransform();
+    });
+
+    function endLightboxDrag(event) {
+      if (event && event.pointerId != null) {
+        lightboxPointers.delete(event.pointerId);
+        try {
+          if (lightboxStage.hasPointerCapture(event.pointerId)) {
+            lightboxStage.releasePointerCapture(event.pointerId);
+          }
+        } catch (err) { /* ignore */ }
+      }
+
+      if (lightboxPointers.size >= 2) {
+        syncPinchFromPointers();
+        return;
+      }
+
+      if (lightboxPointers.size === 1) {
+        lightboxPinchActive = false;
+        lightboxPinchStartDist = 0;
+        const remaining = lightboxPointers.values().next().value;
+        if (remaining && lightboxZoom > 1.01) {
+          lightboxPointerActive = true;
+          lightboxDragging = true;
+          lightboxDidPan = true;
+          lightboxDragStartX = remaining.clientX;
+          lightboxDragStartY = remaining.clientY;
+          lightboxPanStartX = lightboxPanX;
+          lightboxPanStartY = lightboxPanY;
+          lightboxStage.classList.add('is-dragging');
+        }
+        return;
+      }
+
+      lightboxPinchActive = false;
+      lightboxPinchStartDist = 0;
+      lightboxPointerActive = false;
+      lightboxDragging = false;
+      lightboxStage.classList.remove('is-dragging');
+    }
+
+    lightboxStage.addEventListener('pointerup', endLightboxDrag);
+    lightboxStage.addEventListener('pointercancel', endLightboxDrag);
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (!lightbox || lightbox.hidden || !lightbox.classList.contains('is-open')) return;
+
+    if (event.key === 'Escape') {
+      closeLightbox();
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      loadLightboxImage(lightboxOpenIndex - 1, { direction: -1 });
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      loadLightboxImage(lightboxOpenIndex + 1, { direction: 1 });
+      return;
+    }
+    if (event.key === '+' || event.key === '=') {
+      setLightboxZoom(lightboxZoom + lightboxZoomStep);
+      return;
+    }
+    if (event.key === '-' || event.key === '_') {
+      setLightboxZoom(lightboxZoom - lightboxZoomStep);
+    }
+  });
 
   const historyCanvas = document.getElementById('priceHistoryChart');
   let priceHistoryChart = null;
@@ -2258,11 +2820,27 @@ document.addEventListener('DOMContentLoaded', function () {
     const originalCards = Array.from(storeTrack.querySelectorAll('.pd-store-card'));
     const STEP_DURATION = 1100;
     const STEP_PAUSE = 3200;
-    const STORE_GAP = 13;
-    const STORE_CARD_W = window.matchMedia('(max-width: 991.98px)').matches ? 170 : 200;
+    function storeGapPx() {
+      const raw = getComputedStyle(storeTrack).getPropertyValue('--store-gap').trim();
+      const parsed = parseFloat(raw);
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+      if (window.matchMedia('(max-width: 575.98px)').matches) return 10;
+      if (window.matchMedia('(max-width: 991.98px)').matches) return 13;
+      return 12;
+    }
+
+    function storeCardFallbackW() {
+      if (window.matchMedia('(max-width: 767.98px)').matches) {
+        const available = Math.floor(storeCarousel.getBoundingClientRect().width);
+        return available > 0 ? available : 280;
+      }
+      if (window.matchMedia('(max-width: 991.98px)').matches) return 170;
+      return 200;
+    }
+
     let loopWidth = 0;
     let canLoop = false;
-    let stepSize = STORE_CARD_W + STORE_GAP;
+    let stepSize = storeCardFallbackW() + storeGapPx();
     let autoplay = !reduceMotion && originalCards.length > 1;
     let hoverPaused = false;
     let focusPaused = false;
@@ -2278,22 +2856,59 @@ document.addEventListener('DOMContentLoaded', function () {
         const w = Math.round(card.getBoundingClientRect().width);
         if (w > 0) return w;
       }
-      return window.matchMedia('(max-width: 991.98px)').matches ? 170 : 200;
+      return storeCardFallbackW();
+    }
+
+    function clearCardInlineSizes() {
+      storeTrack.querySelectorAll('.pd-store-card').forEach(function (card) {
+        card.style.flex = '';
+        card.style.width = '';
+        card.style.minWidth = '';
+        card.style.maxWidth = '';
+      });
+    }
+
+    function setCardInlineWidth(width) {
+      const basis = '0 0 ' + width + 'px';
+      storeTrack.querySelectorAll('.pd-store-card').forEach(function (card) {
+        card.style.flex = basis;
+        card.style.width = width + 'px';
+        card.style.minWidth = width + 'px';
+        card.style.maxWidth = width + 'px';
+      });
     }
 
     function fitVisibleCards() {
       storeViewport.style.width = '100%';
+      storeViewport.style.maxWidth = '100%';
+      storeViewport.style.marginInline = 'auto';
 
       const available = Math.floor(storeCarousel.getBoundingClientRect().width);
       if (available <= 0) return;
 
-      const width = cardWidthPx();
-      const count = Math.max(1, Math.floor((available + STORE_GAP) / (width + STORE_GAP)));
-      const used = count * width + Math.max(0, count - 1) * STORE_GAP;
+      const gap = storeGapPx();
+      const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
 
-      stepSize = width + STORE_GAP;
+      if (isMobile) {
+        // Una tarjeta = ancho del carrusel (centrada, sin hueco a la derecha)
+        const width = Math.max(1, available);
+        setCardInlineWidth(width);
+        stepSize = width + gap;
+        storeViewport.style.width = width + 'px';
+        storeViewport.style.maxWidth = '100%';
+        storeViewport.style.marginInline = 'auto';
+        return;
+      }
+
+      clearCardInlineSizes();
+      const width = cardWidthPx();
+      const count = Math.max(1, Math.floor((available + gap) / (width + gap)));
+      const used = count * width + Math.max(0, count - 1) * gap;
+
+      stepSize = width + gap;
       storeViewport.style.width = used + 'px';
       storeViewport.style.maxWidth = '100%';
+      storeViewport.style.marginInline = 'auto';
     }
 
     function cardStep() {
@@ -2305,7 +2920,7 @@ document.addEventListener('DOMContentLoaded', function () {
           return delta;
         }
       }
-      return stepSize > 0 ? stepSize : cardWidthPx() + STORE_GAP;
+      return stepSize > 0 ? stepSize : cardWidthPx() + storeGapPx();
     }
 
     function currentCardIndex() {
@@ -2578,15 +3193,23 @@ document.addEventListener('DOMContentLoaded', function () {
 <?php if ($trackViewInBrowser): ?>
 <script>
 (function () {
-  const body = new URLSearchParams(<?= json_encode([
+  const params = new URLSearchParams(<?= json_encode([
       'action' => $searchTerm !== '' ? 'search_click' : 'view',
       'product_id' => (int) $product['idproductos'],
       'term' => $searchTerm,
   ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>);
   if (navigator.sendBeacon) {
-    navigator.sendBeacon('event.php', body);
+    navigator.sendBeacon('event.php', new Blob([params.toString()], {
+      type: 'application/x-www-form-urlencoded'
+    }));
   } else {
-    fetch('event.php', { method: 'POST', body, credentials: 'same-origin', keepalive: true }).catch(() => {});
+    fetch('event.php', {
+      method: 'POST',
+      body: params,
+      credentials: 'same-origin',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }).catch(() => {});
   }
 })();
 </script>

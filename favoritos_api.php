@@ -47,7 +47,11 @@ if ($action === 'set') {
         $pdo->prepare('DELETE FROM favoritos WHERE usuario_idusuario = :u AND productos_idproductos = :p')->execute($params);
     }
 
-    fav_json(['ok' => true, 'favorite' => $wantFavorite]);
+    fav_json([
+        'ok' => true,
+        'favorite' => $wantFavorite,
+        'count' => function_exists('favorite_count') ? favorite_count($userId) : null,
+    ]);
 }
 
 if ($action === 'add_many') {

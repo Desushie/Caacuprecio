@@ -8,6 +8,7 @@
     if (!root) return;
 
     const slides = Array.from(root.querySelectorAll('[data-auth-slide]'));
+    const dots = Array.from(root.querySelectorAll('[data-auth-dot]'));
     const prev = root.querySelector('[data-auth-prev]');
     const next = root.querySelector('[data-auth-next]');
     if (slides.length < 2) return;
@@ -17,13 +18,30 @@
     }));
     let timer = null;
     const intervalMs = 5500;
+    const swipeThreshold = 42;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchActive = false;
+
+    const isDesktopVisual = function () {
+      return desktopMq.matches;
+    };
+
+    const syncDots = function () {
+      dots.forEach(function (dot, dotIndex) {
+        const active = dotIndex === index;
+        dot.setAttribute('aria-current', active ? 'true' : 'false');
+      });
+    };
 
     const show = function (nextIndex) {
+      if (!isDesktopVisual()) return;
       slides[index].classList.remove('is-active');
       slides[index].hidden = true;
       index = (nextIndex + slides.length) % slides.length;
       slides[index].hidden = false;
       slides[index].classList.add('is-active');
+      syncDots();
     };
 
     const stopAuto = function () {
@@ -34,11 +52,34 @@
     };
 
     const startAuto = function () {
-      if (reduceMotion) return;
+      if (reduceMotion || !isDesktopVisual()) return;
       stopAuto();
       timer = setInterval(function () {
         show(index + 1);
       }, intervalMs);
+    };
+
+    const mobileHidden = [
+      root.querySelector('.auth-visual-stage'),
+      root.querySelector('.auth-visual-nav'),
+      root.querySelector('.auth-visual-dots'),
+    ].filter(Boolean);
+
+    const syncForViewport = function () {
+      const desktop = isDesktopVisual();
+      if (desktop) root.removeAttribute('aria-hidden');
+      else root.setAttribute('aria-hidden', 'true');
+      mobileHidden.forEach(function (el) {
+        if (desktop) el.removeAttribute('aria-hidden');
+        else el.setAttribute('aria-hidden', 'true');
+      });
+
+      if (desktop) {
+        syncDots();
+        startAuto();
+        return;
+      }
+      stopAuto();
     };
 
     if (prev) {
@@ -55,6 +96,48 @@
       });
     }
 
+    dots.forEach(function (dot) {
+      dot.addEventListener('click', function () {
+        const target = parseInt(dot.getAttribute('data-auth-dot') || '0', 10);
+        if (Number.isNaN(target) || target === index) return;
+        show(target);
+        startAuto();
+      });
+    });
+
+    root.addEventListener('touchstart', function (event) {
+      if (!isDesktopVisual()) return;
+      if (!event.touches || event.touches.length !== 1) return;
+      touchActive = true;
+      touchStartX = event.touches[0].clientX;
+      touchStartY = event.touches[0].clientY;
+      stopAuto();
+    }, { passive: true });
+
+    root.addEventListener('touchend', function (event) {
+      if (!isDesktopVisual()) return;
+      if (!touchActive || !event.changedTouches || !event.changedTouches.length) {
+        startAuto();
+        return;
+      }
+
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      touchActive = false;
+
+      if (Math.abs(dx) >= swipeThreshold && Math.abs(dx) > Math.abs(dy)) {
+        show(index + (dx < 0 ? 1 : -1));
+      }
+
+      startAuto();
+    }, { passive: true });
+
+    root.addEventListener('touchcancel', function () {
+      touchActive = false;
+      startAuto();
+    }, { passive: true });
+
     root.addEventListener('mouseenter', stopAuto);
     root.addEventListener('mouseleave', startAuto);
     root.addEventListener('focusin', stopAuto);
@@ -62,7 +145,13 @@
       if (!root.contains(event.relatedTarget)) startAuto();
     });
 
-    startAuto();
+    if (typeof desktopMq.addEventListener === 'function') {
+      desktopMq.addEventListener('change', syncForViewport);
+    } else if (typeof desktopMq.addListener === 'function') {
+      desktopMq.addListener(syncForViewport);
+    }
+
+    syncForViewport();
   }
 
   function initPasswordToggles() {
@@ -130,6 +219,9 @@
 
       syncRequired();
 
+      const board = form.closest('[data-auth-board]');
+      if (board) applyAuthBoardHeight(board);
+
       if (options.focus === false) return;
 
       const activePanel = panels.find(function (panel) {
@@ -181,19 +273,39 @@
     form._authSetStep = setStep;
   }
 
+  function applyAuthBoardHeight(board) {
+    if (!board || !board.classList.contains('is-size-locked')) return;
+
+    const stepsForm = board.querySelector('[data-auth-steps]');
+    const step = stepsForm
+      ? Math.max(1, parseInt(stepsForm.getAttribute('data-auth-step') || '1', 10) || 1)
+      : 1;
+    const mode = board.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
+    const usePassword = mode === 'register' && step >= 2;
+
+    const boardH = usePassword
+      ? board.style.getPropertyValue('--auth-board-h-password')
+      : board.style.getPropertyValue('--auth-board-h-base');
+    const formH = usePassword
+      ? board.style.getPropertyValue('--auth-form-h-password')
+      : board.style.getPropertyValue('--auth-form-h-base');
+
+    if (boardH) board.style.setProperty('--auth-board-h', boardH);
+    if (formH) board.style.setProperty('--auth-form-h', formH);
+    board.classList.toggle('is-password-step', usePassword);
+  }
+
   function lockAuthBoardSize(board) {
     const formCol = board.querySelector('.auth-board-form');
     const login = board.querySelector('[data-auth-panel="login"]');
     const register = board.querySelector('[data-auth-panel="register"]');
     if (!formCol || !login || !register) return;
 
-    if (!desktopMq.matches) {
-      board.classList.remove('is-size-locked');
-      board.style.removeProperty('--auth-board-h');
-      board.style.removeProperty('--auth-form-h');
-      board.style.removeProperty('grid-template-columns');
-      return;
-    }
+    const isDesktop = desktopMq.matches;
+    const COLS_LOGIN = 'minmax(18rem, 1.05fr) minmax(16rem, 0.95fr)';
+    const COLS_REGISTER = 'minmax(16rem, 0.95fr) minmax(18rem, 1.05fr)';
+    const colsLogin = isDesktop ? COLS_LOGIN : '1fr';
+    const colsRegister = isDesktop ? COLS_REGISTER : '1fr';
 
     const prev = {
       mode: board.getAttribute('data-auth-mode'),
@@ -204,10 +316,14 @@
       wasRegister: board.classList.contains('auth-board--register'),
     };
 
-    board.classList.remove('is-size-locked', 'auth-board--register');
+    board.classList.remove('is-size-locked', 'auth-board--register', 'is-password-step');
     board.style.removeProperty('--auth-board-h');
     board.style.removeProperty('--auth-form-h');
-    board.style.gridTemplateColumns = 'minmax(18rem, 1.05fr) minmax(16rem, 0.95fr)';
+    board.style.removeProperty('--auth-board-h-base');
+    board.style.removeProperty('--auth-form-h-base');
+    board.style.removeProperty('--auth-board-h-password');
+    board.style.removeProperty('--auth-form-h-password');
+    board.style.gridTemplateColumns = colsLogin;
 
     login.hidden = false;
     login.classList.add('is-active');
@@ -216,8 +332,10 @@
 
     void board.offsetWidth;
 
-    let boardH = board.getBoundingClientRect().height;
-    let formH = formCol.getBoundingClientRect().height;
+    let baseBoardH = board.getBoundingClientRect().height;
+    let baseFormH = formCol.getBoundingClientRect().height;
+    let passwordBoardH = baseBoardH;
+    let passwordFormH = baseFormH;
 
     const steps = Array.prototype.slice.call(register.querySelectorAll('[data-auth-step-panel]'));
     const prevSteps = steps.map(function (s) {
@@ -229,25 +347,41 @@
     register.hidden = false;
     register.classList.add('is-active');
     board.classList.add('auth-board--register');
-    board.style.gridTemplateColumns = 'minmax(16rem, 0.95fr) minmax(18rem, 1.05fr)';
+    board.style.gridTemplateColumns = colsRegister;
 
-    (steps.length ? steps : [null]).forEach(function (current) {
+    (steps.length ? steps : [null]).forEach(function (current, index) {
       steps.forEach(function (s) {
         s.hidden = s !== current;
         s.classList.toggle('is-active', s === current);
       });
       void board.offsetWidth;
-      boardH = Math.max(boardH, board.getBoundingClientRect().height);
-      formH = Math.max(formH, formCol.getBoundingClientRect().height);
+      const boardH = board.getBoundingClientRect().height;
+      const formH = formCol.getBoundingClientRect().height;
+      const stepNum = current
+        ? parseInt(current.getAttribute('data-auth-step-panel') || String(index + 1), 10)
+        : 1;
+
+      if (stepNum <= 1) {
+        baseBoardH = Math.max(baseBoardH, boardH);
+        baseFormH = Math.max(baseFormH, formH);
+      } else {
+        passwordBoardH = Math.max(passwordBoardH, boardH);
+        passwordFormH = Math.max(passwordFormH, formH);
+      }
     });
+
+    passwordBoardH = Math.max(passwordBoardH, baseBoardH);
+    passwordFormH = Math.max(passwordFormH, baseFormH);
 
     steps.forEach(function (s, i) {
       s.hidden = prevSteps[i].hidden;
       s.classList.toggle('is-active', prevSteps[i].active);
     });
 
-    board.style.setProperty('--auth-board-h', Math.ceil(boardH) + 'px');
-    board.style.setProperty('--auth-form-h', Math.ceil(formH) + 'px');
+    board.style.setProperty('--auth-board-h-base', Math.ceil(baseBoardH) + 'px');
+    board.style.setProperty('--auth-form-h-base', Math.ceil(baseFormH) + 'px');
+    board.style.setProperty('--auth-board-h-password', Math.ceil(passwordBoardH) + 'px');
+    board.style.setProperty('--auth-form-h-password', Math.ceil(passwordFormH) + 'px');
     board.classList.add('is-size-locked');
 
     login.hidden = prev.loginHidden;
@@ -256,9 +390,9 @@
     register.classList.toggle('is-active', prev.registerActive);
     const restoreRegister = prev.wasRegister || prev.mode === 'register';
     board.classList.toggle('auth-board--register', restoreRegister);
-    board.style.gridTemplateColumns = restoreRegister
-      ? 'minmax(16rem, 0.95fr) minmax(18rem, 1.05fr)'
-      : 'minmax(18rem, 1.05fr) minmax(16rem, 0.95fr)';
+    board.style.gridTemplateColumns = restoreRegister ? colsRegister : colsLogin;
+
+    applyAuthBoardHeight(board);
   }
 
   function initBoardSwap() {
@@ -279,11 +413,27 @@
     const COLS_REGISTER = 'minmax(16rem, 0.95fr) minmax(18rem, 1.05fr)';
 
     const applyColumns = function (mode) {
+      if (!desktopMq.matches) {
+        board.style.setProperty('grid-template-columns', '1fr');
+        return;
+      }
       board.style.gridTemplateColumns = mode === 'register' ? COLS_REGISTER : COLS_LOGIN;
     };
 
     applyColumns(board.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login');
     lockAuthBoardSize(board);
+
+    if (typeof desktopMq.addEventListener === 'function') {
+      desktopMq.addEventListener('change', function () {
+        applyColumns(board.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login');
+        lockAuthBoardSize(board);
+      });
+    } else if (typeof desktopMq.addListener === 'function') {
+      desktopMq.addListener(function () {
+        applyColumns(board.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login');
+        lockAuthBoardSize(board);
+      });
+    }
 
     let resizeTimer = null;
     const scheduleLock = function () {
@@ -362,7 +512,11 @@
           const stepsForm = panels.register.querySelector('[data-auth-steps]');
           if (stepsForm && typeof stepsForm._authSetStep === 'function') {
             stepsForm._authSetStep(1, { focus: false });
+          } else {
+            applyAuthBoardHeight(board);
           }
+        } else {
+          applyAuthBoardHeight(board);
         }
 
         if (opts.focus === false) return;
@@ -389,7 +543,7 @@
         }
       };
 
-      const canAnimate = !reduceMotion && desktopMq.matches && opts.animate !== false && nextMode !== currentMode;
+      const canAnimate = !reduceMotion && opts.animate !== false && nextMode !== currentMode;
 
       if (!canAnimate) {
         activatePanel();
@@ -399,7 +553,8 @@
 
       board.classList.add('is-swapping');
 
-      // FLIP: medir posiciones actuales, aplicar layout final, invertir y animar.
+      // FLIP: desktop mueve columnas; mobile mantiene banda arriba y solo revela el form.
+      const isDesktop = desktopMq.matches;
       const formFirst = formCol.getBoundingClientRect();
       const visualFirst = visual.getBoundingClientRect();
 
@@ -410,22 +565,32 @@
       const visualLast = visual.getBoundingClientRect();
 
       const formDx = formFirst.left - formLast.left;
+      const formDy = formFirst.top - formLast.top;
       const visualDx = visualFirst.left - visualLast.left;
+      const visualDy = visualFirst.top - visualLast.top;
       const formScale = formFirst.width && formLast.width ? formFirst.width / formLast.width : 1;
       const visualScale = visualFirst.width && visualLast.width ? visualFirst.width / visualLast.width : 1;
 
+      const ease = 'var(--auth-swap-ease, cubic-bezier(0.22, 1, 0.36, 1))';
+      const formInvert = isDesktop
+        ? 'translate(' + formDx + 'px, ' + formDy + 'px) scaleX(' + formScale + ')'
+        : 'translate(' + formDx + 'px, ' + formDy + 'px)';
+      const visualInvert = isDesktop
+        ? 'translate(' + visualDx + 'px, ' + visualDy + 'px) scaleX(' + visualScale + ')'
+        : 'translate(' + visualDx + 'px, ' + visualDy + 'px)';
+
       formCol.style.transition = 'none';
       visual.style.transition = 'none';
-      formCol.style.transformOrigin = 'left center';
-      visual.style.transformOrigin = 'left center';
-      formCol.style.transform = 'translateX(' + formDx + 'px) scaleX(' + formScale + ')';
-      visual.style.transform = 'translateX(' + visualDx + 'px) scaleX(' + visualScale + ')';
+      formCol.style.transformOrigin = isDesktop ? 'left center' : 'center top';
+      visual.style.transformOrigin = isDesktop ? 'left center' : 'center top';
+      formCol.style.transform = formInvert;
+      visual.style.transform = visualInvert;
 
       void formCol.offsetWidth;
 
       window.requestAnimationFrame(function () {
-        formCol.style.transition = 'transform ' + SWAP_MS + 'ms var(--auth-swap-ease, cubic-bezier(0.22, 1, 0.36, 1))';
-        visual.style.transition = 'transform ' + SWAP_MS + 'ms var(--auth-swap-ease, cubic-bezier(0.22, 1, 0.36, 1))';
+        formCol.style.transition = 'transform ' + SWAP_MS + 'ms ' + ease;
+        visual.style.transition = 'transform ' + SWAP_MS + 'ms ' + ease;
         formCol.style.transform = '';
         visual.style.transform = '';
       });

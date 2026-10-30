@@ -1,15 +1,42 @@
 (function () {
   var FALLBACK_ICON = 'image';
 
+  function toPascalCase(name) {
+    return String(name || '')
+      .split('-')
+      .filter(Boolean)
+      .map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join('');
+  }
+
   function refreshLucideIcons() {
     if (!window.lucide || typeof window.lucide.createIcons !== 'function') {
       return;
     }
 
+    // createIcons también re-renderiza SVG que ya tienen data-lucide y provoca
+    // un parpadeo en todo el sitio (p. ej. al cambiar de tema). Los protegemos.
+    var keepers = [];
+    document.querySelectorAll('svg[data-lucide]').forEach(function (svg) {
+      keepers.push(svg);
+      svg.setAttribute('data-lucide-keep', svg.getAttribute('data-lucide') || '');
+      svg.removeAttribute('data-lucide');
+    });
+
     window.lucide.createIcons({
       attrs: {
         'stroke-width': 1.75
       }
+    });
+
+    keepers.forEach(function (svg) {
+      var name = svg.getAttribute('data-lucide-keep');
+      if (name) {
+        svg.setAttribute('data-lucide', name);
+      }
+      svg.removeAttribute('data-lucide-keep');
     });
   }
 
@@ -19,7 +46,29 @@
     }
 
     container.innerHTML = '';
-    const icon = document.createElement('i');
+
+    // Crear el SVG directo: evita un createIcons de página completa al cambiar tema
+    var pascal = toPascalCase(name);
+    var iconDef = window.lucide && window.lucide.icons ? window.lucide.icons[pascal] : null;
+    if (iconDef && typeof window.lucide.createElement === 'function') {
+      var svg = window.lucide.createElement(iconDef, {
+        'class': 'lucide',
+        'stroke-width': 1.75,
+        'aria-hidden': 'true',
+        width: 18,
+        height: 18
+      });
+      if (svg) {
+        svg.setAttribute('data-lucide', name);
+        if (!svg.classList.contains('lucide')) {
+          svg.classList.add('lucide');
+        }
+        container.appendChild(svg);
+        return;
+      }
+    }
+
+    var icon = document.createElement('i');
     icon.setAttribute('data-lucide', name);
     icon.setAttribute('aria-hidden', 'true');
     container.appendChild(icon);

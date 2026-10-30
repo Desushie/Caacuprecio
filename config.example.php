@@ -138,11 +138,13 @@ const CONSENT_FIELD = 'acepto_privacidad';
  */
 function consent_field(string $id, bool $withTerms = false): string
 {
-    $newTab = '<span class="visually-hidden"> (se abre en una pestaña nueva)</span>';
-    $privacy = '<a href="privacidad.php" target="_blank" rel="noopener">Política de privacidad' . $newTab . '</a>';
+    $privacy = '<a href="privacidad.php" target="_blank" rel="noopener">política de privacidad</a>';
+    $newTabNote = $withTerms
+        ? '<span class="visually-hidden"> Los enlaces se abren en una pestaña nueva.</span>'
+        : '<span class="visually-hidden"> Se abre en una pestaña nueva.</span>';
     $text = $withTerms
-        ? 'Leí y acepto los <a href="terminos.php" target="_blank" rel="noopener">Términos y condiciones' . $newTab . '</a> y la ' . $privacy . '.'
-        : 'Acepto que Caacuprecio trate los datos de este formulario según la ' . $privacy . '.';
+        ? 'Acepto los <a href="terminos.php" target="_blank" rel="noopener">términos</a> y la ' . $privacy . '.' . $newTabNote
+        : 'Acepto que Caacuprecio trate los datos de este formulario según la ' . $privacy . '.' . $newTabNote;
 
     return '<div class="form-check consent-check">'
         . '<input class="form-check-input" type="checkbox" name="' . CONSENT_FIELD . '" id="' . e($id) . '" value="1" required>'
@@ -251,7 +253,7 @@ function page_title(string $title = ''): string
 function active_sort_options(): array
 {
     return [
-        'recientes' => 'Más recientes',
+        'recientes' => 'Recientes',
         'precio_asc' => 'Menor precio',
         'precio_desc' => 'Mayor precio',
         'nombre_asc' => 'Nombre A-Z',
@@ -560,9 +562,11 @@ function render_head(string $title = ''): void
     echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e(page_title($title)) . '</title>';
+    // Tema antes del paint para evitar FOUC al cargar
+    echo '<script>(function(){try{var t=localStorage.getItem("caacuprecio-theme")||"' . e(DEFAULT_THEME) . '";var d=t!=="light";document.documentElement.setAttribute("data-bs-theme",d?"dark":"light");document.documentElement.classList.add(d?"theme-dark":"theme-light");}catch(e){}})();</script>';
     echo '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">';
     echo '<script src="https://cdn.jsdelivr.net/npm/lucide@0.511.0/dist/umd/lucide.min.js"></script>';
-    echo '<script src="./js/icons.js"></script>';
+    echo '<script src="./js/icons.js?v=' . filemtime(__DIR__ . '/js/icons.js') . '"></script>';
     echo '<link rel="preconnect" href="https://fonts.googleapis.com">';
     echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
     echo '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
@@ -573,13 +577,11 @@ function render_head(string $title = ''): void
 
     echo '</head>';
     echo '<body class="theme-dark">';
+    echo '<script>document.body.className=document.documentElement.classList.contains("theme-light")?"theme-light":"theme-dark";</script>';
 }
 
 function render_navbar(string $current = 'home'): void
 {
-    $homeActive = $current === 'home' ? 'active' : '';
-    $storesActive = $current === 'tienda' ? 'active' : '';
-    $productActive = $current === 'producto' ? 'active' : '';
     $favActive = $current === 'favoritos' ? 'active' : '';
     $user = current_user();
     $favCount = favorite_count();
@@ -631,79 +633,244 @@ function render_navbar(string $current = 'home'): void
             . '</div>'
             . '</div>';
 
-        $mobileAccount = '<div class="navbar-mobile-account d-lg-none">'
+        $mobileAccount = '<div class="navbar-mobile-account" role="navigation" aria-label="Menú de cuenta">'
             . '<div class="navbar-user-head">' . $userHead . '</div>'
-            . '<ul class="navbar-nav navbar-account">'
-            . '<li class="nav-item"><a class="nav-link' . $userActive . '" href="usuario.php">' . lucide_icon('circle-user', 'me-2', 17) . 'Mi cuenta</a></li>'
-            . ($canAdmin ? '<li class="nav-item"><a class="nav-link' . $adminActive . '" href="./admin.php">' . lucide_icon('settings', 'me-2', 17) . 'Panel admin</a></li>' : '')
-            . '</ul>'
-            . '<a class="navbar-cta-btn navbar-cta-btn-ghost" href="logout.php">' . lucide_icon('log-out', '', 17) . 'Cerrar sesión</a>'
+            . '<ul class="navbar-user-list">' . $menuItems . '</ul>'
+            . '<ul class="navbar-user-list navbar-user-footer">' . $menuFooter . '</ul>'
             . '</div>';
     } else {
-        $loginButton = '<a class="navbar-cta-btn" href="login.php">Ingresar</a>';
-        $userMenu = '<div class="navbar-cta d-none d-lg-flex">' . $loginButton . '</div>';
-        $mobileAccount = '<div class="navbar-cta d-lg-none">' . $loginButton . '</div>';
+        $userMenu = '<div class="navbar-cta"><a class="navbar-cta-btn" href="login.php">Ingresar</a></div>';
     }
 
+    $hasSearch = should_render_global_search();
+    $innerClass = 'container navbar-inner' . ($hasSearch ? ' has-search' : '') . ($mobileAccount !== '' ? ' has-account-menu' : '');
+
     echo '<a class="visually-hidden-focusable skip-link" href="#contenido">Saltar al contenido</a>';
-    echo '<nav class="navbar navbar-expand-lg sticky-top navbar-shell navbar-apple">';
-    echo '  <div class="container navbar-inner">';
-    echo '    <a class="navbar-brand d-flex align-items-center" href="index.php">';
+    echo '<nav class="navbar sticky-top navbar-shell navbar-apple" aria-label="Principal">';
+    echo '  <div class="' . $innerClass . '">';
+
+    echo '    <a class="navbar-brand" href="index.php">';
     echo '      <img src="./img/logo_horizontal_dark.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-navbar-logo" width="156" height="52">';
     echo '    </a>';
 
-    echo '    <div class="collapse navbar-collapse" id="mainNav">';
-    echo '      <ul class="navbar-nav navbar-links">';
-    echo '        <li class="nav-item"><a class="nav-link ' . $homeActive . '" data-nav="home" href="index.php">Inicio</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link" data-nav="categorias" href="index.php#categorias">Categorías</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link ' . $productActive . '" data-nav="productos" href="index.php#productos">Productos</a></li>';
-    echo '        <li class="nav-item"><a class="nav-link ' . $storesActive . '" data-nav="tiendas" href="index.php#tiendas">Tiendas</a></li>';
-    if ($user) {
-        echo '        <li class="nav-item"><a class="nav-link ' . $favActive . '" data-nav="favoritos" href="favoritos.php">Favoritos';
-        echo ' <span class="badge rounded-pill navbar-fav-badge ms-1">' . $favCount . '</span>';
-        echo '</a></li>';
+    if ($hasSearch) {
+        echo '    <div class="navbar-search-host" id="navbar-search-host">';
+        echo '      <div class="navbar-search" id="global-search-fixed" data-global-search>';
+        render_global_search_dock();
+        echo '      </div>';
+        echo '    </div>';
     }
-    echo '      </ul>';
-    echo '      ' . $mobileAccount;
-    echo '    </div>';
 
     echo '    <div class="navbar-toolbar">';
     echo '      ' . $userMenu;
-    echo '      <button id="themeToggle" class="navbar-theme-btn navbar-theme-btn-icon d-none d-lg-inline-flex" type="button" aria-label="Cambiar tema" title="Cambiar tema">';
+    echo '      <button id="themeToggle" class="navbar-theme-btn navbar-theme-btn-icon" type="button" aria-label="Cambiar tema" title="Cambiar tema">';
     echo '        <span data-lucide-host data-icon-dark="sun" data-icon-light="moon">' . lucide_icon('sun') . '</span>';
     echo '      </button>';
-    echo '      <button id="themeToggleMobile" class="navbar-theme-btn navbar-theme-btn-icon d-lg-none" type="button" aria-label="Cambiar tema">';
-    echo '        <span data-lucide-host data-icon-dark="sun" data-icon-light="moon">' . lucide_icon('contrast') . '</span>';
-    echo '      </button>';
-    echo '      <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Abrir menú">';
-    echo '        <span class="navbar-toggler-icon"></span>';
-    echo '      </button>';
+    if ($mobileAccount !== '') {
+        echo '      <button class="navbar-toggler border-0 shadow-none d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Abrir menú de cuenta">';
+        echo '        <span class="navbar-toggler-icon"></span>';
+        echo '      </button>';
+    }
     echo '    </div>';
+
+    if ($mobileAccount !== '') {
+        echo '    <div class="collapse navbar-collapse navbar-mobile-panel d-lg-none" id="mainNav">';
+        echo '      ' . $mobileAccount;
+        echo '    </div>';
+    }
+
     echo '  </div>';
     echo '</nav>';
+    if ($mobileAccount !== '') {
+        echo '<div class="navbar-menu-backdrop" id="navbarMenuBackdrop" aria-hidden="true"></div>';
+    }
     echo '<div id="contenido" tabindex="-1"></div>';
+}
+
+function should_render_global_search(): bool
+{
+    $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if ($script === '') {
+        return false;
+    }
+
+    if (str_starts_with($script, 'admin')) {
+        return false;
+    }
+
+    return !in_array($script, [
+        'login.php',
+        'registro.php',
+        'olvide_password.php',
+        'reset_password.php',
+        'analytics.php',
+        'favoritos_print.php',
+        'favoritos_api.php',
+        'buscar_api.php',
+        'event.php',
+        'go.php',
+        'tracking.php',
+        'logout.php',
+        'guardar_sugerencia.php',
+        'favorito_toggle.php',
+        'cron_queue_run_all.php',
+    ], true);
+}
+
+function render_global_search_dock(): void
+{
+    $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
+    $q = trim((string) ($_GET['q'] ?? ''));
+    $categoriaId = (int) ($_GET['categoria'] ?? 0);
+    $sort = (string) ($_GET['orden'] ?? 'recientes');
+    if (!array_key_exists($sort, active_sort_options())) {
+        $sort = 'recientes';
+    }
+
+    $tiendaId = (int) ($_GET['tienda'] ?? 0);
+    $marca = trim((string) ($_GET['marca'] ?? ''));
+    $precioMin = trim((string) ($_GET['precio_min'] ?? ''));
+    $precioMax = trim((string) ($_GET['precio_max'] ?? ''));
+
+    try {
+        $categorias = db()->query('SELECT idcategorias, cat_nombre FROM categorias ORDER BY cat_nombre ASC')->fetchAll();
+    } catch (Throwable $e) {
+        $categorias = [];
+    }
+
+    $liveAttrs = '';
+    if ($script === 'index.php') {
+        $liveAttrs = ' data-live-target="#home-live-results" data-count-target="#home-live-count" data-state-target="#home-live-state"';
+    } elseif ($script === 'buscar.php') {
+        $liveAttrs = ' data-live-target="#results-live-results" data-count-target="#results-live-count" data-state-target="#results-live-state"';
+    }
+
+    $context = match ($script) {
+        'buscar.php' => 'results',
+        'producto.php' => 'product',
+        'tienda.php' => 'store',
+        'favoritos.php' => 'favorites',
+        default => 'global',
+    };
+
+    echo '<div class="global-search-dock navbar-search-dock"';
+    echo '  data-search-root';
+    echo '  data-search-endpoint="buscar_api.php"';
+    echo '  data-search-history-endpoint="guardar_busqueda.php"';
+    echo '  data-search-results-page="buscar.php"';
+    echo '  data-search-mode="pro"';
+    echo '  data-search-context="' . e($context) . '"' . $liveAttrs . '>';
+    echo '  <form class="js-smart-search-form search-dock-form navbar-search-form" method="get" action="buscar.php" autocomplete="off">';
+
+    if ($script === 'buscar.php') {
+        echo '    <input type="hidden" name="tienda" value="' . $tiendaId . '" data-search-filter="tienda">';
+        echo '    <input type="hidden" name="marca" value="' . e($marca) . '" data-search-filter="marca">';
+        echo '    <input type="hidden" name="precio_min" value="' . e($precioMin) . '" data-search-filter="precio_min">';
+        echo '    <input type="hidden" name="precio_max" value="' . e($precioMax) . '" data-search-filter="precio_max">';
+    }
+
+    echo '    <div class="search-dock-row navbar-search-row">';
+    echo '      <div class="search-dock-filters navbar-search-filters">';
+    echo '        <div class="search-category-col search-dock-select-wrap">';
+    echo '          <span class="search-dock-select-icon" aria-hidden="true">' . lucide_icon('layout-grid', '', 15) . '</span>';
+    echo '          <select name="categoria" class="form-select js-smart-search-category search-dock-select" data-search-category data-select-tooltip aria-label="Categoría" title="Todas las categorías">';
+    echo '            <option value="0" title="Todas las categorías" data-full-label="Todas las categorías">Categoría</option>';
+    foreach ($categorias as $categoria) {
+        $id = (int) $categoria['idcategorias'];
+        $name = (string) $categoria['cat_nombre'];
+        $selected = $categoriaId === $id ? ' selected' : '';
+        echo '            <option value="' . $id . '" title="' . e($name) . '" data-full-label="' . e($name) . '"' . $selected . '>' . e($name) . '</option>';
+    }
+    echo '          </select>';
+    echo '        </div>';
+    echo '        <div class="search-order-col search-dock-select-wrap">';
+    echo '          <span class="search-dock-select-icon" aria-hidden="true">' . lucide_icon('arrow-up-down', '', 15) . '</span>';
+    echo '          <select name="orden" class="form-select search-dock-select" data-search-order data-search-sort data-select-tooltip aria-label="Orden">';
+    foreach (active_sort_options() as $value => $label) {
+        $selected = $sort === $value ? ' selected' : '';
+        echo '            <option value="' . e($value) . '" title="' . e($label) . '" data-full-label="' . e($label) . '"' . $selected . '>' . e($label) . '</option>';
+    }
+    echo '          </select>';
+    echo '        </div>';
+    echo '      </div>';
+
+    echo '      <div class="search-input-col search-dock-field">';
+    echo '        <span class="search-dock-icon" aria-hidden="true">' . lucide_icon('search', '', 18) . '</span>';
+    echo '        <label for="global-search-input" class="visually-hidden">Buscar productos</label>';
+    echo '        <input';
+    echo '          id="global-search-input"';
+    echo '          type="search"';
+    echo '          name="q"';
+    echo '          class="form-control js-smart-search-input search-dock-input"';
+    echo '          placeholder="Producto, marca o tienda"';
+    echo '          value="' . e($q) . '"';
+    echo '          autocomplete="off"';
+    echo '          enterkeyhint="search"';
+    echo '          data-search-input';
+    echo '          data-live-delay="320"';
+    echo '          data-min-length="2"';
+    echo '          aria-autocomplete="list"';
+    echo '          aria-expanded="false"';
+    echo '          aria-controls="global-search-suggestions"';
+    echo '        >';
+    echo '        <div';
+    echo '          id="global-search-suggestions"';
+    echo '          class="search-suggest-dropdown search-suggestions-panel"';
+    echo '          data-search-dropdown';
+    echo '          data-search-suggest';
+    echo '          data-search-suggestions';
+    echo '          role="listbox"';
+    echo '          aria-label="Sugerencias de búsqueda"';
+    echo '        ></div>';
+    echo '      </div>';
+    echo '    </div>';
+    echo '  </form>';
+    echo '</div>';
     echo '<script>';
     echo '(function(){';
-    echo 'var page=' . json_encode($current) . ';';
-    echo 'function links(){return document.querySelectorAll(".navbar-links .nav-link[data-nav]");}';
-    echo 'function setActive(name){links().forEach(function(link){link.classList.toggle("active",link.getAttribute("data-nav")===name);});}';
-    echo 'function sectionFromScroll(){var ids=["categorias","productos","tiendas"];var y=window.scrollY+100;var current="home";ids.forEach(function(id){var el=document.getElementById(id);if(el&&el.offsetTop<=y)current=id;});return current;}';
-    echo 'function sync(){';
-    echo 'if(page==="favoritos")return setActive("favoritos");';
-    echo 'if(page==="usuario")return setActive("usuario");';
-    echo 'if(page==="admin")return setActive("admin");';
-    echo 'if(page==="producto")return setActive("productos");';
-    echo 'if(page==="tienda")return setActive("tiendas");';
-    echo 'if(page!=="home")return setActive("");';
-    echo 'var hash=(location.hash||"").replace("#","");';
-    echo 'if(hash==="categorias"||hash==="productos"||hash==="tiendas")return setActive(hash);';
-    echo 'setActive(sectionFromScroll());';
+    echo 'var root=document.getElementById("global-search-fixed");';
+    echo 'var host=document.getElementById("navbar-search-host");';
+    echo 'if(!root)return;';
+    echo 'root.querySelectorAll("[data-select-tooltip]").forEach(function(select){';
+    echo 'function syncTitle(){';
+    echo 'var opt=select.options[select.selectedIndex];';
+    echo 'var label=(opt&&(opt.getAttribute("data-full-label")||opt.title||opt.textContent))||"";';
+    echo 'select.title=label;';
+    echo 'select.setAttribute("aria-description",label);';
     echo '}';
-    echo 'document.addEventListener("click",function(event){var link=event.target.closest(".navbar-links .nav-link[data-nav]");if(!link)return;var name=link.getAttribute("data-nav");if(name==="home"||name==="categorias"||name==="productos"||name==="tiendas"){setActive(name);}});';
-    echo 'window.addEventListener("hashchange",sync);';
-    echo 'window.addEventListener("scroll",function(){if(page==="home")setActive(sectionFromScroll());},{passive:true});';
-    echo 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",sync);}else{sync();}';
-    echo 'window.addEventListener("load",sync);';
+    echo 'select.addEventListener("change",syncTitle);';
+    echo 'syncTitle();';
+    echo '});';
+    echo 'if(!host)return;';
+    echo 'var mq=window.matchMedia("(max-width: 991.98px)");';
+    echo 'var dockSpace="--mobile-search-dock-space";';
+    echo 'function setDockSpace(){';
+    echo 'if(!root.classList.contains("is-mobile-bottom-dock")){';
+    echo 'document.documentElement.style.removeProperty(dockSpace);';
+    echo 'return;';
+    echo '}';
+    echo 'document.documentElement.style.setProperty(dockSpace,root.offsetHeight+"px");';
+    echo '}';
+    echo 'function syncMobileDock(){';
+    echo 'if(mq.matches){';
+    echo 'if(root.parentElement!==document.body)document.body.appendChild(root);';
+    echo 'root.classList.add("is-mobile-bottom-dock");';
+    echo 'document.documentElement.classList.add("has-mobile-search-dock");';
+    echo '}else{';
+    echo 'if(root.parentElement!==host)host.appendChild(root);';
+    echo 'root.classList.remove("is-mobile-bottom-dock");';
+    echo 'document.documentElement.classList.remove("has-mobile-search-dock");';
+    echo '}';
+    echo 'setDockSpace();';
+    echo '}';
+    echo 'syncMobileDock();';
+    echo 'if(mq.addEventListener)mq.addEventListener("change",syncMobileDock);';
+    echo 'else if(mq.addListener)mq.addListener(syncMobileDock);';
+    echo 'if(typeof ResizeObserver!=="undefined"){';
+    echo 'new ResizeObserver(setDockSpace).observe(root);';
+    echo '}else{';
+    echo 'window.addEventListener("resize",setDockSpace,{passive:true});';
+    echo '}';
     echo '})();';
     echo '</script>';
 }
@@ -716,6 +883,7 @@ function render_footer(): void
     $user = current_user();
     $year = date('Y');
 
+    echo '<div class="site-footer-push" aria-hidden="true"></div>';
     echo '<footer class="footer site-footer">';
     echo '  <div class="container site-footer-inner">';
     echo '    <div class="site-footer-grid">';
@@ -725,56 +893,60 @@ function render_footer(): void
     echo '          <img src="./img/logo_horizontal.webp" data-theme-logo data-light-logo="./img/logo_horizontal.webp" data-dark-logo="./img/logo_horizontal_dark.webp" alt="Caacuprecio" class="site-footer-logo" width="156" height="52">';
     echo '        </a>';
     echo '        <p class="site-footer-tagline">Compara precios entre los comercios de la ciudad y elige la mejor opción antes de salir.</p>';
-    echo '        <p class="site-footer-place">';
-    echo            lucide_icon('map-pin', 'site-footer-place-icon', 14);
-    echo '          <span>Caacupé, Paraguay</span>';
-    echo '        </p>';
+    echo '        <div class="site-footer-meta">';
+    echo '          <p class="site-footer-place">';
+    echo              lucide_icon('map-pin', 'site-footer-place-icon', 14);
+    echo '            <span>Caacupé, Paraguay</span>';
+    echo '          </p>';
     if (BUSINESS_EMAIL !== '') {
-        echo '        <a class="site-footer-place site-footer-mail" href="mailto:' . e(BUSINESS_EMAIL) . '">';
-        echo            lucide_icon('mail', 'site-footer-place-icon', 14);
-        echo '          <span>' . e(BUSINESS_EMAIL) . '</span>';
-        echo '        </a>';
+        echo '          <a class="site-footer-place site-footer-mail" href="mailto:' . e(BUSINESS_EMAIL) . '">';
+        echo              lucide_icon('mail', 'site-footer-place-icon', 14);
+        echo '            <span>' . e(BUSINESS_EMAIL) . '</span>';
+        echo '          </a>';
     }
+    echo '        </div>';
     echo '      </div>';
 
-    echo '      <nav class="site-footer-col" aria-label="Explorar">';
-    echo '        <h6 class="site-footer-heading">Explorar</h6>';
-    echo '        <ul class="site-footer-links">';
-    echo '          <li><a href="index.php#productos">Productos</a></li>';
-    echo '          <li><a href="index.php#tiendas">Tiendas</a></li>';
-    echo '          <li><a href="index.php#categorias">Categorías</a></li>';
-    echo '          <li><a href="buscar.php">Buscar</a></li>';
-    echo '        </ul>';
-    echo '      </nav>';
+    echo '      <div class="site-footer-navs">';
 
-    echo '      <nav class="site-footer-col" aria-label="Cuenta">';
-    echo '        <h6 class="site-footer-heading">Cuenta</h6>';
-    echo '        <ul class="site-footer-links">';
+    echo '        <nav class="site-footer-col" aria-label="Explorar">';
+    echo '          <h6 class="site-footer-heading">Explorar</h6>';
+    echo '          <ul class="site-footer-links">';
+    echo '            <li><a href="index.php#productos">Productos</a></li>';
+    echo '            <li><a href="index.php#tiendas">Tiendas</a></li>';
+    echo '            <li><a href="index.php#categorias">Categorías</a></li>';
+    echo '            <li><a href="buscar.php">Buscar</a></li>';
+    echo '          </ul>';
+    echo '        </nav>';
+
+    echo '        <nav class="site-footer-col" aria-label="Cuenta">';
+    echo '          <h6 class="site-footer-heading">Cuenta</h6>';
+    echo '          <ul class="site-footer-links">';
     if ($user) {
-        echo '          <li><a href="usuario.php">Mi cuenta</a></li>';
-        echo '          <li><a href="favoritos.php">Mis favoritos</a></li>';
+        echo '            <li><a href="usuario.php">Mi cuenta</a></li>';
+        echo '            <li><a href="favoritos.php">Mis favoritos</a></li>';
         if (is_admin() || is_empresa()) {
-            echo '          <li><a href="admin.php">Panel admin</a></li>';
+            echo '            <li><a href="admin.php">Panel admin</a></li>';
         }
-        echo '          <li><a href="logout.php">Cerrar sesión</a></li>';
+        echo '            <li><a href="logout.php">Cerrar sesión</a></li>';
     } else {
-        echo '          <li><a href="login.php">Ingresar</a></li>';
-        echo '          <li><a href="registro.php">Crear cuenta</a></li>';
-        echo '          <li><a href="olvide_password.php">Recuperar clave</a></li>';
+        echo '            <li><a href="login.php">Ingresar</a></li>';
+        echo '            <li><a href="registro.php">Crear cuenta</a></li>';
+        echo '            <li><a href="olvide_password.php">Recuperar clave</a></li>';
     }
-    echo '        </ul>';
-    echo '      </nav>';
+    echo '          </ul>';
+    echo '        </nav>';
 
-    echo '      <nav class="site-footer-col" aria-label="Legal">';
-    echo '        <h6 class="site-footer-heading">Legal</h6>';
-    echo '        <ul class="site-footer-links">';
-    echo '          <li><a href="terminos.php">Términos</a></li>';
-    echo '          <li><a href="privacidad.php">Privacidad</a></li>';
-    echo '          <li><a href="cookies.php">Cookies</a></li>';
-    echo '          <li><a href="reembolsos.php">Reembolsos</a></li>';
-    echo '          <li><a href="aviso_legal.php">Aviso legal</a></li>';
-    echo '        </ul>';
-    echo '      </nav>';
+    echo '        <nav class="site-footer-col" aria-label="Legal">';
+    echo '          <h6 class="site-footer-heading">Legal</h6>';
+    echo '          <ul class="site-footer-links">';
+    echo '            <li><a href="terminos.php">Términos</a></li>';
+    echo '            <li><a href="privacidad.php">Privacidad</a></li>';
+    echo '            <li><a href="cookies.php">Cookies</a></li>';
+    echo '            <li><a href="reembolsos.php">Reembolsos</a></li>';
+    echo '            <li><a href="aviso_legal.php">Aviso legal</a></li>';
+    echo '          </ul>';
+    echo '        </nav>';
 
     try {
         $footerStores = db()->query('
@@ -791,21 +963,23 @@ function render_footer(): void
         $footerStores = [];
     }
     if ($footerStores) {
-        echo '      <nav class="site-footer-col" aria-label="Tiendas">';
-        echo '        <h6 class="site-footer-heading">Tiendas</h6>';
-        echo '        <ul class="site-footer-links">';
+        echo '        <nav class="site-footer-col" aria-label="Tiendas">';
+        echo '          <h6 class="site-footer-heading">Tiendas</h6>';
+        echo '          <ul class="site-footer-links">';
         foreach ($footerStores as $store) {
-            echo '          <li><a href="tienda.php?id=' . (int) $store['idtiendas'] . '">' . e($store['tie_nombre']) . '</a></li>';
+            echo '            <li><a href="tienda.php?id=' . (int) $store['idtiendas'] . '">' . e($store['tie_nombre']) . '</a></li>';
         }
-        echo '        </ul>';
-        echo '      </nav>';
+        echo '          </ul>';
+        echo '        </nav>';
     }
 
+    echo '      </div>';
     echo '    </div>';
 
-    echo '    <p class="site-footer-note">' . e(APP_NAME) . ' no vende productos. Precios, stock e imágenes provienen de cada tienda, pueden estar desactualizados y no constituyen una oferta propia; confirma siempre antes de comprar. Las marcas pertenecen a sus respectivos titulares.</p>';
-
-    echo '    <p class="site-footer-copy">© ' . e($year) . ' ' . e(APP_NAME) . '</p>';
+    echo '    <div class="site-footer-bottom">';
+    echo '      <p class="site-footer-note">' . e(APP_NAME) . ' no vende productos. Precios, stock e imágenes provienen de cada tienda, pueden estar desactualizados y no constituyen una oferta propia; confirma siempre antes de comprar. Las marcas pertenecen a sus respectivos titulares.</p>';
+    echo '      <p class="site-footer-copy">© ' . e($year) . ' ' . e(APP_NAME) . '</p>';
+    echo '    </div>';
     echo '  </div>';
     echo '</footer>';
 
@@ -911,13 +1085,10 @@ function render_footer(): void
 
     echo '<script>';
     echo '(function() {';
-    echo '    document.addEventListener("show.bs.modal", function(event) {';
-    echo '        if (event.target && event.target.id === "suggestionModal") {';
-    echo '            document.body.appendChild(event.target);';
-    echo '        }';
-    echo '    });';
     echo '    const modal = document.getElementById("suggestionModal");';
     echo '    if (!modal) return;';
+    // Igual que deleteAccountModal: modal + backdrop como hijos directos de body
+    echo '    if (modal.parentElement !== document.body) { document.body.appendChild(modal); }';
     echo '    const subject = modal.querySelector("#sug_asunto");';
     echo '    const detail = modal.querySelector("#sug_detalle");';
     echo '    const counter = modal.querySelector("[data-sg-count]");';
@@ -946,10 +1117,15 @@ function render_footer(): void
     echo 'const root=document.documentElement;';
     echo 'const body=document.body;';
     echo 'const storageKey="caacuprecio-theme";';
-    echo 'const toggleButtons=[document.getElementById("themeToggle"),document.getElementById("themeToggleMobile")].filter(Boolean);';
-    echo 'function applyTheme(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const host=btn.querySelector("[data-lucide-host]");const text=btn.querySelector("span:not([data-lucide-host])");if(host&&window.setLucideIcon){setLucideIcon(host,isDark?(host.dataset.iconDark||"sun"):(host.dataset.iconLight||"moon"));}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});if(window.refreshLucideIcons){refreshLucideIcons();}}';
-    echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme);';
-    echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next);}));';
+    echo 'const toggleButtons=[document.getElementById("themeToggle")].filter(Boolean);';
+    echo 'function paintThemeCore(theme){const isDark=theme!=="light";root.setAttribute("data-bs-theme",isDark?"dark":"light");root.classList.toggle("theme-dark",isDark);root.classList.toggle("theme-light",!isDark);body.classList.toggle("theme-dark",isDark);body.classList.toggle("theme-light",!isDark);}';
+    echo 'function paintThemeChrome(theme){const isDark=theme!=="light";document.querySelectorAll("[data-theme-logo]").forEach((img)=>{const src=isDark?img.dataset.darkLogo:img.dataset.lightLogo;if(src&&img.getAttribute("src")!==src){img.setAttribute("src",src);}});toggleButtons.forEach((btn)=>{const host=btn.querySelector("[data-lucide-host]");const text=btn.querySelector("span:not([data-lucide-host])");if(host&&window.setLucideIcon){setLucideIcon(host,isDark?(host.dataset.iconDark||"sun"):(host.dataset.iconLight||"moon"));}if(text){text.textContent=isDark?"Modo claro":"Modo oscuro";}});}';
+    echo 'function supportsColorTween(){try{return CSS&&CSS.registerProperty&&CSS.supports("(color: color-mix(in srgb, red, blue))");}catch(e){return false;}}';
+    // View Transitions primero: en index hay cientos de tiles y el tween de variables laguea
+    echo 'function applyTheme(theme,animate){const run=function(){paintThemeCore(theme);paintThemeChrome(theme);};if(!animate){run();return;}if(document.startViewTransition){root.classList.add("theme-vt-active");const vt=document.startViewTransition(function(){paintThemeCore(theme);});Promise.resolve(vt.finished).catch(function(){}).then(function(){root.classList.remove("theme-vt-active");paintThemeChrome(theme);});return;}if(supportsColorTween()){paintThemeCore(theme);requestAnimationFrame(function(){paintThemeChrome(theme);});return;}run();}';
+    echo 'const savedTheme=localStorage.getItem(storageKey)||"dark";applyTheme(savedTheme,false);';
+    echo 'requestAnimationFrame(function(){body.classList.add("theme-animated");});';
+    echo 'toggleButtons.forEach((btn)=>btn.addEventListener("click",function(){const next=root.getAttribute("data-bs-theme")==="dark"?"light":"dark";localStorage.setItem(storageKey,next);applyTheme(next,true);}));';
 
     if ($suggestionError !== '') {
         echo 'const modalEl=document.getElementById("suggestionModal"); if(modalEl && window.bootstrap){ new bootstrap.Modal(modalEl).show(); }';
@@ -957,6 +1133,16 @@ function render_footer(): void
 
     echo '})();';
     echo '</script>';
+    if (should_render_global_search()) {
+        $searchJs = __DIR__ . '/js/search.js';
+        $searchVer = is_file($searchJs) ? (string) filemtime($searchJs) : '1';
+        echo '<script src="./js/search.js?v=' . e($searchVer) . '"></script>';
+    }
+    $favoritesJs = __DIR__ . '/js/favorites.js';
+    if (is_file($favoritesJs)) {
+        echo '<script src="./js/favorites.js?v=' . e((string) filemtime($favoritesJs)) . '"></script>';
+    }
     echo '<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>';
+    echo '<script>(function(){var nav=document.getElementById("mainNav");var backdrop=document.getElementById("navbarMenuBackdrop");if(!nav||!backdrop)return;var sync=function(open){document.body.classList.toggle("navbar-menu-open",open);backdrop.setAttribute("aria-hidden",open?"false":"true");};nav.addEventListener("show.bs.collapse",function(){sync(true);});nav.addEventListener("hide.bs.collapse",function(){sync(false);});backdrop.addEventListener("click",function(){var inst=window.bootstrap&&bootstrap.Collapse.getInstance(nav);if(inst)inst.hide();});})();</script>';
     echo '</body></html>';
 }

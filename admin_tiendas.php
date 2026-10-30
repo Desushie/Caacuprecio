@@ -468,18 +468,20 @@ require __DIR__ . '/auth_toast.php';
                     <?php endif; ?>
                   </span>
                   <div class="at-store-id">
-                    <h3 class="at-store-name" title="<?= e($store['tie_nombre']) ?>"><?= e($store['tie_nombre']) ?></h3>
+                    <div class="at-store-title">
+                      <h3 class="at-store-name" title="<?= e($store['tie_nombre']) ?>"><?= e($store['tie_nombre']) ?></h3>
+                      <span
+                        class="at-profile <?= $store['faltan'] ? 'is-gap' : '' ?>"
+                        title="<?= $store['faltan'] ? 'Falta: ' . e(implode(', ', array_map(static fn($k) => mb_strtolower(AT_CAMPOS[$k]['label']), $store['faltan']))) : 'Perfil completo' ?>"
+                      >
+                        <?= lucide_icon($store['faltan'] ? 'circle-alert' : 'circle-check', '', 13) ?>Perfil <?= $filled ?>/<?= count(AT_CAMPOS) ?>
+                      </span>
+                    </div>
                     <p class="at-store-status">
                       <span class="at-pill <?= $status['tone'] ?>"><span class="dash-dot" aria-hidden="true"></span><?= e($status['state']) ?></span>
                       <?php if ($status['detail'] !== ''): ?><span><?= e($status['detail']) ?></span><?php endif; ?>
                     </p>
                   </div>
-                  <span
-                    class="at-profile <?= $store['faltan'] ? 'is-gap' : '' ?>"
-                    title="<?= $store['faltan'] ? 'Falta: ' . e(implode(', ', array_map(static fn($k) => mb_strtolower(AT_CAMPOS[$k]['label']), $store['faltan']))) : 'Perfil completo' ?>"
-                  >
-                    <?= lucide_icon($store['faltan'] ? 'circle-alert' : 'circle-check', '', 13) ?>Perfil <?= $filled ?>/<?= count(AT_CAMPOS) ?>
-                  </span>
                 </div>
 
                 <dl class="at-store-stats">
@@ -488,11 +490,17 @@ require __DIR__ . '/auth_toast.php';
                     <dd><?= $fmt((int) $store['publicados']) ?></dd>
                   </div>
                   <div>
-                    <dt>Clics (30 días)</dt>
+                    <dt>
+                      <span class="at-dt-full">Clics (30 días)</span>
+                      <span class="at-dt-short">Clics</span>
+                    </dt>
                     <dd><?= $fmt($store['clics']) ?></dd>
                   </div>
                   <div>
-                    <dt>Valoración</dt>
+                    <dt>
+                      <span class="at-dt-full">Valoración</span>
+                      <span class="at-dt-short">Nota</span>
+                    </dt>
                     <dd>
                       <?php if ($store['rating'] !== null): ?>
                         <?= number_format($store['rating'], 1, ',', '.') ?><small>/5</small>

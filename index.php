@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/tracking.php';
 
 $q = trim($_GET['q'] ?? '');
 $categoriaId = (int) ($_GET['categoria'] ?? 0);
@@ -20,7 +21,20 @@ $stats = [
     'categorias' => (int) $pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
     'productos' => (int) $pdo->query('SELECT COUNT(*) FROM productos WHERE pro_activo = 1')->fetchColumn(),
     'favoritos' => ($userLogged && function_exists('favorite_count')) ? favorite_count() : 0,
+    'ofertas' => 0,
 ];
+
+try {
+    $stats['ofertas'] = (int) $pdo->query('
+        SELECT COUNT(*)
+        FROM productos
+        WHERE pro_activo = 1
+          AND pro_precio > 0
+          AND pro_precio_anterior > pro_precio
+    ')->fetchColumn();
+} catch (Throwable $e) {
+    $stats['ofertas'] = 0;
+}
 
 try {
     $categorias = $pdo->query('
@@ -39,7 +53,6 @@ try {
     $categorias = $pdo->query('SELECT idcategorias, cat_nombre FROM categorias ORDER BY cat_nombre ASC')->fetchAll();
 }
 
-$popularSearches = [];
 $recentSearches = [];
 
 if (!function_exists('cp_table_exists')) {
@@ -63,6 +76,17 @@ if (!function_exists('cp_table_exists')) {
             $cache[$key] = ((int) $stmt->fetchColumn()) > 0;
         } catch (Throwable $e) {
             $cache[$key] = false;
+        }
+
+        // Algunos hosts restringen information_schema; SHOW TABLES es más fiable.
+        if (!$cache[$key]) {
+            try {
+                $safe = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $table);
+                $stmt = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($safe));
+                $cache[$key] = (bool) $stmt?->fetchColumn();
+            } catch (Throwable $e) {
+                $cache[$key] = false;
+            }
         }
 
         return $cache[$key];
@@ -136,104 +160,298 @@ if (!function_exists('cp_redirect_without_clear_history')) {
     }
 }
 
-if (!function_exists('cp_get_recently_viewed_products')) {
-    function cp_get_recently_viewed_products(PDO $pdo, int $userId = 0, string $sessionId = '', int $limit = 8): array
+if (!function_exists('cp_fetch_products_by_ids')) {
+    /**
+     * @param list<int> $ids
+     * @return list<array<string, mixed>>
+     */
+    function cp_fetch_products_by_ids(PDO $pdo, array $ids, int $limit = 8): array
     {
-        if (!cp_table_exists($pdo, 'productos_vistos')) {
+        $limit = max(1, (int) $limit);
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn(int $id): bool => $id > 0
+        )));
+        $ids = array_slice($ids, 0, $limit);
+
+        if (!$ids) {
             return [];
         }
 
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $orderCases = [];
+        foreach ($ids as $i => $id) {
+            $orderCases[] = 'WHEN ' . (int) $id . ' THEN ' . $i;
+        }
+        $orderSql = implode(' ', $orderCases);
+
         try {
-            if ($userId > 0 && $sessionId !== '') {
-                $sql = "
-                    SELECT
-                        p.idproductos,
-                        p.pro_nombre,
-                        p.pro_marca,
-                        p.pro_precio,
-                        p.pro_imagen,
-                        p.pro_en_stock,
-                        t.idtiendas,
-                        t.tie_nombre,
-                        MAX(pv.visto_en) AS ultima_vista,
-                        COUNT(*) AS total_vistas
-                    FROM productos_vistos pv
-                    INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
-                    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-                    WHERE p.pro_activo = 1
-                      AND (pv.usuario_idusuario = :uid OR pv.session_id = :sid)
-                    GROUP BY
-                        p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
-                        p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
-                    ORDER BY ultima_vista DESC
-                    LIMIT :limit
-                ";
-                $stmt = $pdo->prepare($sql);
-                $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
-                $stmt->bindValue(':sid', $sessionId);
-            } elseif ($userId > 0) {
-                $sql = "
-                    SELECT
-                        p.idproductos,
-                        p.pro_nombre,
-                        p.pro_marca,
-                        p.pro_precio,
-                        p.pro_imagen,
-                        p.pro_en_stock,
-                        t.idtiendas,
-                        t.tie_nombre,
-                        MAX(pv.visto_en) AS ultima_vista,
-                        COUNT(*) AS total_vistas
-                    FROM productos_vistos pv
-                    INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
-                    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-                    WHERE p.pro_activo = 1
-                      AND pv.usuario_idusuario = :uid
-                    GROUP BY
-                        p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
-                        p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
-                    ORDER BY ultima_vista DESC
-                    LIMIT :limit
-                ";
-                $stmt = $pdo->prepare($sql);
-                $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
-            } elseif ($sessionId !== '') {
-                $sql = "
-                    SELECT
-                        p.idproductos,
-                        p.pro_nombre,
-                        p.pro_marca,
-                        p.pro_precio,
-                        p.pro_imagen,
-                        p.pro_en_stock,
-                        t.idtiendas,
-                        t.tie_nombre,
-                        MAX(pv.visto_en) AS ultima_vista,
-                        COUNT(*) AS total_vistas
-                    FROM productos_vistos pv
-                    INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
-                    INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
-                    WHERE p.pro_activo = 1
-                      AND pv.session_id = :sid
-                    GROUP BY
-                        p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
-                        p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
-                    ORDER BY ultima_vista DESC
-                    LIMIT :limit
-                ";
-                $stmt = $pdo->prepare($sql);
-                $stmt->bindValue(':sid', $sessionId);
-            } else {
-                return [];
-            }
+            $stmt = $pdo->prepare("
+                SELECT
+                    p.idproductos,
+                    p.pro_nombre,
+                    p.pro_marca,
+                    p.pro_precio,
+                    p.pro_imagen,
+                    p.pro_en_stock,
+                    t.idtiendas,
+                    t.tie_nombre,
+                    1 AS total_vistas
+                FROM productos p
+                INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                WHERE p.pro_activo = 1
+                  AND p.idproductos IN ({$placeholders})
+                ORDER BY CASE p.idproductos {$orderSql} ELSE 999 END
+                LIMIT {$limit}
+            ");
+            $stmt->execute($ids);
 
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-
-            return $stmt->fetchAll();
+            return $stmt->fetchAll() ?: [];
         } catch (Throwable $e) {
             return [];
         }
+    }
+}
+
+if (!function_exists('cp_get_recently_viewed_products')) {
+    function cp_get_recently_viewed_products(PDO $pdo, int $userId = 0, string $sessionId = '', int $limit = 8): array
+    {
+        $limit = max(1, (int) $limit);
+        $items = [];
+        $seen = [];
+
+        $pushRows = static function (array $rows) use (&$items, &$seen, $limit): void {
+            foreach ($rows as $row) {
+                if (count($items) >= $limit) {
+                    break;
+                }
+                $id = (int) ($row['idproductos'] ?? 0);
+                if ($id <= 0 || isset($seen[$id])) {
+                    continue;
+                }
+                $seen[$id] = true;
+                if (!isset($row['total_vistas'])) {
+                    $row['total_vistas'] = 1;
+                }
+                $items[] = $row;
+            }
+        };
+
+        // 1) Historial de sesión (fiable aunque el tracking analítico esté bloqueado).
+        if (function_exists('cp_session_viewed_product_ids')) {
+            $pushRows(cp_fetch_products_by_ids($pdo, cp_session_viewed_product_ids($limit), $limit));
+        }
+
+        // 2) Tabla productos_vistos (usuario y/o cookie de sesión).
+        if (count($items) < $limit && cp_table_exists($pdo, 'productos_vistos')) {
+            try {
+                if ($userId > 0 && $sessionId !== '') {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(pv.visto_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM productos_vistos pv
+                        INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND (pv.usuario_idusuario = :uid OR pv.session_id = :sid)
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+                    $stmt->bindValue(':sid', $sessionId);
+                } elseif ($userId > 0) {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(pv.visto_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM productos_vistos pv
+                        INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND pv.usuario_idusuario = :uid
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+                } elseif ($sessionId !== '') {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(pv.visto_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM productos_vistos pv
+                        INNER JOIN productos p ON p.idproductos = pv.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND pv.session_id = :sid
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':sid', $sessionId);
+                } else {
+                    $stmt = null;
+                }
+
+                if ($stmt) {
+                    $stmt->execute();
+                    $pushRows($stmt->fetchAll() ?: []);
+                }
+            } catch (Throwable $e) {
+                // Seguir con clics de búsqueda / historial de términos.
+            }
+        }
+
+        // 3) Productos abiertos desde una búsqueda (busqueda_click_producto).
+        if (count($items) < $limit && cp_table_exists($pdo, 'busqueda_click_producto')) {
+            try {
+                if ($userId > 0 && $sessionId !== '') {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(bcp.creado_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM busqueda_click_producto bcp
+                        INNER JOIN productos p ON p.idproductos = bcp.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND (bcp.usuario_idusuario = :uid OR bcp.session_id = :sid)
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+                    $stmt->bindValue(':sid', $sessionId);
+                } elseif ($userId > 0) {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(bcp.creado_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM busqueda_click_producto bcp
+                        INNER JOIN productos p ON p.idproductos = bcp.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND bcp.usuario_idusuario = :uid
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+                } elseif ($sessionId !== '') {
+                    $sql = "
+                        SELECT
+                            p.idproductos,
+                            p.pro_nombre,
+                            p.pro_marca,
+                            p.pro_precio,
+                            p.pro_imagen,
+                            p.pro_en_stock,
+                            t.idtiendas,
+                            t.tie_nombre,
+                            MAX(bcp.creado_en) AS ultima_vista,
+                            COUNT(*) AS total_vistas
+                        FROM busqueda_click_producto bcp
+                        INNER JOIN productos p ON p.idproductos = bcp.productos_idproductos
+                        INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                        WHERE p.pro_activo = 1
+                          AND bcp.session_id = :sid
+                        GROUP BY
+                            p.idproductos, p.pro_nombre, p.pro_marca, p.pro_precio,
+                            p.pro_imagen, p.pro_en_stock, t.idtiendas, t.tie_nombre
+                        ORDER BY ultima_vista DESC
+                        LIMIT {$limit}
+                    ";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->bindValue(':sid', $sessionId);
+                } else {
+                    $stmt = null;
+                }
+
+                if ($stmt) {
+                    $stmt->execute();
+                    $pushRows($stmt->fetchAll() ?: []);
+                }
+            } catch (Throwable $e) {
+                // Continuar con términos de búsqueda de la sesión.
+            }
+        }
+
+        // 4) Último recurso: términos buscados en esta sesión → un producto representante.
+        if (count($items) < $limit && function_exists('cp_find_product_for_search_term')) {
+            $terms = array_values(array_filter(array_map(
+                static fn($value) => trim((string) $value),
+                (array) ($_SESSION['search_history'] ?? [])
+            )));
+
+            foreach ($terms as $term) {
+                if (count($items) >= $limit) {
+                    break;
+                }
+                $row = cp_find_product_for_search_term($pdo, $term);
+                if ($row) {
+                    $row['total_vistas'] = 1;
+                    $pushRows([$row]);
+                }
+            }
+        }
+
+        return array_slice($items, 0, $limit);
     }
 }
 
@@ -613,6 +831,84 @@ if (!function_exists('cp_get_best_price_gaps')) {
     }
 }
 
+if (!function_exists('cp_get_active_offers')) {
+    function cp_get_active_offers(PDO $pdo, int $limit = 18): array
+    {
+        $limit = max(1, $limit);
+
+        try {
+            $stmt = $pdo->prepare("
+                SELECT
+                    p.idproductos,
+                    p.pro_nombre,
+                    p.pro_marca,
+                    p.pro_imagen,
+                    p.pro_precio,
+                    p.pro_precio_anterior,
+                    p.pro_en_stock,
+                    p.pro_url,
+                    COALESCE(NULLIF(TRIM(p.pro_grupo), ''), p.pro_nombre) AS grupo,
+                    t.idtiendas,
+                    t.tie_nombre,
+                    c.cat_nombre,
+                    ROUND((1 - p.pro_precio / p.pro_precio_anterior) * 100) AS pct,
+                    (p.pro_precio_anterior - p.pro_precio) AS ahorro
+                FROM productos p
+                INNER JOIN tiendas t ON t.idtiendas = p.tiendas_idtiendas
+                LEFT JOIN categorias c ON c.idcategorias = p.categorias_idcategorias
+                WHERE p.pro_activo = 1
+                  AND p.pro_precio > 0
+                  AND p.pro_precio_anterior > p.pro_precio
+                  AND p.pro_precio >= p.pro_precio_anterior * 0.1
+                ORDER BY pct DESC, ahorro DESC, p.pro_nombre ASC
+                LIMIT :limit
+            ");
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+        } catch (Throwable $e) {
+            return [];
+        }
+
+        $offers = [];
+        foreach ($rows as $row) {
+            $price = (float) ($row['pro_precio'] ?? 0);
+            $oldPrice = (float) ($row['pro_precio_anterior'] ?? 0);
+            if ($price <= 0 || $oldPrice <= $price) {
+                continue;
+            }
+
+            $pct = (int) ($row['pct'] ?? 0);
+            $saving = (float) ($row['ahorro'] ?? max(0, $oldPrice - $price));
+            if ($pct <= 0) {
+                $pct = (int) round((($oldPrice - $price) / $oldPrice) * 100);
+            }
+
+            $offers[] = [
+                'idproductos' => (int) ($row['idproductos'] ?? 0),
+                'pro_nombre' => (string) ($row['pro_nombre'] ?? 'Producto'),
+                'pro_marca' => trim((string) ($row['pro_marca'] ?? '')),
+                'pro_imagen' => $row['pro_imagen'] ?? null,
+                'pro_precio' => $price,
+                'pro_precio_anterior' => $oldPrice,
+                'pro_en_stock' => (int) ($row['pro_en_stock'] ?? 0),
+                'pro_url' => trim((string) ($row['pro_url'] ?? '')),
+                'grupo' => (string) ($row['grupo'] ?? $row['pro_nombre'] ?? 'Producto'),
+                'idtiendas' => (int) ($row['idtiendas'] ?? 0),
+                'tie_nombre' => (string) ($row['tie_nombre'] ?? 'Tienda'),
+                'cat_nombre' => trim((string) ($row['cat_nombre'] ?? '')),
+                'pct' => max(1, $pct),
+                'ahorro' => $saving,
+                'tone' => function_exists('cp_store_tone')
+                    ? cp_store_tone((string) ($row['tie_nombre'] ?? ''))
+                    : 'other',
+            ];
+        }
+
+        return $offers;
+    }
+}
+
 if (isset($_GET['clear_history']) && (string) $_GET['clear_history'] === '1') {
     cp_clear_session_search_history();
     cp_redirect_without_clear_history('index.php');
@@ -632,8 +928,6 @@ $recentSearches = array_values(array_slice(array_filter(array_map(
     static fn ($value) => trim((string) $value),
     $_SESSION['search_history'] ?? []
 )), 0, 8));
-
-$popularSearches = cp_get_popular_searches($pdo, 8);
 
 $where = ['p.pro_activo = 1'];
 $params = [];
@@ -707,6 +1001,12 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $products = $stmt->fetchAll();
 
+$isProductsPartial = (string) ($_GET['partial'] ?? '') === 'products';
+
+if ($isProductsPartial) {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+} else {
 $featuredStoreKeys = ['inverfin', 'computex', 'full office'];
 $featuredStoreMeta = [
     'inverfin' => ['tone' => 'inverfin', 'focus' => 'Tecnología', 'icon' => 'cpu'],
@@ -753,6 +1053,7 @@ $recentlyViewed = cp_get_recently_viewed_products($pdo, $currentUserId, $current
 $trendingProducts = cp_get_trending_products($pdo, 7, 5);
 $mostSearchedProducts = cp_get_most_searched_products($pdo, 30, 5, $recentSearches);
 $bestPriceGaps = cp_get_best_price_gaps($pdo, 5000);
+$activeOffers = cp_get_active_offers($pdo, 24);
 
 render_head('Inicio');
 render_navbar('home');
@@ -830,162 +1131,17 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
     }
     echo '</ol>';
 };
+} // fin else (!$isProductsPartial) — consultas y chrome del home completo
+
+if (!$isProductsPartial):
 ?>
 
-<div class="search-sticky-container">
-  <div class="container">
-    <div
-      class="search-bar search-dock glass-card"
-      data-search-root
-      data-search-endpoint="buscar_api.php"
-      data-search-history-endpoint="guardar_busqueda.php"
-      data-search-results-page="buscar.php"
-      data-search-mode="pro"
-      data-search-context="home"
-      data-live-target="#home-live-results"
-      data-count-target="#home-live-count"
-      data-state-target="#home-live-state"
-    >
-      <form class="js-smart-search-form search-mobile-form search-dock-form" method="get" action="buscar.php" autocomplete="off">
-        <div class="search-dock-row">
-          <div class="search-input-col search-dock-field">
-            <span class="search-dock-icon" aria-hidden="true"><?= lucide_icon('search', '', 18) ?></span>
-            <label for="global-search-home" class="visually-hidden">Buscar productos</label>
-            <input
-              id="global-search-home"
-              type="text"
-              name="q"
-              class="form-control js-smart-search-input search-dock-input"
-              placeholder="Producto, marca, tienda o categoría"
-              value="<?= e($q) ?>"
-              autocomplete="off"
-              data-search-input
-              data-live-delay="320"
-              data-min-length="2"
-              aria-autocomplete="list"
-              aria-expanded="false"
-              aria-controls="global-search-home-suggestions"
-            >
-            <div
-              id="global-search-home-suggestions"
-              class="search-suggest-dropdown search-suggestions-panel"
-              data-search-dropdown
-              data-search-suggest
-              data-search-suggestions
-              role="listbox"
-              aria-label="Sugerencias de búsqueda"
-            ></div>
-          </div>
-
-          <div class="search-dock-filters">
-            <div class="search-category-col search-dock-select-wrap">
-              <span class="search-dock-select-icon" aria-hidden="true"><?= lucide_icon('layout-grid', '', 15) ?></span>
-              <select name="categoria" class="form-select js-smart-search-category search-dock-select" data-search-category>
-                <option value="0">Todas las categorías</option>
-                <?php foreach ($categorias as $categoria): ?>
-                  <option value="<?= (int) $categoria['idcategorias'] ?>" <?= $categoriaId === (int) $categoria['idcategorias'] ? 'selected' : '' ?>>
-                    <?= e($categoria['cat_nombre']) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <div class="search-order-col search-dock-select-wrap">
-              <span class="search-dock-select-icon" aria-hidden="true"><?= lucide_icon('arrow-up-down', '', 15) ?></span>
-              <select name="orden" class="form-select search-dock-select" data-search-order data-search-sort>
-                <?php foreach (active_sort_options() as $value => $label): ?>
-                  <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>><?= e($label) ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-          </div>
-
-          <div class="search-dock-actions">
-            <div class="search-submit-col">
-              <button class="btn btn-primary search-submit-btn" type="submit" aria-label="Buscar">
-                <?= lucide_icon('search') ?>
-                <span class="search-submit-text">Buscar</span>
-              </button>
-            </div>
-            <div class="search-pin-col">
-              <button type="button" id="toggle-sticky-btn" class="btn btn-outline-secondary search-pin-btn" title="Fijar / Desplazar barra">
-                <span data-lucide-host><?= lucide_icon('pin') ?></span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <?php
-          $dockRecentSearches = array_slice($recentSearches, 0, 5);
-          $dockRecentLookup = [];
-          foreach ($dockRecentSearches as $term) {
-              $dockRecentLookup[mb_strtolower((string) $term)] = true;
-          }
-
-          $dockPopularSearches = [];
-          foreach ($popularSearches as $item) {
-              $term = trim((string) ($item['termino'] ?? ''));
-              if ($term === '' || isset($dockRecentLookup[mb_strtolower($term)])) {
-                  continue;
-              }
-              $dockPopularSearches[] = $item;
-              if (count($dockPopularSearches) >= 5) {
-                  break;
-              }
-          }
-        ?>
-        <?php if ($dockRecentSearches || $dockPopularSearches): ?>
-          <div class="search-discovery-stack">
-            <?php if ($dockRecentSearches): ?>
-              <div class="search-chip-row search-chip-row-recent">
-                <span class="search-chip-label"><?= lucide_icon('history', '', 12) ?>Recientes</span>
-                <div class="search-chip-track">
-                  <?php foreach ($dockRecentSearches as $term): ?>
-                    <span class="search-chip search-chip-history">
-                      <a
-                        class="search-chip-link"
-                        href="buscar.php?q=<?= rawurlencode($term) ?>"
-                        data-search-chip="history"
-                        data-search-term="<?= e($term) ?>"
-                      ><?= e($term) ?></a>
-                      <a
-                        class="search-chip-remove"
-                        href="index.php?remove_history=<?= rawurlencode($term) ?>"
-                        title="Eliminar '<?= e($term) ?>' del historial"
-                        aria-label="Eliminar <?= e($term) ?> del historial"
-                        data-remove-history-term="<?= e($term) ?>"
-                      ><?= lucide_icon('x', '', 10) ?></a>
-                    </span>
-                  <?php endforeach; ?>
-                </div>
-                <a class="search-discovery-clear" href="index.php?clear_history=1" title="Limpiar todo el historial" aria-label="Limpiar todo el historial">
-                  <?= lucide_icon('trash-2', '', 12) ?>
-                </a>
-              </div>
-            <?php endif; ?>
-
-            <?php if ($dockPopularSearches): ?>
-              <div class="search-chip-row search-chip-row-hot">
-                <span class="search-chip-label search-chip-label-hot"><?= lucide_icon('flame', '', 12) ?>Tendencias</span>
-                <div class="search-chip-track">
-                  <?php foreach ($dockPopularSearches as $item): ?>
-                    <a
-                      class="search-chip search-chip-hot"
-                      href="buscar.php?q=<?= rawurlencode((string) $item['termino']) ?>"
-                      data-search-chip="popular"
-                      data-search-term="<?= e((string) $item['termino']) ?>"
-                    ><?= e((string) $item['termino']) ?></a>
-                  <?php endforeach; ?>
-                </div>
-              </div>
-            <?php endif; ?>
-          </div>
-        <?php endif; ?>
-      </form>
-    </div>
-  </div>
-</div>
-
-<section id="home-live-section" class="home-live position-relative" aria-labelledby="home-live-title">
+<section
+  id="home-live-section"
+  class="home-live position-relative<?= $q !== '' ? ' is-active' : '' ?>"
+  aria-labelledby="home-live-title"
+  <?= $q === '' ? 'hidden' : '' ?>
+>
   <div class="container">
     <div class="hl-panel" data-live-panel aria-busy="false">
       <header class="hl-head">
@@ -1045,53 +1201,83 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
 </div>
 
 <section class="hero hero-home position-relative overflow-hidden">
-  <div class="container position-relative z-1">
-    <div class="hero-band">
-      <div class="hero-main">
-        <p class="hero-kicker">Comparador de precios</p>
+  <div class="hero-band">
+    <div class="hero-main">
+      <p class="hero-kicker">Comparador de precios · Caacupé</p>
 
-        <h1 class="hero-title">
-          Mismo producto, 
-          <span class="hero-title-accent">distintas tiendas.</span>
-        </h1>
+      <h1 class="hero-title">
+        Mismo producto,
+        <span class="hero-title-accent">distintas tiendas.</span>
+      </h1>
 
-        <p class="hero-lead">
-        Busca lo que necesitas, compara valores entre comercios de la ciudad y guarda tus preferidos para cuando decidas salir. Una forma sencilla de analizar tus opciones y elegir la que más te conviene.
-        </p>
+      <p class="hero-lead">
+        Busca lo que necesitas, compara valores entre comercios de la ciudad y guarda tus preferidos para cuando decidas salir.
+      </p>
+    </div>
 
-        <div class="hero-actions">
-          <a href="#productos" class="btn btn-primary px-4">
-            <?= lucide_icon('eye') ?>Ver productos
-          </a>
-          <?php if ($userLogged): ?>
-            <a href="favoritos.php" class="btn btn-outline-primary px-4">
-              <?= lucide_icon('heart') ?>Favoritos
-            </a>
-          <?php endif; ?>
-        </div>
+    <figure class="hero-sim" aria-hidden="true">
+      <ol class="hero-sim-steps">
+        <li class="is-step-1"><span>1</span>Busca</li>
+        <li class="is-step-2"><span>2</span>Compara</li>
+        <li class="is-step-3"><span>3</span>Elige</li>
+      </ol>
+
+      <div class="hero-sim-search">
+        <span class="hero-sim-ico"><?= lucide_icon('search', '', 15) ?></span>
+        <span class="hero-sim-query">Auriculares bluetooth</span>
+        <span class="hero-sim-caret"></span>
       </div>
 
-      <dl class="hero-metrics<?= $userLogged ? '' : ' is-compact' ?>">
-        <div>
-          <dt>Tiendas</dt>
-          <dd><?= number_format($stats['tiendas'], 0, ',', '.') ?></dd>
-        </div>
-        <div>
-          <dt>Categorías</dt>
-          <dd><?= number_format($stats['categorias'], 0, ',', '.') ?></dd>
-        </div>
-        <div>
-          <dt>Productos</dt>
-          <dd><?= number_format($stats['productos'], 0, ',', '.') ?></dd>
-        </div>
-        <?php if ($userLogged): ?>
-          <div>
-            <dt>Tus favoritos</dt>
-            <dd><?= number_format($stats['favoritos'], 0, ',', '.') ?></dd>
-          </div>
-        <?php endif; ?>
-      </dl>
+      <ol class="hero-sim-offers">
+        <?php foreach ([
+            ['Tienda A', 150000, 'Mejor precio', 'is-best'],
+            ['Tienda B', 168000, '+12%', ''],
+            ['Tienda C', 186000, '+24%', ''],
+        ] as $i => [$simStore, $simPrice, $simTag, $simClass]): ?>
+          <li class="<?= $simClass ?>" style="--sim-delay: <?= $i * 0.18 ?>s">
+            <span class="hero-sim-store"><span class="hero-sim-ico"><?= lucide_icon('store', '', 14) ?></span><?= $simStore ?></span>
+            <span class="hero-sim-price"><?= gs($simPrice) ?></span>
+            <span class="hero-sim-tag"><?php if ($simClass): ?><?= lucide_icon('badge-check', '', 13) ?><?php endif; ?><?= $simTag ?></span>
+          </li>
+        <?php endforeach; ?>
+      </ol>
+
+      <figcaption class="hero-sim-foot">
+        <span class="hero-sim-saved"><span class="hero-sim-ico"><?= lucide_icon('heart', '', 14) ?></span>Guardado en favoritos</span>
+      </figcaption>
+    </figure>
+
+    <div class="hero-actions">
+      <?php if ($userLogged): ?>
+        <a href="favoritos.php" class="hero-link is-strong">
+          <?= lucide_icon('heart', '', 16) ?>Mis favoritos
+        </a>
+      <?php else: ?>
+        <a href="#categorias" class="hero-link is-strong">
+          <?= lucide_icon('layout-grid', '', 16) ?>Ver categorías
+        </a>
+      <?php endif; ?>
+      <a href="buscar.php" class="hero-link">
+        Buscar en el catálogo<?= lucide_icon('arrow-right', '', 15) ?>
+      </a>
     </div>
+
+    <dl class="hero-facts">
+      <?php foreach ([
+          ['store', 'Tiendas', $stats['tiendas'], 'comercios locales', null],
+          ['package', 'Productos', $stats['productos'], 'publicados', '#productos'],
+          ['layout-grid', 'Categorías', $stats['categorias'], 'para explorar', '#categorias'],
+          ['badge-percent', 'Ofertas', $stats['ofertas'], 'con precio rebajado', $activeOffers ? '#ofertas' : null],
+      ] as [$factIcon, $factLabel, $factValue, $factCaption, $factHref]): ?>
+        <div<?= $factHref ? ' class="is-linked"' : '' ?>>
+          <?php if ($factHref): ?>
+            <a class="hero-fact-link" href="<?= e($factHref) ?>" aria-label="Ir a <?= e($factLabel) ?>"></a>
+          <?php endif; ?>
+          <dt><span class="hero-fact-icon"><?= lucide_icon($factIcon, '', 15) ?></span><?= e($factLabel) ?></dt>
+          <dd><?= number_format((float) $factValue, 0, ',', '.') ?><small><?= e($factCaption) ?></small></dd>
+        </div>
+      <?php endforeach; ?>
+    </dl>
   </div>
 </section>
 
@@ -1185,7 +1371,7 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
                 <a class="categories-clear" href="index.php#categorias">Ver todas</a>
               <?php endif; ?>
               <?php if ($categoryPages > 1): ?>
-                <div class="categories-nav">
+                <div class="categories-nav" role="group" aria-label="Navegar categorías">
                   <button type="button" class="categories-nav-btn" data-categories-prev aria-label="Categorías anteriores">
                     <?= lucide_icon('chevron-left', '', 18) ?>
                   </button>
@@ -1210,8 +1396,9 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
                 $iconKey = $categoryIconKey($name);
                 $meta = $categoryCountLabel($categoria);
                 $isActive = $categoriaId === $id;
-                $isVisible = $index >= $categoryPageStart && $index < $categoryPageStart + $categoryPageSize;
-                $slot = $isVisible ? ($index - $categoryPageStart) : -1;
+                $slotOffset = ($index - $categoryPageStart + $categoryTotal) % $categoryTotal;
+                $isVisible = $slotOffset < $categoryPageSize;
+                $slot = $isVisible ? $slotOffset : -1;
                 $isFeatured = $slot === 0;
               ?>
               <li
@@ -1250,122 +1437,6 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
       <?php endif; ?>
     </div>
   </section>
-
-  <?php if ($bestPriceGaps): ?>
-  <?php
-    $dealPageSize = 10;
-    $dealPages = (int) max(1, ceil(count($bestPriceGaps) / $dealPageSize));
-  ?>
-  <section
-    class="deals-section"
-    id="conviene"
-    aria-labelledby="deals-title"
-  >
-    <div class="container">
-      <div class="deals-pager" data-deals-pager data-page-size="<?= (int) $dealPageSize ?>">
-        <div class="section-header deals-header">
-          <div>
-            <p class="deals-kicker">Comparar ofertas</p>
-            <h2 id="deals-title" class="section-title mb-1">Elige el mejor precio</h2>
-            <p class="section-subtitle mb-0">Mismo producto en varias tiendas. Compara el menor precio con otra oferta y mira la diferencia antes de salir. Confirma precio y stock con la tienda.</p>
-          </div>
-          <?php if ($dealPages > 1): ?>
-            <div class="deals-nav">
-              <button type="button" class="deals-nav-btn" data-deals-prev aria-label="Productos anteriores">
-                <?= lucide_icon('chevron-left', '', 18) ?>
-              </button>
-              <p class="deals-nav-status" data-deals-status aria-live="polite" aria-label="Página 1 de <?= (int) $dealPages ?>">
-                <span class="deals-nav-current" data-deals-current>1</span>
-                <span class="deals-nav-total">de <?= (int) $dealPages ?></span>
-              </p>
-              <button type="button" class="deals-nav-btn" data-deals-next aria-label="Productos siguientes">
-                <?= lucide_icon('chevron-right', '', 18) ?>
-              </button>
-            </div>
-          <?php endif; ?>
-        </div>
-
-        <div class="deals-board">
-          <div class="deals-list">
-            <?php foreach ($bestPriceGaps as $index => $deal): ?>
-              <?php
-                $dealName = (string) ($deal['pro_nombre'] ?? 'Producto');
-                $dealGroup = (string) ($deal['grupo'] ?? $dealName);
-                $dealUrl = 'producto.php?grupo=' . rawurlencode($dealGroup);
-                if ($q !== '') {
-                    $dealUrl .= '&q=' . rawurlencode($q);
-                }
-                $dealOffers = [];
-                foreach ($deal['ofertas'] as $offer) {
-                    $offerPrice = is_array($offer) ? (float) ($offer['pro_precio'] ?? 0) : 0.0;
-                    if ($offerPrice <= 0) {
-                        continue;
-                    }
-
-                    $storeName = (string) ($offer['tie_nombre'] ?? 'Tienda');
-                    $dealOffers[] = [
-                        'label' => $storeName,
-                        'tone' => (string) ($offer['tone'] ?? cp_store_tone($storeName)),
-                        'price' => $offerPrice,
-                    ];
-                }
-
-                $storeCount = count($dealOffers);
-                $cheapOffer = $dealOffers[0] ?? null;
-                $expensiveOffer = $dealOffers[$storeCount - 1] ?? null;
-                $saving = (float) ($deal['ahorro'] ?? 0);
-                $storeCountLabel = $storeCount === 1
-                    ? 'En 1 tienda'
-                    : 'En ' . number_format($storeCount, 0, ',', '.') . ' tiendas';
-              ?>
-              <a
-                class="deals-card<?= $index < $dealPageSize ? ' is-visible' : '' ?>"
-                data-deal-row
-                href="<?= e($dealUrl) ?>"
-                aria-label="Comparar <?= e($dealName) ?> en <?= e(implode(', ', array_map(static fn (array $row): string => (string) $row['label'], $dealOffers))) ?>"
-              >
-                <span class="deals-card-media">
-                  <img src="<?= e(image_url($deal['pro_imagen'] ?? null, $dealName)) ?>" alt="">
-                </span>
-                <span class="deals-card-copy">
-                  <?php if (!empty($deal['pro_marca'])): ?>
-                    <span class="deals-card-brand"><?= e($deal['pro_marca']) ?></span>
-                  <?php endif; ?>
-                  <span class="deals-card-name"><?= e($dealName) ?></span>
-                  <span class="deals-card-meta">
-                    <span class="deals-card-count"><?= e($storeCountLabel) ?></span>
-                    <span class="deals-card-save">
-                      <?php if ($saving > 0): ?>
-                        Diferencia <?= gs($saving) ?>
-                      <?php else: ?>
-                        Mismo precio
-                      <?php endif; ?>
-                      <?= lucide_icon('arrow-right', '', 15) ?>
-                    </span>
-                  </span>
-                </span>
-                <?php if ($cheapOffer && $expensiveOffer): ?>
-                  <span class="deals-card-prices">
-                    <span class="deals-card-price is-best" data-tone="<?= e($cheapOffer['tone']) ?>">
-                      <em>Menor precio</em>
-                      <strong><?= gs($cheapOffer['price']) ?></strong>
-                      <span><?= e($cheapOffer['label']) ?></span>
-                    </span>
-                    <span class="deals-card-price is-high" data-tone="<?= e($expensiveOffer['tone']) ?>">
-                      <em>Otra oferta</em>
-                      <strong><?= gs($expensiveOffer['price']) ?></strong>
-                      <span><?= e($expensiveOffer['label']) ?></span>
-                    </span>
-                  </span>
-                <?php endif; ?>
-              </a>
-            <?php endforeach; ?>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-  <?php endif; ?>
 
   <section class="activity-section" id="actividad" aria-labelledby="activity-title">
     <div class="container">
@@ -1420,115 +1491,118 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
     </div>
   </section>
 
+<?php
+endif; // !$isProductsPartial — hero, categorías y actividad
+
+      $currentCategoryName = '';
+      if ($categoriaId > 0) {
+          foreach ($categorias as $categoria) {
+              if ((int) ($categoria['idcategorias'] ?? 0) === $categoriaId) {
+                  $currentCategoryName = (string) ($categoria['cat_nombre'] ?? '');
+                  break;
+              }
+          }
+      }
+
+      $resultFrom = $totalProducts > 0 ? $offset + 1 : 0;
+      $resultTo = $totalProducts > 0 ? min($offset + count($products), $totalProducts) : 0;
+      $pageMinPrice = null;
+      $pageMaxPrice = null;
+      $pageDeals = 0;
+      $pageInStock = 0;
+
+      foreach ($products as $productRow) {
+          $priceValue = (float) $productRow['pro_precio'];
+          if ($priceValue > 0) {
+              $pageMinPrice = $pageMinPrice === null ? $priceValue : min($pageMinPrice, $priceValue);
+              $pageMaxPrice = $pageMaxPrice === null ? $priceValue : max($pageMaxPrice, $priceValue);
+          }
+
+          $oldPriceValue = $productRow['pro_precio_anterior'] !== null ? (float) $productRow['pro_precio_anterior'] : null;
+          if ($priceValue > 0 && $oldPriceValue && $oldPriceValue > $priceValue) {
+              $pageDeals++;
+          }
+
+          if ((int) $productRow['pro_en_stock'] === 1) {
+              $pageInStock++;
+          }
+      }
+
+      $buildCatalogUrl = static function (array $overrides = []) use ($q, $categoriaId, $sort, $page): string {
+          $query = [
+              'q' => array_key_exists('q', $overrides) ? $overrides['q'] : $q,
+              'categoria' => array_key_exists('categoria', $overrides) ? $overrides['categoria'] : $categoriaId,
+              'orden' => array_key_exists('orden', $overrides) ? $overrides['orden'] : $sort,
+              'page' => array_key_exists('page', $overrides) ? $overrides['page'] : $page,
+          ];
+
+          if (trim((string) $query['q']) === '') {
+              unset($query['q']);
+          }
+          if ((int) $query['categoria'] <= 0) {
+              unset($query['categoria']);
+          }
+          if (($query['orden'] ?? '') === 'recientes' || ($query['orden'] ?? '') === '') {
+              unset($query['orden']);
+          }
+          if ((int) ($query['page'] ?? 1) <= 1) {
+              unset($query['page']);
+          }
+
+          $qs = http_build_query($query);
+          return 'index.php' . ($qs !== '' ? '?' . $qs : '') . '#productos';
+      };
+
+      $formatFreshness = static function (?string $date): string {
+          if ($date === null || trim($date) === '') {
+              return 'Sin fecha';
+          }
+
+          $ts = strtotime($date);
+          if ($ts === false) {
+              return 'Sin fecha';
+          }
+
+          $diff = time() - $ts;
+          if ($diff < 0) {
+              $diff = 0;
+          }
+          if ($diff < 3600) {
+              return 'Hace minutos';
+          }
+          if ($diff < 86400) {
+              return 'Hoy';
+          }
+          if ($diff < 172800) {
+              return 'Ayer';
+          }
+
+          $days = (int) floor($diff / 86400);
+          if ($days < 7) {
+              return 'Hace ' . $days . ' días';
+          }
+
+          return date('d/m/Y', $ts);
+      };
+
+      $hasFilters = $q !== '' || $categoriaId > 0;
+      $favoriteRedirect = $buildCatalogUrl();
+
+if (!$isProductsPartial):
+?>
   <section id="productos" class="products-section" aria-labelledby="products-title">
     <div class="container">
-      <?php
-        $currentCategoryName = '';
-        if ($categoriaId > 0) {
-            foreach ($categorias as $categoria) {
-                if ((int) ($categoria['idcategorias'] ?? 0) === $categoriaId) {
-                    $currentCategoryName = (string) ($categoria['cat_nombre'] ?? '');
-                    break;
-                }
-            }
-        }
-
-        $resultFrom = $totalProducts > 0 ? $offset + 1 : 0;
-        $resultTo = $totalProducts > 0 ? min($offset + count($products), $totalProducts) : 0;
-        $pageMinPrice = null;
-        $pageMaxPrice = null;
-        $pageDeals = 0;
-        $pageInStock = 0;
-
-        foreach ($products as $productRow) {
-            $priceValue = (float) $productRow['pro_precio'];
-            if ($priceValue > 0) {
-                $pageMinPrice = $pageMinPrice === null ? $priceValue : min($pageMinPrice, $priceValue);
-                $pageMaxPrice = $pageMaxPrice === null ? $priceValue : max($pageMaxPrice, $priceValue);
-            }
-
-            $oldPriceValue = $productRow['pro_precio_anterior'] !== null ? (float) $productRow['pro_precio_anterior'] : null;
-            if ($priceValue > 0 && $oldPriceValue && $oldPriceValue > $priceValue) {
-                $pageDeals++;
-            }
-
-            if ((int) $productRow['pro_en_stock'] === 1) {
-                $pageInStock++;
-            }
-        }
-
-        $buildCatalogUrl = static function (array $overrides = []) use ($q, $categoriaId, $sort, $page): string {
-            $query = [
-                'q' => array_key_exists('q', $overrides) ? $overrides['q'] : $q,
-                'categoria' => array_key_exists('categoria', $overrides) ? $overrides['categoria'] : $categoriaId,
-                'orden' => array_key_exists('orden', $overrides) ? $overrides['orden'] : $sort,
-                'page' => array_key_exists('page', $overrides) ? $overrides['page'] : $page,
-            ];
-
-            if (trim((string) $query['q']) === '') {
-                unset($query['q']);
-            }
-            if ((int) $query['categoria'] <= 0) {
-                unset($query['categoria']);
-            }
-            if (($query['orden'] ?? '') === 'recientes' || ($query['orden'] ?? '') === '') {
-                unset($query['orden']);
-            }
-            if ((int) ($query['page'] ?? 1) <= 1) {
-                unset($query['page']);
-            }
-
-            $qs = http_build_query($query);
-            return 'index.php' . ($qs !== '' ? '?' . $qs : '') . '#productos';
-        };
-
-        $formatFreshness = static function (?string $date): string {
-            if ($date === null || trim($date) === '') {
-                return 'Sin fecha';
-            }
-
-            $ts = strtotime($date);
-            if ($ts === false) {
-                return 'Sin fecha';
-            }
-
-            $diff = time() - $ts;
-            if ($diff < 0) {
-                $diff = 0;
-            }
-            if ($diff < 3600) {
-                return 'Hace minutos';
-            }
-            if ($diff < 86400) {
-                return 'Hoy';
-            }
-            if ($diff < 172800) {
-                return 'Ayer';
-            }
-
-            $days = (int) floor($diff / 86400);
-            if ($days < 7) {
-                return 'Hace ' . $days . ' días';
-            }
-
-            return date('d/m/Y', $ts);
-        };
-
-        $hasFilters = $q !== '' || $categoriaId > 0;
-        $favoriteRedirect = $buildCatalogUrl();
-      ?>
-
       <div class="section-header products-header">
         <div>
           <p class="products-kicker">Comparar precios</p>
           <h2 id="products-title" class="section-title mb-1">Productos disponibles</h2>
-          <p class="section-subtitle mb-0">Revisa precio, stock y tienda en un vistazo, y entra al detalle para comparar el resto de las ofertas.</p>
+          <p class="section-subtitle mb-0">Explora el catálogo completo y ordénalo por precio o por nombre.</p>
         </div>
       </div>
+<?php endif; ?>
 
-      <div class="products-layout">
+      <div class="products-layout" data-products-catalog>
         <aside class="products-rail" aria-label="Resumen y orden del catálogo">
-          <span class="products-rail-mark" aria-hidden="true"><?= lucide_icon('scale', '', 88) ?></span>
           <div class="products-rail-head">
             <span class="products-rail-icon"><?= lucide_icon('list-filter', '', 20) ?></span>
             <div>
@@ -1564,6 +1638,7 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
             <p class="products-rail-label">Ordenar</p>
             <div class="products-sort-list">
               <?php foreach (active_sort_options() as $value => $label): ?>
+                <?php if ($value === 'recientes') continue; ?>
                 <a
                   class="products-sort-link<?= $sort === $value ? ' is-active' : '' ?>"
                   href="<?= e($buildCatalogUrl(['orden' => $value, 'page' => 1])) ?>"
@@ -1598,7 +1673,7 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
             </div>
           <?php endif; ?>
 
-          <p class="products-hint">El precio es el de la tienda indicada. Entra al producto para ver otras ofertas y el historial.</p>
+          <p class="products-hint"><?= lucide_icon('info', '', 14) ?><span>Precio de la tienda indicada. Entra para ver ofertas e historial.</span></p>
         </aside>
 
         <div class="products-stage">
@@ -1665,8 +1740,11 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
                     <a
                       class="product-tile-fav<?= $isFavorite ? ' is-on' : '' ?>"
                       href="<?= e(favorite_toggle_url($productId, $favoriteRedirect)) ?>"
+                      data-fav-toggle
+                      data-product-id="<?= (int) $productId ?>"
                       title="<?= $isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
                       aria-label="<?= $isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                      aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>"
                     >
                       <?= lucide_icon('heart', $isFavorite ? 'lucide-fill' : '', 16) ?>
                     </a>
@@ -1801,8 +1879,374 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
         <?php endif; ?>
         </div>
       </div>
+<?php
+if ($isProductsPartial) {
+    exit;
+}
+?>
     </div>
   </section>
+
+  <?php if ($bestPriceGaps): ?>
+  <?php
+    $dealPageSize = 6;
+    $dealPages = (int) max(1, ceil(count($bestPriceGaps) / $dealPageSize));
+    $dealFavoriteRedirect = 'index.php#conviene';
+  ?>
+  <section
+    class="deals-section"
+    id="conviene"
+    aria-labelledby="deals-title"
+  >
+    <div class="container">
+      <div class="deals-pager" data-deals-pager data-page-size="<?= (int) $dealPageSize ?>">
+        <div class="section-header deals-header">
+          <div>
+            <p class="deals-kicker">Comparar ofertas</p>
+            <h2 id="deals-title" class="section-title mb-1">Elige el mejor precio</h2>
+            <p class="section-subtitle mb-0">Productos con la mayor diferencia de precio entre una tienda y otra.</p>
+          </div>
+          <?php if ($dealPages > 1): ?>
+            <div class="deals-nav" role="group" aria-label="Navegar ofertas">
+              <button type="button" class="deals-nav-btn" data-deals-prev aria-label="Productos anteriores">
+                <?= lucide_icon('chevron-left', '', 18) ?>
+              </button>
+              <button type="button" class="deals-nav-btn" data-deals-next aria-label="Productos siguientes">
+                <?= lucide_icon('chevron-right', '', 18) ?>
+              </button>
+              <p class="deals-nav-status" data-deals-status aria-live="polite" aria-label="Página 1 de <?= (int) $dealPages ?>">
+                <span class="deals-nav-current" data-deals-current>1</span>
+                <span class="deals-nav-total">de <?= (int) $dealPages ?></span>
+              </p>
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <div class="deals-board">
+          <div class="deals-carousel" data-deals-carousel>
+            <button
+              type="button"
+              class="deals-carousel-btn deals-carousel-btn--prev"
+              data-deals-carousel-prev
+              aria-label="Productos anteriores"
+              hidden
+            >
+              <?= lucide_icon('chevron-left', '', 18) ?>
+            </button>
+            <div class="deals-list" role="list" data-deals-track>
+              <?php foreach ($bestPriceGaps as $index => $deal): ?>
+                <?php
+                  $dealId = (int) ($deal['idproductos'] ?? 0);
+                  $dealName = (string) ($deal['pro_nombre'] ?? 'Producto');
+                  $dealGroup = (string) ($deal['grupo'] ?? $dealName);
+                  $dealUrl = 'producto.php?grupo=' . rawurlencode($dealGroup);
+                  if ($q !== '') {
+                      $dealUrl .= '&q=' . rawurlencode($q);
+                  }
+                  $dealInStock = (int) ($deal['pro_en_stock'] ?? 0) === 1;
+                  $isDealFavorite = ($favoritesEnabled && $userLogged && $dealId > 0)
+                      ? is_favorite_product($dealId)
+                      : false;
+                  $dealOffers = [];
+                  foreach ($deal['ofertas'] as $offer) {
+                      $offerPrice = is_array($offer) ? (float) ($offer['pro_precio'] ?? 0) : 0.0;
+                      if ($offerPrice <= 0) {
+                          continue;
+                      }
+
+                      $storeName = (string) ($offer['tie_nombre'] ?? 'Tienda');
+                      $dealOffers[] = [
+                          'label' => $storeName,
+                          'tone' => (string) ($offer['tone'] ?? cp_store_tone($storeName)),
+                          'price' => $offerPrice,
+                      ];
+                  }
+
+                  $storeCount = count($dealOffers);
+                  $cheapOffer = $dealOffers[0] ?? null;
+                  $expensiveOffer = $dealOffers[$storeCount - 1] ?? null;
+                  $saving = (float) ($deal['ahorro'] ?? 0);
+                  $storeCountLabel = $storeCount === 1
+                      ? 'En 1 tienda'
+                      : 'En ' . number_format($storeCount, 0, ',', '.') . ' tiendas';
+                ?>
+                <article
+                  class="deals-card clickable-card<?= $index < $dealPageSize ? ' is-visible' : '' ?>"
+                  data-deal-row
+                  data-card-href="<?= e($dealUrl) ?>"
+                  role="listitem"
+                  tabindex="0"
+                  aria-label="Comparar <?= e($dealName) ?> en <?= e(implode(', ', array_map(static fn (array $row): string => (string) $row['label'], $dealOffers))) ?>"
+                >
+                  <span class="deals-card-main">
+                    <span class="deals-card-media">
+                      <img src="<?= e(image_url($deal['pro_imagen'] ?? null, $dealName)) ?>" alt="">
+                      <span
+                        class="deals-card-flag <?= $dealInStock ? 'is-stock' : 'is-wait' ?>"
+                        title="<?= e(stock_label($deal['pro_en_stock'] ?? 0)) ?>"
+                      ><?= e($dealInStock ? 'Stock' : 'Consultar') ?></span>
+                      <?php if ($favoritesEnabled && $userLogged && $dealId > 0): ?>
+                        <a
+                          class="deals-card-fav<?= $isDealFavorite ? ' is-on' : '' ?>"
+                          href="<?= e(favorite_toggle_url($dealId, $dealFavoriteRedirect)) ?>"
+                          data-fav-toggle
+                          data-product-id="<?= (int) $dealId ?>"
+                          title="<?= $isDealFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                          aria-label="<?= $isDealFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                          aria-pressed="<?= $isDealFavorite ? 'true' : 'false' ?>"
+                        >
+                          <?= lucide_icon('heart', $isDealFavorite ? 'lucide-fill' : '', 16) ?>
+                        </a>
+                      <?php else: ?>
+                        <a class="deals-card-fav" href="login.php" title="Inicia sesión para guardar favoritos" aria-label="Inicia sesión para guardar favoritos">
+                          <?= lucide_icon('heart', '', 16) ?>
+                        </a>
+                      <?php endif; ?>
+                    </span>
+                    <span class="deals-card-copy">
+                      <?php if (!empty($deal['pro_marca'])): ?>
+                        <span class="deals-card-brand"><?= e($deal['pro_marca']) ?></span>
+                      <?php endif; ?>
+                      <span class="deals-card-name" title="<?= e($dealName) ?>"><?= e($dealName) ?></span>
+                      <span class="deals-card-meta">
+                        <span class="deals-card-count"><?= e($storeCountLabel) ?></span>
+                        <span class="deals-card-sep" aria-hidden="true">·</span>
+                        <span class="deals-card-save">
+                          <?php if ($saving > 0): ?>
+                            Diferencia <?= gs($saving) ?>
+                          <?php else: ?>
+                            Mismo precio
+                          <?php endif; ?>
+                          <?= lucide_icon('arrow-right', '', 16) ?>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                  <?php if ($cheapOffer && $expensiveOffer): ?>
+                    <span class="deals-card-prices">
+                      <span class="deals-card-price is-best" data-tone="<?= e($cheapOffer['tone']) ?>">
+                        <em>Menor precio</em>
+                        <strong><?= gs($cheapOffer['price']) ?></strong>
+                        <span><?= e($cheapOffer['label']) ?></span>
+                      </span>
+                      <span class="deals-card-price is-high" data-tone="<?= e($expensiveOffer['tone']) ?>">
+                        <em>Otra oferta</em>
+                        <strong><?= gs($expensiveOffer['price']) ?></strong>
+                        <span><?= e($expensiveOffer['label']) ?></span>
+                      </span>
+                    </span>
+                  <?php endif; ?>
+                </article>
+              <?php endforeach; ?>
+            </div>
+            <button
+              type="button"
+              class="deals-carousel-btn deals-carousel-btn--next"
+              data-deals-carousel-next
+              aria-label="Productos siguientes"
+              hidden
+            >
+              <?= lucide_icon('chevron-right', '', 18) ?>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($activeOffers): ?>
+  <?php
+    $offerPageSize = 3;
+    $offerPages = (int) max(1, ceil(count($activeOffers) / $offerPageSize));
+    $offerFavoriteRedirect = 'index.php#ofertas';
+  ?>
+  <section
+    class="offers-section"
+    id="ofertas"
+    aria-labelledby="offers-title"
+  >
+    <div class="container">
+      <div class="offers-board" data-offers-pager data-page-size="<?= (int) $offerPageSize ?>">
+        <div class="offers-intro">
+          <div class="offers-intro-copy">
+            <p class="offers-kicker">Precio rebajado</p>
+            <h2 id="offers-title" class="section-title">Ofertas disponibles</h2>
+            <p class="section-subtitle">Descuentos reales frente al precio anterior de cada tienda.</p>
+          </div>
+          <?php if ($offerPages > 1): ?>
+            <div class="offers-nav" role="group" aria-label="Navegar ofertas">
+              <button type="button" class="offers-nav-btn" data-offers-prev aria-label="Ofertas anteriores">
+                <?= lucide_icon('chevron-left', '', 18) ?>
+              </button>
+              <button type="button" class="offers-nav-btn" data-offers-next aria-label="Ofertas siguientes">
+                <?= lucide_icon('chevron-right', '', 18) ?>
+              </button>
+              <p class="offers-nav-status" data-offers-status aria-live="polite" aria-label="Página 1 de <?= (int) $offerPages ?>">
+                <span class="offers-nav-current" data-offers-current>1</span>
+                <span class="offers-nav-total">de <?= (int) $offerPages ?></span>
+              </p>
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <div class="offers-carousel" data-offers-carousel>
+          <button
+            type="button"
+            class="offers-carousel-btn offers-carousel-btn--prev"
+            data-offers-carousel-prev
+            aria-label="Ofertas anteriores"
+            hidden
+          >
+            <?= lucide_icon('chevron-left', '', 18) ?>
+          </button>
+          <div class="offers-rail" role="list" data-offers-track>
+            <?php
+              $offerWashPalette = [
+                '#a8c9f0',
+                '#b5d4f5',
+                '#9bc0ec',
+                '#c2daf7',
+                '#8eb8e8',
+                '#aecff2',
+                '#bcd9f5',
+                '#94bce6',
+              ];
+              $offerWashColors = $offerWashPalette;
+              $offerWashSeed = crc32('offer-wash|' . count($activeOffers) . '|' . ($activeOffers[0]['idproductos'] ?? 0));
+              mt_srand($offerWashSeed);
+              for ($i = count($offerWashColors) - 1; $i > 0; $i--) {
+                  $j = mt_rand(0, $i);
+                  $swap = $offerWashColors[$i];
+                  $offerWashColors[$i] = $offerWashColors[$j];
+                  $offerWashColors[$j] = $swap;
+              }
+              mt_srand();
+            ?>
+            <?php foreach ($activeOffers as $index => $offer): ?>
+              <?php
+                $offerId = (int) ($offer['idproductos'] ?? 0);
+                $offerName = (string) ($offer['pro_nombre'] ?? 'Producto');
+                $offerUrl = 'producto.php?id=' . $offerId . ($q !== '' ? '&q=' . rawurlencode($q) : '');
+                $offerStore = (string) ($offer['tie_nombre'] ?? 'Tienda');
+                $offerBrand = trim((string) ($offer['pro_marca'] ?? ''));
+                $offerDescParts = array_values(array_filter([
+                    $offerBrand !== '' ? $offerBrand : null,
+                    $offerStore !== '' ? $offerStore : null,
+                ]));
+                $offerDesc = implode(' · ', $offerDescParts);
+                if ($offerDesc === '') {
+                    $offerDesc = 'En oferta';
+                }
+                $offerInStock = (int) ($offer['pro_en_stock'] ?? 0) === 1;
+                $offerExternal = trim((string) ($offer['pro_url'] ?? ''));
+                $offerCtaHref = $offerExternal !== ''
+                    ? ('go.php?' . http_build_query([
+                        'id' => $offerId,
+                        'source' => 'inicio',
+                        'click_type' => 'ir_oferta',
+                        'term' => $q,
+                        'target_url' => $offerExternal,
+                    ]))
+                    : $offerUrl;
+                $offerCtaExternal = $offerExternal !== '';
+                $isOfferFavorite = ($favoritesEnabled && $userLogged) ? is_favorite_product($offerId) : false;
+                $offerVisible = $index < $offerPageSize;
+                $offerWash = $offerWashColors[$index % count($offerWashColors)];
+              ?>
+              <article
+                class="offers-card clickable-card<?= $offerVisible ? ' is-visible' : '' ?>"
+                data-offer-row
+                style="--tile-wash: <?= e($offerWash) ?>;"
+                data-card-href="<?= e($offerUrl) ?>"
+                role="listitem"
+                tabindex="0"
+                aria-label="<?= e($offerName) ?>, −<?= (int) $offer['pct'] ?> por ciento en <?= e($offerStore) ?>"
+              >
+                <div class="offers-card-visual">
+                  <div class="offers-card-media">
+                    <img
+                      src="<?= e(image_url($offer['pro_imagen'] ?? null, $offerName)) ?>"
+                      alt="<?= e($offerName) ?>"
+                      loading="lazy"
+                      decoding="async"
+                      onerror="this.onerror=null;if(window.applyProductImageFallback){applyProductImageFallback(this);}else{this.style.display='none';}"
+                    >
+                  </div>
+                  <div class="offers-card-flags">
+                    <span class="offers-card-flag is-deal">−<?= (int) $offer['pct'] ?>%</span>
+                  </div>
+                </div>
+                <?php if ($favoritesEnabled && $userLogged): ?>
+                  <a
+                    class="offers-card-fav<?= $isOfferFavorite ? ' is-on' : '' ?>"
+                    href="<?= e(favorite_toggle_url($offerId, $offerFavoriteRedirect)) ?>"
+                    data-fav-toggle
+                    data-product-id="<?= (int) $offerId ?>"
+                    title="<?= $isOfferFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                    aria-label="<?= $isOfferFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>"
+                    aria-pressed="<?= $isOfferFavorite ? 'true' : 'false' ?>"
+                  >
+                    <?= lucide_icon('heart', $isOfferFavorite ? 'lucide-fill' : '', 16) ?>
+                  </a>
+                <?php else: ?>
+                  <a class="offers-card-fav" href="login.php" title="Inicia sesión para guardar favoritos" aria-label="Inicia sesión para guardar favoritos">
+                    <?= lucide_icon('heart', '', 16) ?>
+                  </a>
+                <?php endif; ?>
+
+                <div class="offers-card-body">
+                  <div class="offers-card-top">
+                    <div class="offers-card-tags">
+                      <?php if ($offerBrand !== ''): ?>
+                        <span class="offers-card-brand"><?= e($offerBrand) ?></span>
+                      <?php endif; ?>
+                      <span class="offers-card-store"><?= e($offerStore) ?></span>
+                    </div>
+                    <h3 class="offers-card-name"><?= e($offerName) ?></h3>
+                  </div>
+
+                  <div class="offers-card-foot">
+                    <div class="offers-card-priceblock">
+                      <div class="offers-card-cost">
+                        <p class="offers-card-price-now"><?= gs($offer['pro_precio']) ?></p>
+                        <p class="offers-card-price-old"><?= gs($offer['pro_precio_anterior']) ?></p>
+                        <p class="offers-card-save">Ahorro <?= gs($offer['ahorro']) ?></p>
+                      </div>
+                      <span class="offers-card-flag <?= $offerInStock ? 'is-stock' : 'is-wait' ?>"><?= e($offerInStock ? 'Stock' : 'Consultar') ?></span>
+                    </div>
+
+                    <div class="offers-card-actions">
+                      <a
+                        class="offers-card-cta"
+                        href="<?= e($offerCtaHref) ?>"
+                        <?php if ($offerCtaExternal): ?>
+                          target="_blank"
+                          rel="noopener noreferrer nofollow"
+                        <?php endif; ?>
+                      >
+                        Ver oferta <?= lucide_icon($offerCtaExternal ? 'external-link' : 'arrow-right', '', 15) ?>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            <?php endforeach; ?>
+          </div>
+          <button
+            type="button"
+            class="offers-carousel-btn offers-carousel-btn--next"
+            data-offers-carousel-next
+            aria-label="Ofertas siguientes"
+            hidden
+          >
+            <?= lucide_icon('chevron-right', '', 18) ?>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <?php endif; ?>
 
   <section id="tiendas" class="stores-section" aria-labelledby="stores-title">
     <div class="container">
@@ -1810,100 +2254,133 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
         <div>
           <p class="stores-kicker">Tiendas participantes</p>
           <h2 id="stores-title" class="section-title mb-1">Tiendas</h2>
-          <p class="section-subtitle mb-0">Catálogos tomados de los sitios web de cada tienda para comparar precios en un solo lugar.</p>
+          <p class="section-subtitle mb-0">Catálogos de cada tienda reunidos para comparar precios en un solo lugar.</p>
         </div>
       </div>
 
       <?php if ($stores): ?>
-        <div class="stores-board">
-          <?php foreach ($stores as $index => $store): ?>
-            <?php
-              $storeId = (int) $store['idtiendas'];
-              $storeName = (string) ($store['tie_nombre'] ?? 'Tienda');
-              $storeUrl = 'tienda.php?id=' . $storeId;
-              $storeTone = (string) ($store['_tone'] ?? 'inverfin');
-              $storeFocus = (string) ($store['_focus'] ?? 'Catálogo');
-              $storeIcon = (string) ($store['_icon'] ?? 'store');
-              $storeDescription = trim((string) ($store['tie_descripcion'] ?? ''));
-              $productCount = (int) ($store['total_productos'] ?? 0);
-              $updatedAt = (string) ($store['ultima_actualizacion'] ?? '');
-              $updatedLabel = isset($formatFreshness) ? $formatFreshness($updatedAt) : ($updatedAt !== '' ? date('d/m/Y', strtotime($updatedAt)) : 'Sin fecha');
-              $updatedExact = $updatedAt !== '' ? date('d/m/Y H:i', strtotime($updatedAt)) : 'Sin actualizaciones recientes';
-              $storeLocationRaw = trim((string) ($store['tie_ubicacion'] ?? ''));
-              $storeLocationUrl = '';
-              $storeLocationLabel = '';
+        <div class="stores-carousel" data-stores-carousel>
+          <button
+            type="button"
+            class="stores-carousel-btn stores-carousel-btn--prev"
+            data-stores-prev
+            aria-label="Tiendas anteriores"
+            hidden
+          >
+            <?= lucide_icon('chevron-left', '', 18) ?>
+          </button>
+          <div class="stores-board" role="region" aria-label="Tiendas participantes" data-stores-track>
+            <?php foreach ($stores as $index => $store): ?>
+              <?php
+                $storeId = (int) $store['idtiendas'];
+                $storeName = (string) ($store['tie_nombre'] ?? 'Tienda');
+                $storeUrl = 'tienda.php?id=' . $storeId;
+                $storeTone = (string) ($store['_tone'] ?? 'inverfin');
+                $storeFocus = (string) ($store['_focus'] ?? 'Catálogo');
+                $storeIcon = (string) ($store['_icon'] ?? 'store');
+                $storeDescription = trim((string) ($store['tie_descripcion'] ?? ''));
+                $productCount = (int) ($store['total_productos'] ?? 0);
+                $updatedAt = (string) ($store['ultima_actualizacion'] ?? '');
+                $updatedLabel = isset($formatFreshness) ? $formatFreshness($updatedAt) : ($updatedAt !== '' ? date('d/m/Y', strtotime($updatedAt)) : 'Sin fecha');
+                $updatedExact = $updatedAt !== '' ? date('d/m/Y H:i', strtotime($updatedAt)) : 'Sin actualizaciones recientes';
+                $storeLocationRaw = trim((string) ($store['tie_ubicacion'] ?? ''));
+                $storeLocationUrl = '';
+                $storeLocationLabel = '';
 
-              if ($storeLocationRaw !== '') {
-                  $isLocationUrl = preg_match('~^https?://~i', $storeLocationRaw) === 1;
-                  $isCoordinates = preg_match('~^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$~', $storeLocationRaw) === 1;
-                  $storeLocationUrl = $isLocationUrl
-                      ? $storeLocationRaw
-                      : 'https://www.google.com/maps?q=' . rawurlencode($storeLocationRaw);
-                  $storeLocationLabel = ($isLocationUrl || $isCoordinates) ? 'Ver mapa' : $storeLocationRaw;
-              }
-            ?>
-            <article
-              class="store-panel clickable-card"
-              data-tone="<?= e($storeTone) ?>"
-              data-card-href="<?= e($storeUrl) ?>"
-              role="link"
-              tabindex="0"
-              aria-label="Ver catálogo de <?= e($storeName) ?>"
-            >
-              <span class="store-panel-mark" aria-hidden="true"><?= lucide_icon($storeIcon, '', 88) ?></span>
-              <header class="store-panel-head">
-                <div class="store-panel-logo">
-                  <?php if (!empty($store['tie_logo'])): ?>
-                    <img src="<?= e($store['tie_logo']) ?>" alt="" class="store-panel-logo-img">
-                  <?php else: ?>
-                    <span class="store-panel-fallback"><?= e(mb_strtoupper(mb_substr($storeName, 0, 2))) ?></span>
+                if ($storeLocationRaw !== '') {
+                    $isLocationUrl = preg_match('~^https?://~i', $storeLocationRaw) === 1;
+                    $isCoordinates = preg_match('~^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$~', $storeLocationRaw) === 1;
+                    $storeLocationUrl = $isLocationUrl
+                        ? $storeLocationRaw
+                        : 'https://www.google.com/maps?q=' . rawurlencode($storeLocationRaw);
+                    $storeLocationLabel = ($isLocationUrl || $isCoordinates) ? 'Ver mapa' : $storeLocationRaw;
+                }
+              ?>
+              <article
+                class="store-panel clickable-card"
+                data-tone="<?= e($storeTone) ?>"
+                data-card-href="<?= e($storeUrl) ?>"
+                role="link"
+                tabindex="0"
+                aria-label="Ver catálogo de <?= e($storeName) ?>"
+              >
+                <span class="store-panel-mark" aria-hidden="true"><?= lucide_icon($storeIcon, '', 88) ?></span>
+                <header class="store-panel-head">
+                  <div class="store-panel-logo<?= empty($store['tie_logo']) ? ' is-fallback' : '' ?>">
+                    <?php if (!empty($store['tie_logo'])): ?>
+                      <img
+                        src="<?= e($store['tie_logo']) ?>"
+                        alt=""
+                        class="store-panel-logo-img"
+                        loading="lazy"
+                        decoding="async"
+                        data-no-fallback="true"
+                        onerror="this.onerror=null;var p=this.parentElement;this.remove();if(!p)return;p.classList.add('is-fallback');var f=p.querySelector('.store-panel-fallback');if(f){f.hidden=false;f.removeAttribute('aria-hidden');}"
+                      >
+                      <span class="store-panel-fallback" hidden aria-hidden="true">
+                        <?= lucide_icon('image', '', 56) ?>
+                      </span>
+                    <?php else: ?>
+                      <span class="store-panel-fallback" role="img" aria-label="<?= e($storeName) ?>">
+                        <?= lucide_icon('image', '', 56) ?>
+                      </span>
+                    <?php endif; ?>
+                  </div>
+                </header>
+
+                <div class="store-panel-copy">
+                  <div class="store-panel-identity">
+                    <span class="store-panel-index"><?= str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) ?></span>
+                    <p class="store-panel-focus"><?= e($storeFocus) ?></p>
+                  </div>
+                  <h3 class="store-panel-name"><?= e($storeName) ?></h3>
+                  <?php if ($storeDescription !== ''): ?>
+                    <p class="store-panel-desc"><?= e($storeDescription) ?></p>
                   <?php endif; ?>
                 </div>
-              </header>
 
-              <div class="store-panel-copy">
-                <div class="store-panel-identity">
-                  <span class="store-panel-index"><?= str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) ?></span>
-                  <p class="store-panel-focus"><?= e($storeFocus) ?></p>
-                </div>
-                <h3 class="store-panel-name"><?= e($storeName) ?></h3>
-                <?php if ($storeDescription !== ''): ?>
-                  <p class="store-panel-desc"><?= e($storeDescription) ?></p>
-                <?php endif; ?>
-              </div>
+                <dl class="store-panel-facts">
+                  <div>
+                    <dt>Productos</dt>
+                    <dd><?= number_format($productCount, 0, ',', '.') ?></dd>
+                  </div>
+                  <div>
+                    <dt>Actualizado</dt>
+                    <dd title="<?= e($updatedExact) ?>"><?= e($updatedLabel) ?></dd>
+                  </div>
+                </dl>
 
-              <dl class="store-panel-facts">
-                <div>
-                  <dt>Productos</dt>
-                  <dd><?= number_format($productCount, 0, ',', '.') ?></dd>
-                </div>
-                <div>
-                  <dt>Actualizado</dt>
-                  <dd title="<?= e($updatedExact) ?>"><?= e($updatedLabel) ?></dd>
-                </div>
-              </dl>
-
-              <footer class="store-panel-foot">
-                <?php if ($storeLocationUrl !== ''): ?>
-                  <a
-                    class="store-panel-place"
-                    href="<?= e($storeLocationUrl) ?>"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="<?= e($storeLocationLabel) ?>"
-                  >
-                    <?= lucide_icon('map-pin', '', 14) ?>
-                    <span><?= e($storeLocationLabel) ?></span>
+                <footer class="store-panel-foot">
+                  <?php if ($storeLocationUrl !== ''): ?>
+                    <a
+                      class="store-panel-place"
+                      href="<?= e($storeLocationUrl) ?>"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="<?= e($storeLocationLabel) ?>"
+                    >
+                      <?= lucide_icon('map-pin', '', 14) ?>
+                      <span><?= e($storeLocationLabel) ?></span>
+                    </a>
+                  <?php else: ?>
+                    <span class="store-panel-place is-empty">Caacupé</span>
+                  <?php endif; ?>
+                  <a class="store-panel-cta" href="<?= e($storeUrl) ?>">
+                    Ver catálogo <?= lucide_icon('arrow-right', '', 15) ?>
                   </a>
-                <?php else: ?>
-                  <span class="store-panel-place is-empty">Caacupé</span>
-                <?php endif; ?>
-                <a class="store-panel-cta" href="<?= e($storeUrl) ?>">
-                  Ver catálogo <?= lucide_icon('arrow-right', '', 15) ?>
-                </a>
-              </footer>
-            </article>
-          <?php endforeach; ?>
+                </footer>
+              </article>
+            <?php endforeach; ?>
+          </div>
+          <button
+            type="button"
+            class="stores-carousel-btn stores-carousel-btn--next"
+            data-stores-next
+            aria-label="Tiendas siguientes"
+            hidden
+          >
+            <?= lucide_icon('chevron-right', '', 18) ?>
+          </button>
         </div>
       <?php else: ?>
         <div class="stores-empty">
@@ -1919,6 +2396,117 @@ $renderActivityItems = static function (array $items, string $metricKey, string 
 <script>
 /* Fuerza los saltos internos sin animación, incluso si otro CSS activa smooth scroll. */
 document.documentElement.style.setProperty('scroll-behavior', 'auto', 'important');
+
+(function () {
+  let catalogRequest = 0;
+
+  function catalogPartialUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.set('partial', 'products');
+    next.hash = '';
+    return next.toString();
+  }
+
+  function publicCatalogUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.delete('partial');
+    if (!next.hash) next.hash = 'productos';
+    return next.pathname + next.search + next.hash;
+  }
+
+  function loadCatalog(url, options) {
+    const opts = options || {};
+    const layout = document.querySelector('[data-products-catalog]');
+    if (!layout) return Promise.resolve();
+
+    const requestId = ++catalogRequest;
+    layout.classList.add('is-loading');
+    layout.setAttribute('aria-busy', 'true');
+
+    return fetch(catalogPartialUrl(url), {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' }
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error('No se pudo cargar el catálogo.');
+        return response.text();
+      })
+      .then(function (html) {
+        if (requestId !== catalogRequest) return;
+
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const next = doc.querySelector('[data-products-catalog]') || doc.body.firstElementChild;
+        if (!next || !next.classList || !next.classList.contains('products-layout')) {
+          throw new Error('Respuesta de catálogo inválida.');
+        }
+
+        layout.replaceWith(next);
+        if (window.refreshLucideIcons) window.refreshLucideIcons();
+        if (window.applyProductImageFallback) {
+          next.querySelectorAll('img').forEach(function (img) {
+            if (!(img.getAttribute('src') || '').trim()) {
+              window.applyProductImageFallback(img);
+            }
+          });
+        }
+
+        const publicUrl = publicCatalogUrl(url);
+        if (opts.replace) {
+          history.replaceState({ catalog: true }, '', publicUrl);
+        } else {
+          history.pushState({ catalog: true }, '', publicUrl);
+        }
+      })
+      .catch(function () {
+        if (requestId !== catalogRequest) return;
+        window.location.href = publicCatalogUrl(url);
+      })
+      .finally(function () {
+        if (requestId !== catalogRequest) return;
+        const current = document.querySelector('[data-products-catalog]');
+        if (current) {
+          current.classList.remove('is-loading');
+          current.removeAttribute('aria-busy');
+        }
+      });
+  }
+
+  document.addEventListener('click', function (event) {
+    const link = event.target.closest('[data-products-catalog] a[href]');
+    if (!link) return;
+    if (link.hasAttribute('data-fav-toggle')) return;
+    if (link.target === '_blank' || link.hasAttribute('download')) return;
+
+    let targetUrl;
+    try {
+      targetUrl = new URL(link.href, window.location.href);
+    } catch (error) {
+      return;
+    }
+
+    if (targetUrl.origin !== window.location.origin) return;
+    if (targetUrl.searchParams.get('partial')) return;
+
+    const path = targetUrl.pathname.replace(/\/+$/, '');
+    const currentPath = window.location.pathname.replace(/\/+$/, '');
+    const looksLikeHome =
+      /(?:^|\/)index\.php$/i.test(targetUrl.pathname) ||
+      path === currentPath ||
+      path === currentPath.replace(/\/index\.php$/i, '');
+
+    if (!looksLikeHome) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    loadCatalog(targetUrl);
+  });
+
+  window.addEventListener('popstate', function () {
+    if (!document.querySelector('[data-products-catalog]')) return;
+    const url = new URL(window.location.href);
+    loadCatalog(url, { replace: true });
+  });
+})();
 
 document.addEventListener('click', function (event) {
   const card = event.target.closest('.clickable-card[data-card-href]');
@@ -1969,11 +2557,8 @@ document.addEventListener('click', function(event) {
 }, true);
 
 document.addEventListener('DOMContentLoaded', function() {
-  const stickyContainer = document.querySelector('.search-sticky-container');
-  const toggleBtn = document.getElementById('toggle-sticky-btn');
-  
-  // 1. Control de la sección en vivo (Para index.php)
-  const searchInput = document.getElementById('global-search-home');
+  // Control de la sección en vivo (Para index.php)
+  const searchInput = document.getElementById('global-search-input');
   const liveSection = document.getElementById('home-live-section');
   if (searchInput && liveSection) {
     const toggleLiveSection = () => {
@@ -1987,20 +2572,261 @@ document.addEventListener('DOMContentLoaded', function() {
     searchInput.addEventListener('input', toggleLiveSection);
   }
 
+  const storesCarousel = document.querySelector('[data-stores-carousel]');
+  if (storesCarousel) {
+    const track = storesCarousel.querySelector('[data-stores-track]');
+    const prevBtn = storesCarousel.querySelector('[data-stores-prev]');
+    const nextBtn = storesCarousel.querySelector('[data-stores-next]');
+    const originalCards = track
+      ? Array.from(track.querySelectorAll('.store-panel')).filter(function (card) {
+          return !card.hasAttribute('data-stores-clone');
+        })
+      : [];
+    const carouselMq = window.matchMedia('(max-width: 991.98px)');
+    let loopWidth = 0;
+    let canLoop = false;
+    let normalizing = false;
+    let settleTimer = 0;
+
+    const clearClones = () => {
+      if (!track) return;
+      track.querySelectorAll('[data-stores-clone]').forEach(function (node) {
+        node.remove();
+      });
+    };
+
+    const cloneCard = (card) => {
+      const clone = card.cloneNode(true);
+      clone.setAttribute('data-stores-clone', '');
+      clone.setAttribute('aria-hidden', 'true');
+      clone.tabIndex = -1;
+      clone.querySelectorAll('a, button, [tabindex]').forEach(function (el) {
+        el.setAttribute('tabindex', '-1');
+      });
+      return clone;
+    };
+
+    const getStep = () => {
+      if (originalCards.length >= 2) {
+        const delta = originalCards[1].offsetLeft - originalCards[0].offsetLeft;
+        if (delta > 0) return delta;
+      }
+      const card = originalCards[0];
+      if (!card) return Math.max(240, track.clientWidth * 0.8);
+      const styles = window.getComputedStyle(track);
+      const gap = parseFloat(styles.columnGap || styles.gap || '0') || 0;
+      return card.getBoundingClientRect().width + gap;
+    };
+
+    const updateStoresNav = () => {
+      if (!track || !prevBtn || !nextBtn) return;
+      const canScroll = canLoop || track.scrollWidth > track.clientWidth + 4;
+      storesCarousel.classList.toggle('is-scrollable', canScroll);
+      prevBtn.hidden = !canScroll;
+      nextBtn.hidden = !canScroll;
+      prevBtn.disabled = !canScroll;
+      nextBtn.disabled = !canScroll;
+    };
+
+    const normalizeScroll = () => {
+      if (!canLoop || loopWidth <= 0 || normalizing) return;
+
+      const left = track.scrollLeft;
+      if (left >= loopWidth * 2 - 0.5 || left < loopWidth - 0.5) {
+        normalizing = true;
+        const prevSnap = track.style.scrollSnapType;
+        track.style.scrollSnapType = 'none';
+        while (track.scrollLeft >= loopWidth * 2) {
+          track.scrollLeft -= loopWidth;
+        }
+        while (track.scrollLeft < loopWidth) {
+          track.scrollLeft += loopWidth;
+        }
+        requestAnimationFrame(function () {
+          track.style.scrollSnapType = prevSnap;
+          normalizing = false;
+        });
+      }
+    };
+
+    const setupLoop = () => {
+      if (!track) return;
+      clearClones();
+      loopWidth = 0;
+      canLoop = false;
+      track.scrollLeft = 0;
+
+      if (!carouselMq.matches || originalCards.length < 2) {
+        updateStoresNav();
+        return;
+      }
+
+      const overflows = track.scrollWidth > track.clientWidth + 4;
+      if (!overflows) {
+        updateStoresNav();
+        return;
+      }
+
+      const before = document.createDocumentFragment();
+      const after = document.createDocumentFragment();
+      originalCards.forEach(function (card) {
+        before.appendChild(cloneCard(card));
+        after.appendChild(cloneCard(card));
+      });
+      track.insertBefore(before, track.firstChild);
+      track.appendChild(after);
+
+      loopWidth = originalCards[0].offsetLeft;
+      canLoop = loopWidth > 0;
+      if (canLoop) {
+        track.scrollLeft = loopWidth;
+      }
+      updateStoresNav();
+    };
+
+    const goStores = (direction) => {
+      if (!track || (!canLoop && track.scrollWidth <= track.clientWidth + 4)) return;
+      const step = getStep();
+      if (step <= 0) return;
+      track.scrollBy({ left: direction * step, behavior: 'smooth' });
+    };
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        goStores(-1);
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        goStores(1);
+      });
+    }
+
+    track.addEventListener(
+      'scroll',
+      function () {
+        if (normalizing) return;
+        updateStoresNav();
+        window.clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(normalizeScroll, 80);
+      },
+      { passive: true }
+    );
+
+    track.addEventListener('scrollend', normalizeScroll);
+
+    let rebuildTimer = 0;
+    let setupBusy = false;
+    const scheduleSetup = () => {
+      window.clearTimeout(rebuildTimer);
+      rebuildTimer = window.setTimeout(function () {
+        if (setupBusy) return;
+        setupBusy = true;
+        setupLoop();
+        setupBusy = false;
+      }, 120);
+    };
+
+    if (typeof carouselMq.addEventListener === 'function') {
+      carouselMq.addEventListener('change', scheduleSetup);
+    } else if (typeof carouselMq.addListener === 'function') {
+      carouselMq.addListener(scheduleSetup);
+    }
+
+    window.addEventListener('resize', scheduleSetup);
+    setupLoop();
+  }
+
   const dealsPager = document.querySelector('[data-deals-pager]');
   if (dealsPager) {
-    const rows = Array.from(dealsPager.querySelectorAll('[data-deal-row]'));
+    const dealsCarousel = dealsPager.querySelector('[data-deals-carousel]');
+    const track = dealsPager.querySelector('[data-deals-track]');
+    const originalCards = track
+      ? Array.from(track.querySelectorAll('[data-deal-row]')).filter(function (card) {
+          return !card.hasAttribute('data-deals-clone');
+        })
+      : [];
     const pageSize = Math.max(1, parseInt(dealsPager.getAttribute('data-page-size') || '5', 10));
-    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(originalCards.length / pageSize));
     const prevBtn = dealsPager.querySelector('[data-deals-prev]');
     const nextBtn = dealsPager.querySelector('[data-deals-next]');
+    const carouselPrevBtn = dealsPager.querySelector('[data-deals-carousel-prev]');
+    const carouselNextBtn = dealsPager.querySelector('[data-deals-carousel-next]');
     const status = dealsPager.querySelector('[data-deals-status]');
     const current = dealsPager.querySelector('[data-deals-current]');
+    const carouselMq = window.matchMedia('(max-width: 1099.98px)');
     let page = 0;
+    let loopWidth = 0;
+    let canLoop = false;
+    let normalizing = false;
+    let settleTimer = 0;
+    let rebuildTimer = 0;
+    let setupBusy = false;
+
+    const clearClones = () => {
+      if (!track) return;
+      track.querySelectorAll('[data-deals-clone]').forEach(function (node) {
+        node.remove();
+      });
+    };
+
+    const cloneCard = (card) => {
+      const clone = card.cloneNode(true);
+      clone.setAttribute('data-deals-clone', '');
+      clone.setAttribute('aria-hidden', 'true');
+      clone.classList.add('is-visible');
+      clone.tabIndex = -1;
+      clone.querySelectorAll('a, button, [tabindex]').forEach(function (el) {
+        el.setAttribute('tabindex', '-1');
+      });
+      return clone;
+    };
+
+    const getStep = () => {
+      if (originalCards.length >= 2) {
+        const delta = originalCards[1].offsetLeft - originalCards[0].offsetLeft;
+        if (delta > 0) return delta;
+      }
+      const card = originalCards[0];
+      if (!card || !track) return Math.max(240, 280);
+      const styles = window.getComputedStyle(track);
+      const gap = parseFloat(styles.columnGap || styles.gap || '0') || 0;
+      return card.getBoundingClientRect().width + gap;
+    };
+
+    const updateCarouselNav = () => {
+      if (!dealsCarousel || !carouselPrevBtn || !carouselNextBtn || !track) return;
+      const canScroll = canLoop || track.scrollWidth > track.clientWidth + 4;
+      dealsCarousel.classList.toggle('is-scrollable', canScroll);
+      carouselPrevBtn.hidden = !canScroll;
+      carouselNextBtn.hidden = !canScroll;
+      carouselPrevBtn.disabled = !canScroll;
+      carouselNextBtn.disabled = !canScroll;
+    };
+
+    const normalizeScroll = () => {
+      if (!track || !canLoop || loopWidth <= 0 || normalizing) return;
+      const left = track.scrollLeft;
+      if (left >= loopWidth * 2 - 0.5 || left < loopWidth - 0.5) {
+        normalizing = true;
+        const prevSnap = track.style.scrollSnapType;
+        track.style.scrollSnapType = 'none';
+        while (track.scrollLeft >= loopWidth * 2) {
+          track.scrollLeft -= loopWidth;
+        }
+        while (track.scrollLeft < loopWidth) {
+          track.scrollLeft += loopWidth;
+        }
+        requestAnimationFrame(function () {
+          track.style.scrollSnapType = prevSnap;
+          normalizing = false;
+        });
+      }
+    };
 
     const renderDealsPage = () => {
       const start = page * pageSize;
-      rows.forEach((row, index) => {
+      originalCards.forEach(function (row, index) {
         row.classList.toggle('is-visible', index >= start && index < start + pageSize);
       });
       if (current) {
@@ -2016,14 +2842,351 @@ document.addEventListener('DOMContentLoaded', function() {
       renderDealsPage();
     };
 
+    const setupDealsMode = () => {
+      if (!track || !dealsCarousel) return;
+
+      clearClones();
+      loopWidth = 0;
+      canLoop = false;
+      track.scrollLeft = 0;
+
+      if (!carouselMq.matches) {
+        dealsPager.classList.remove('is-deals-carousel');
+        dealsCarousel.classList.remove('is-carousel', 'is-scrollable');
+        if (carouselPrevBtn) {
+          carouselPrevBtn.hidden = true;
+          carouselPrevBtn.disabled = true;
+        }
+        if (carouselNextBtn) {
+          carouselNextBtn.hidden = true;
+          carouselNextBtn.disabled = true;
+        }
+        renderDealsPage();
+        return;
+      }
+
+      dealsPager.classList.add('is-deals-carousel');
+      dealsCarousel.classList.add('is-carousel');
+      originalCards.forEach(function (card) {
+        card.classList.add('is-visible');
+      });
+
+      if (originalCards.length < 2) {
+        updateCarouselNav();
+        return;
+      }
+
+      const overflows = track.scrollWidth > track.clientWidth + 4;
+      if (!overflows) {
+        updateCarouselNav();
+        return;
+      }
+
+      const before = document.createDocumentFragment();
+      const after = document.createDocumentFragment();
+      originalCards.forEach(function (card) {
+        before.appendChild(cloneCard(card));
+        after.appendChild(cloneCard(card));
+      });
+      track.insertBefore(before, track.firstChild);
+      track.appendChild(after);
+
+      loopWidth = originalCards[0].offsetLeft;
+      canLoop = loopWidth > 0;
+      if (canLoop) {
+        track.scrollLeft = loopWidth;
+      }
+      updateCarouselNav();
+    };
+
+    const goDealsCarousel = (direction) => {
+      if (!track || (!canLoop && track.scrollWidth <= track.clientWidth + 4)) return;
+      const step = getStep();
+      if (step <= 0) return;
+      track.scrollBy({ left: direction * step, behavior: 'smooth' });
+    };
+
     if (prevBtn) {
-      prevBtn.addEventListener('click', () => goToDealsPage(page - 1));
+      prevBtn.addEventListener('click', function () {
+        goToDealsPage(page - 1);
+      });
     }
     if (nextBtn) {
-      nextBtn.addEventListener('click', () => goToDealsPage(page + 1));
+      nextBtn.addEventListener('click', function () {
+        goToDealsPage(page + 1);
+      });
+    }
+    if (carouselPrevBtn) {
+      carouselPrevBtn.addEventListener('click', function () {
+        goDealsCarousel(-1);
+      });
+    }
+    if (carouselNextBtn) {
+      carouselNextBtn.addEventListener('click', function () {
+        goDealsCarousel(1);
+      });
     }
 
-    renderDealsPage();
+    if (track) {
+      track.addEventListener(
+        'scroll',
+        function () {
+          if (normalizing || !carouselMq.matches) return;
+          updateCarouselNav();
+          window.clearTimeout(settleTimer);
+          settleTimer = window.setTimeout(normalizeScroll, 80);
+        },
+        { passive: true }
+      );
+      track.addEventListener('scrollend', function () {
+        if (carouselMq.matches) normalizeScroll();
+      });
+    }
+
+    const scheduleSetup = () => {
+      window.clearTimeout(rebuildTimer);
+      rebuildTimer = window.setTimeout(function () {
+        if (setupBusy) return;
+        setupBusy = true;
+        setupDealsMode();
+        setupBusy = false;
+      }, 120);
+    };
+
+    if (typeof carouselMq.addEventListener === 'function') {
+      carouselMq.addEventListener('change', scheduleSetup);
+    } else if (typeof carouselMq.addListener === 'function') {
+      carouselMq.addListener(scheduleSetup);
+    }
+
+    window.addEventListener('resize', scheduleSetup);
+    setupDealsMode();
+  }
+
+  const offersPager = document.querySelector('[data-offers-pager]');
+  if (offersPager) {
+    const offersCarousel = offersPager.querySelector('[data-offers-carousel]');
+    const track = offersPager.querySelector('[data-offers-track]');
+    const originalCards = track
+      ? Array.from(track.querySelectorAll('[data-offer-row]')).filter(function (card) {
+          return !card.hasAttribute('data-offers-clone');
+        })
+      : [];
+    const pageSize = Math.max(1, parseInt(offersPager.getAttribute('data-page-size') || '3', 10));
+    const totalPages = Math.max(1, Math.ceil(originalCards.length / pageSize));
+    const prevBtn = offersPager.querySelector('[data-offers-prev]');
+    const nextBtn = offersPager.querySelector('[data-offers-next]');
+    const carouselPrevBtn = offersPager.querySelector('[data-offers-carousel-prev]');
+    const carouselNextBtn = offersPager.querySelector('[data-offers-carousel-next]');
+    const status = offersPager.querySelector('[data-offers-status]');
+    const current = offersPager.querySelector('[data-offers-current]');
+    const carouselMq = window.matchMedia('(max-width: 900px)');
+    let page = 0;
+    let loopWidth = 0;
+    let canLoop = false;
+    let normalizing = false;
+    let settleTimer = 0;
+    let rebuildTimer = 0;
+    let setupBusy = false;
+
+    const clearClones = () => {
+      if (!track) return;
+      track.querySelectorAll('[data-offers-clone]').forEach(function (node) {
+        node.remove();
+      });
+    };
+
+    const cloneCard = (card) => {
+      const clone = card.cloneNode(true);
+      clone.setAttribute('data-offers-clone', '');
+      clone.setAttribute('aria-hidden', 'true');
+      clone.classList.add('is-visible');
+      clone.tabIndex = -1;
+      clone.querySelectorAll('a, button, [tabindex]').forEach(function (el) {
+        el.setAttribute('tabindex', '-1');
+      });
+      return clone;
+    };
+
+    const getStep = () => {
+      if (originalCards.length >= 2) {
+        const delta = originalCards[1].offsetLeft - originalCards[0].offsetLeft;
+        if (delta > 0) return delta;
+      }
+      const card = originalCards[0];
+      if (!card || !track) return Math.max(240, 280);
+      const styles = window.getComputedStyle(track);
+      const gap = parseFloat(styles.columnGap || styles.gap || '0') || 0;
+      return card.getBoundingClientRect().width + gap;
+    };
+
+    const updateCarouselNav = () => {
+      if (!offersCarousel || !carouselPrevBtn || !carouselNextBtn || !track) return;
+      const canScroll = canLoop || track.scrollWidth > track.clientWidth + 4;
+      offersCarousel.classList.toggle('is-scrollable', canScroll);
+      carouselPrevBtn.hidden = !canScroll;
+      carouselNextBtn.hidden = !canScroll;
+      carouselPrevBtn.disabled = !canScroll;
+      carouselNextBtn.disabled = !canScroll;
+    };
+
+    const normalizeScroll = () => {
+      if (!track || !canLoop || loopWidth <= 0 || normalizing) return;
+      const left = track.scrollLeft;
+      if (left >= loopWidth * 2 - 0.5 || left < loopWidth - 0.5) {
+        normalizing = true;
+        const prevSnap = track.style.scrollSnapType;
+        track.style.scrollSnapType = 'none';
+        while (track.scrollLeft >= loopWidth * 2) {
+          track.scrollLeft -= loopWidth;
+        }
+        while (track.scrollLeft < loopWidth) {
+          track.scrollLeft += loopWidth;
+        }
+        requestAnimationFrame(function () {
+          track.style.scrollSnapType = prevSnap;
+          normalizing = false;
+        });
+      }
+    };
+
+    const renderOffersPage = () => {
+      const start = page * pageSize;
+      originalCards.forEach(function (row, index) {
+        row.classList.toggle('is-visible', index >= start && index < start + pageSize);
+      });
+      if (current) {
+        current.textContent = String(page + 1);
+      }
+      if (status) {
+        status.setAttribute('aria-label', 'Página ' + (page + 1) + ' de ' + totalPages);
+      }
+    };
+
+    const goToOffersPage = (nextPage) => {
+      page = (nextPage + totalPages) % totalPages;
+      renderOffersPage();
+    };
+
+    const setupOffersMode = () => {
+      if (!track || !offersCarousel) return;
+
+      clearClones();
+      loopWidth = 0;
+      canLoop = false;
+      track.scrollLeft = 0;
+
+      if (!carouselMq.matches) {
+        offersPager.classList.remove('is-offers-carousel');
+        offersCarousel.classList.remove('is-carousel', 'is-scrollable');
+        if (carouselPrevBtn) {
+          carouselPrevBtn.hidden = true;
+          carouselPrevBtn.disabled = true;
+        }
+        if (carouselNextBtn) {
+          carouselNextBtn.hidden = true;
+          carouselNextBtn.disabled = true;
+        }
+        renderOffersPage();
+        return;
+      }
+
+      offersPager.classList.add('is-offers-carousel');
+      offersCarousel.classList.add('is-carousel');
+      originalCards.forEach(function (card) {
+        card.classList.add('is-visible');
+      });
+
+      if (originalCards.length < 2) {
+        updateCarouselNav();
+        return;
+      }
+
+      const overflows = track.scrollWidth > track.clientWidth + 4;
+      if (!overflows) {
+        updateCarouselNav();
+        return;
+      }
+
+      const before = document.createDocumentFragment();
+      const after = document.createDocumentFragment();
+      originalCards.forEach(function (card) {
+        before.appendChild(cloneCard(card));
+        after.appendChild(cloneCard(card));
+      });
+      track.insertBefore(before, track.firstChild);
+      track.appendChild(after);
+
+      loopWidth = originalCards[0].offsetLeft;
+      canLoop = loopWidth > 0;
+      if (canLoop) {
+        track.scrollLeft = loopWidth;
+      }
+      updateCarouselNav();
+    };
+
+    const goOffersCarousel = (direction) => {
+      if (!track || (!canLoop && track.scrollWidth <= track.clientWidth + 4)) return;
+      const step = getStep();
+      if (step <= 0) return;
+      track.scrollBy({ left: direction * step, behavior: 'smooth' });
+    };
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        goToOffersPage(page - 1);
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        goToOffersPage(page + 1);
+      });
+    }
+    if (carouselPrevBtn) {
+      carouselPrevBtn.addEventListener('click', function () {
+        goOffersCarousel(-1);
+      });
+    }
+    if (carouselNextBtn) {
+      carouselNextBtn.addEventListener('click', function () {
+        goOffersCarousel(1);
+      });
+    }
+
+    if (track) {
+      track.addEventListener(
+        'scroll',
+        function () {
+          if (normalizing || !carouselMq.matches) return;
+          updateCarouselNav();
+          window.clearTimeout(settleTimer);
+          settleTimer = window.setTimeout(normalizeScroll, 80);
+        },
+        { passive: true }
+      );
+      track.addEventListener('scrollend', function () {
+        if (carouselMq.matches) normalizeScroll();
+      });
+    }
+
+    const scheduleSetup = () => {
+      window.clearTimeout(rebuildTimer);
+      rebuildTimer = window.setTimeout(function () {
+        if (setupBusy) return;
+        setupBusy = true;
+        setupOffersMode();
+        setupBusy = false;
+      }, 120);
+    };
+
+    if (typeof carouselMq.addEventListener === 'function') {
+      carouselMq.addEventListener('change', scheduleSetup);
+    } else if (typeof carouselMq.addListener === 'function') {
+      carouselMq.addListener(scheduleSetup);
+    }
+
+    window.addEventListener('resize', scheduleSetup);
+    setupOffersMode();
   }
 
   const categoriesPager = document.querySelector('[data-categories-pager]');
@@ -2085,8 +3248,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const start = page * pageSize;
       applyBentoLayout();
       slides.forEach((slide, index) => {
-        const slot = index - start;
-        const visible = slot >= 0 && slot < pageSize;
+        const slot = (index - start + slides.length) % slides.length;
+        const visible = slot < pageSize;
         clearAnimState(slide);
         syncSlideSlot(slide, slot, visible);
         if (visible && entering) {
@@ -2236,27 +3399,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 2. Control del Pin (Por defecto: Libre -> Clic: Fija)
-  if (stickyContainer && toggleBtn) {
-    const iconHost = toggleBtn.querySelector('[data-lucide-host]') || toggleBtn;
-    
-    toggleBtn.addEventListener('click', function() {
-      // Commuta la clase: si no está, la pone (fija); si está, la saca (libre)
-      const isStickyActive = stickyContainer.classList.toggle('is-sticky');
-      document.body.classList.toggle('search-pinned', isStickyActive);
-      
-      if (isStickyActive) {
-        // MODO FIJO ACTIVADO (Se mueve con la pantalla)
-        if (window.setLucideIcon) setLucideIcon(iconHost, 'pin-off');
-        toggleBtn.classList.replace('btn-outline-secondary', 'btn-primary');
-      } else {
-        // MODO NATURAL/QUIETO (Se queda en su lugar original)
-        if (window.setLucideIcon) setLucideIcon(iconHost, 'pin');
-        toggleBtn.classList.replace('btn-primary', 'btn-outline-secondary');
-      }
-    });
-  }
 });
 </script>
-<script src="./js/search.js?v=<?= filemtime(__DIR__ . '/js/search.js') ?>"></script>
 <?php render_footer(); ?>

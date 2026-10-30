@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/config.php';
 require_admin_or_empresa();
 
@@ -452,6 +452,16 @@ if ($editId > 0 && !in_array($editId, array_map('intval', array_column($products
     }
 }
 
+$isListPartial = (string) ($_GET['partial'] ?? '') === 'list';
+
+if ($isListPartial) {
+    header('Content-Type: text/html; charset=UTF-8');
+    echo '<div data-ap-list-partial>';
+    require __DIR__ . '/admin_productos_list.php';
+    echo '</div>';
+    exit;
+}
+
 render_head('Administrar productos');
 ?>
 <link rel="stylesheet" href="./css/admin.css?v=<?= filemtime(__DIR__ . '/css/admin.css') ?>">
@@ -680,18 +690,12 @@ require __DIR__ . '/auth_toast.php';
         <?php endforeach; ?>
       </ul>
 
-      <section class="dash-panel ap-list animate-reveal-up" aria-labelledby="ap-list-title" style="--lane-accent: var(--brand)">
+      <section class="dash-panel ap-list animate-reveal-up" data-ap-list aria-labelledby="ap-list-title" style="--lane-accent: var(--brand)">
         <header class="dash-panel-head">
           <span class="dash-panel-icon" aria-hidden="true"><?= lucide_icon('list', '', 18) ?></span>
           <div>
             <h2 id="ap-list-title" class="dash-panel-title">Listado de productos</h2>
-            <p class="dash-panel-caption">
-              <?php if ($totalProducts > 0): ?>
-                Mostrando <?= $fmt($fromItem) ?>–<?= $fmt($toItem) ?> de <?= $fmt($totalProducts) ?> · <?= e(AP_ORDENES[$orden]) ?>
-              <?php else: ?>
-                Ningún producto coincide con la búsqueda
-              <?php endif; ?>
-            </p>
+            <?php $apListParts = ['caption']; require __DIR__ . '/admin_productos_list.php'; ?>
           </div>
           <div class="ap-tools">
             <?php if ($activeFilters): ?>
@@ -751,473 +755,118 @@ require __DIR__ . '/auth_toast.php';
           </div>
         </form>
 
-        <?php if ($products): ?>
-          <div class="ap-table">
-          <div class="ap-cols" aria-hidden="true">
-            <span></span>
-            <span>Producto</span>
-            <span>Precio</span>
-            <span>Estado</span>
-            <span>Actualizado</span>
-            <span>Acciones</span>
-          </div>
-
-          <ul class="ap-rows">
-            <?php foreach ($products as $product): ?>
-              <?php
-                $productId = (int) $product['idproductos'];
-                $price = ($product['pro_precio'] !== null && (float) $product['pro_precio'] > 0) ? (float) $product['pro_precio'] : null;
-                $old = $product['pro_precio_anterior'] !== null ? (float) $product['pro_precio_anterior'] : null;
-                $off = ($price !== null && $old !== null && $old > $price) ? (int) round((1 - $price / $old) * 100) : 0;
-                $rise = ($price !== null && $old !== null && $old > 0 && $price > $old) ? (int) round(($price / $old - 1) * 100) : 0;
-                $isActive = (int) $product['pro_activo'] === 1;
-                $inStock = (int) $product['pro_en_stock'] === 1;
-                $brand = trim((string) ($product['pro_marca'] ?? ''));
-                $category = trim((string) ($product['cat_nombre'] ?? ''));
-                $externalUrl = trim((string) ($product['pro_url'] ?? ''));
-                $updated = $product['pro_fecha_scraping'] ?? null;
-              ?>
-              <li class="ap-row <?= $isActive ? '' : 'is-hidden' ?>">
-                <span class="ap-thumb">
-                  <img
-                    src="<?= e(image_url($product['pro_imagen'], $product['pro_nombre'])) ?>"
-                    alt=""
-                    class="dash-thumb ap-thumb-img"
-                    loading="lazy"
-                    decoding="async"
-                  >
-                  <?php if ($off > 0): ?>
-                    <span class="ap-thumb-deal">−<?= $off ?>%</span>
-                  <?php endif; ?>
-                </span>
-
-                <div class="ap-prod">
-                  <a href="producto.php?id=<?= $productId ?>" class="ap-name" title="<?= e($product['pro_nombre']) ?>"><?= e($product['pro_nombre']) ?></a>
-                  <div class="ap-meta">
-                    <span class="ap-meta-id">#<?= $productId ?></span>
-                    <span class="ap-meta-item" title="Marca"><?= lucide_icon('tag', '', 12) ?><span><?= e($brand !== '' ? $brand : 'Sin marca') ?></span></span>
-                    <?php if (!$isEmpresa): ?>
-                      <span class="ap-meta-item" title="Tienda"><?= lucide_icon('store', '', 12) ?><span><?= e($product['tie_nombre']) ?></span></span>
-                    <?php endif; ?>
-                    <span class="ap-meta-item <?= $category === '' ? 'is-warn' : '' ?>" title="Categoría"><?= lucide_icon('folder', '', 12) ?><span><?= e($category !== '' ? $category : 'Sin categoría') ?></span></span>
-                  </div>
-                </div>
-
-                <div class="ap-price">
-                  <?php if ($price !== null): ?>
-                    <strong><?= gs($price) ?></strong>
-                  <?php else: ?>
-                    <span class="ap-pill is-alt"><?= lucide_icon('banknote-x', '', 12) ?>Sin precio</span>
-                  <?php endif; ?>
-                  <?php if ($off > 0): ?>
-                    <span><s><?= gs($old) ?></s><em class="dash-off">−<?= $off ?>%</em></span>
-                  <?php elseif ($rise > 0): ?>
-                    <span><s><?= gs($old) ?></s><em class="dash-off is-up">+<?= $rise ?>%</em></span>
-                  <?php else: ?>
-                    <span class="ap-price-steady">Precio estable</span>
-                  <?php endif; ?>
-                </div>
-
-                <div class="ap-status">
-                  <span class="ap-pill <?= $isActive ? 'is-good' : 'is-bad' ?>">
-                    <?= lucide_icon($isActive ? 'eye' : 'eye-off', '', 12) ?><?= $isActive ? 'Publicado' : 'Oculto' ?>
-                  </span>
-                  <span class="ap-pill <?= $inStock ? 'is-good' : 'is-mid' ?>">
-                    <?= lucide_icon($inStock ? 'package-check' : 'package-search', '', 12) ?><?= e(stock_label($product['pro_en_stock'])) ?>
-                  </span>
-                </div>
-
-                <div class="ap-time">
-                  <strong><?= e(ucfirst(ap_time_ago($updated))) ?></strong>
-                  <?php if (!empty($updated)): ?>
-                    <span><?= e(date('d/m/Y H:i', strtotime((string) $updated))) ?></span>
-                  <?php endif; ?>
-                </div>
-
-                <div class="ap-actions">
-                  <a href="producto.php?id=<?= $productId ?>" class="dash-icon-btn" title="Ver ficha pública" aria-label="Ver ficha de <?= e($product['pro_nombre']) ?>">
-                    <?= lucide_icon('eye', '', 15) ?>
-                  </a>
-                  <?php if ($externalUrl !== ''): ?>
-                    <a href="<?= e($externalUrl) ?>" class="dash-icon-btn" target="_blank" rel="noopener" title="Abrir en la web de la tienda" aria-label="Abrir <?= e($product['pro_nombre']) ?> en la web de la tienda">
-                      <?= lucide_icon('external-link', '', 15) ?>
-                    </a>
-                  <?php endif; ?>
-                  <button
-                    type="button"
-                    class="ap-edit"
-                    data-bs-toggle="modal"
-                    data-bs-target="#productModal<?= $productId ?>"
-                    aria-label="Editar <?= e($product['pro_nombre']) ?>"
-                  >
-                    <?= lucide_icon('square-pen', '', 15) ?><span>Editar</span>
-                  </button>
-                </div>
-              </li>
-            <?php endforeach; ?>
-          </ul>
-          </div>
-
-          <?php if ($totalPages > 1): ?>
-            <nav class="ap-pager" aria-label="Paginación de productos">
-              <span class="ap-pager-info">Página <strong><?= $fmt($page) ?></strong> de <?= $fmt($totalPages) ?></span>
-              <div class="ap-pages">
-                <a
-                  class="ap-page-btn <?= $page <= 1 ? 'is-disabled' : '' ?>"
-                  href="<?= e(build_admin_productos_url(['page' => max(1, $page - 1)])) ?>"
-                  aria-label="Página anterior"
-                  <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : '' ?>
-                ><?= lucide_icon('chevron-left', '', 15) ?></a>
-                <?php foreach ($pageItems as $item): ?>
-                  <?php if ($item === null): ?>
-                    <span class="ap-page-gap" aria-hidden="true">…</span>
-                  <?php else: ?>
-                    <a
-                      class="ap-page-btn <?= $item === $page ? 'is-current' : '' ?>"
-                      href="<?= e(build_admin_productos_url(['page' => $item])) ?>"
-                      <?= $item === $page ? 'aria-current="page"' : '' ?>
-                    ><?= $fmt($item) ?></a>
-                  <?php endif; ?>
-                <?php endforeach; ?>
-                <a
-                  class="ap-page-btn <?= $page >= $totalPages ? 'is-disabled' : '' ?>"
-                  href="<?= e(build_admin_productos_url(['page' => min($totalPages, $page + 1)])) ?>"
-                  aria-label="Página siguiente"
-                  <?= $page >= $totalPages ? 'aria-disabled="true" tabindex="-1"' : '' ?>
-                ><?= lucide_icon('chevron-right', '', 15) ?></a>
-              </div>
-            </nav>
-          <?php endif; ?>
-        <?php else: ?>
-          <div class="ap-empty" role="status">
-            <span class="ap-empty-icon"><?= lucide_icon('search-x', '', 20) ?></span>
-            <strong class="ap-empty-title">
-              <?php if ($q !== ''): ?>
-                Sin resultados para <span class="ap-empty-term">“<?= e($q) ?>”</span>
-              <?php else: ?>
-                No encontramos productos
-              <?php endif; ?>
-            </strong>
-            <p class="ap-empty-text"><?= $activeFilters
-              ? 'Revisa la ortografía, prueba con otras palabras o quita algunos filtros para ampliar la búsqueda.'
-              : 'Revisa la ortografía o prueba con otras palabras para ampliar la búsqueda.' ?></p>
-            <?php if ($activeFilters || $q !== ''): ?>
-              <div class="ap-empty-actions">
-                <?php if ($activeFilters): ?>
-                  <a href="<?= e(admin_productos_url_reset_filters($q)) ?>" class="ap-empty-btn">
-                    <?= lucide_icon('rotate-ccw', '', 14) ?>Limpiar filtros
-                  </a>
-                <?php endif; ?>
-                <?php if ($q !== ''): ?>
-                  <a href="<?= e(build_admin_productos_url(['q' => '', 'page' => 1])) ?>" class="ap-empty-btn is-ghost">
-                    <?= lucide_icon('x', '', 14) ?>Borrar búsqueda
-                  </a>
-                <?php endif; ?>
-              </div>
-            <?php endif; ?>
-          </div>
-        <?php endif; ?>
+        <?php $apListParts = ['results']; require __DIR__ . '/admin_productos_list.php'; ?>
       </section>
 
     </div>
   </div>
 </section>
 
-<?php if ($modalProducts): ?>
-  <?php foreach ($modalProducts as $product): ?>
-    <?php
-      $mId = (int) $product['idproductos'];
-      $mName = (string) $product['pro_nombre'];
-      $mBrand = trim((string) ($product['pro_marca'] ?? ''));
-      $mCategory = trim((string) ($product['cat_nombre'] ?? ''));
-      $mImage = image_url($product['pro_imagen'], $mName);
-      $mUrl = trim((string) ($product['pro_url'] ?? ''));
-      $mPrice = ($product['pro_precio'] ?? '') !== '' && $product['pro_precio'] !== null ? (string) round((float) $product['pro_precio']) : '';
-      $mOld = ($product['pro_precio_anterior'] ?? '') !== '' && $product['pro_precio_anterior'] !== null ? (string) round((float) $product['pro_precio_anterior']) : '';
-      $mOff = ($mPrice !== '' && $mOld !== '' && (float) $mOld > (float) $mPrice && (float) $mPrice > 0) ? (int) round((1 - (float) $mPrice / (float) $mOld) * 100) : 0;
-      $mActive = (int) $product['pro_activo'] === 1;
-      $mStock = (int) $product['pro_en_stock'] === 1;
-      $fid = 'pe' . $mId;
-    ?>
-    <div class="modal fade admin-modal pe-modal" id="productModal<?= $mId ?>" tabindex="-1" aria-labelledby="<?= $fid ?>-title" aria-hidden="true">
-      <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <form method="post" class="modal-content pe-content" data-pe-form>
-          <input type="hidden" name="action" value="save_product">
-          <input type="hidden" name="idproductos" value="<?= $mId ?>">
-          <input type="hidden" name="return_query" value="<?= e($returnQuery) ?>">
-
-          <div class="modal-header pe-header">
-            <div class="pe-heading">
-              <span class="pe-heading-icon" aria-hidden="true"><?= lucide_icon('square-pen', '', 18) ?></span>
-              <div class="pe-heading-text">
-                <span class="pe-kicker">Editar producto <span class="pe-kicker-id">#<?= $mId ?></span></span>
-                <h2 class="modal-title pe-title" id="<?= $fid ?>-title" title="<?= e($mName) ?>"><?= e($mName) ?></h2>
-              </div>
-            </div>
-            <button type="button" class="pe-close" data-bs-dismiss="modal" aria-label="Cerrar"><?= lucide_icon('x', '', 18) ?></button>
-          </div>
-
-          <div class="modal-body pe-body">
-            <div class="pe-layout">
-              <div class="pe-main">
-                <section class="pe-group is-info">
-                  <header class="pe-group-head">
-                    <span class="pe-group-icon" aria-hidden="true"><?= lucide_icon('file-text', '', 14) ?></span>
-                    <div class="pe-group-copy">
-                      <h3 class="pe-group-title">Información básica</h3>
-                      <p class="pe-group-hint">Lo que ve el usuario en el buscador.</p>
-                    </div>
-                  </header>
-                  <div class="pe-field">
-                    <label class="form-label" for="<?= $fid ?>-nombre">Nombre <span class="pe-req" aria-hidden="true">*</span></label>
-                    <input type="text" id="<?= $fid ?>-nombre" name="pro_nombre" class="form-control" value="<?= e($mName) ?>" required data-pe-sync="name">
-                  </div>
-                  <div class="pe-row">
-                    <div class="pe-field">
-                      <label class="form-label" for="<?= $fid ?>-marca">Marca</label>
-                      <input type="text" id="<?= $fid ?>-marca" name="pro_marca" class="form-control" value="<?= e($mBrand) ?>" data-pe-sync="brand">
-                    </div>
-                    <div class="pe-field">
-                      <label class="form-label" for="<?= $fid ?>-cat">Categoría</label>
-                      <select id="<?= $fid ?>-cat" name="categorias_idcategorias" class="form-select" data-pe-sync="cat">
-                        <option value="">Sin categoría</option>
-                        <?php foreach ($categories as $cat): ?>
-                          <option value="<?= (int) $cat['idcategorias'] ?>" <?= (int) $product['categorias_idcategorias'] === (int) $cat['idcategorias'] ? 'selected' : '' ?>><?= e($cat['cat_nombre']) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="pe-field">
-                    <label class="form-label" for="<?= $fid ?>-tienda">Tienda<?php if (!$isEmpresa): ?> <span class="pe-req" aria-hidden="true">*</span><?php endif; ?></label>
-                    <?php if ($isEmpresa): ?>
-                      <input type="text" id="<?= $fid ?>-tienda" class="form-control" value="<?= e($product['tie_nombre']) ?>" readonly>
-                      <input type="hidden" name="tiendas_idtiendas" value="<?= (int) $myStoreId ?>">
-                    <?php else: ?>
-                      <select id="<?= $fid ?>-tienda" name="tiendas_idtiendas" class="form-select" required>
-                        <?php foreach ($stores as $store): ?>
-                          <option value="<?= (int) $store['idtiendas'] ?>" <?= (int) $product['tiendas_idtiendas'] === (int) $store['idtiendas'] ? 'selected' : '' ?>><?= e($store['tie_nombre']) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    <?php endif; ?>
-                  </div>
-                  <div class="pe-field is-grow">
-                    <label class="form-label" for="<?= $fid ?>-desc">Descripción</label>
-                    <textarea id="<?= $fid ?>-desc" name="pro_descripcion" class="form-control" rows="3" placeholder="Características principales del producto"><?= e($product['pro_descripcion']) ?></textarea>
-                  </div>
-                </section>
-
-                <div class="pe-stack">
-                  <section class="pe-group is-price">
-                    <header class="pe-group-head">
-                      <span class="pe-group-icon" aria-hidden="true"><?= lucide_icon('banknote', '', 14) ?></span>
-                      <div class="pe-group-copy">
-                        <h3 class="pe-group-title">Precio</h3>
-                        <p class="pe-group-hint">Si el anterior es mayor, es oferta.</p>
-                      </div>
-                    </header>
-                    <div class="pe-row">
-                      <div class="pe-field">
-                        <label class="form-label" for="<?= $fid ?>-precio">Precio actual <span class="pe-req" aria-hidden="true">*</span></label>
-                        <div class="pe-affix">
-                          <span class="pe-affix-tag" aria-hidden="true">Gs.</span>
-                          <input type="number" id="<?= $fid ?>-precio" name="pro_precio" class="form-control" value="<?= e($mPrice) ?>" min="0" step="1" inputmode="numeric" placeholder="0" required data-pe-sync="price">
-                        </div>
-                      </div>
-                      <div class="pe-field">
-                        <label class="form-label" for="<?= $fid ?>-old">Precio anterior</label>
-                        <div class="pe-affix">
-                          <span class="pe-affix-tag" aria-hidden="true">Gs.</span>
-                          <input type="number" id="<?= $fid ?>-old" name="pro_precio_anterior" class="form-control" value="<?= e($mOld) ?>" min="0" step="1" inputmode="numeric" placeholder="Opcional" title="Si es mayor al precio actual, se muestra como oferta" data-pe-sync="old">
-                        </div>
-                      </div>
-                    </div>
-                    <p class="pe-price-note" data-pe-note aria-live="polite" hidden>
-                      <?= lucide_icon('info', 'pe-price-note-icon', 15) ?>
-                      <span data-pe-note-text></span>
-                    </p>
-                  </section>
-
-                  <section class="pe-group is-links">
-                    <header class="pe-group-head">
-                      <span class="pe-group-icon" aria-hidden="true"><?= lucide_icon('link', '', 14) ?></span>
-                      <div class="pe-group-copy">
-                        <h3 class="pe-group-title">Enlaces</h3>
-                        <p class="pe-group-hint">Página del producto e imagen.</p>
-                      </div>
-                    </header>
-                    <div class="pe-field">
-                      <label class="form-label" for="<?= $fid ?>-url">URL del producto en la tienda</label>
-                      <div class="pe-affix">
-                        <span class="pe-affix-tag" aria-hidden="true"><?= lucide_icon('globe', '', 15) ?></span>
-                        <input type="url" id="<?= $fid ?>-url" name="pro_url" class="form-control" value="<?= e($mUrl) ?>" placeholder="https://" data-pe-link>
-                        <a href="<?= e($mUrl !== '' ? $mUrl : '#') ?>" class="pe-affix-btn" target="_blank" rel="noopener" title="Abrir enlace" aria-label="Abrir enlace del producto en una pestaña nueva" data-pe-open <?= $mUrl === '' ? 'hidden' : '' ?>><?= lucide_icon('external-link', '', 15) ?></a>
-                      </div>
-                    </div>
-                    <div class="pe-field">
-                      <label class="form-label" for="<?= $fid ?>-img">URL de la imagen</label>
-                      <div class="pe-affix">
-                        <span class="pe-affix-tag" aria-hidden="true"><?= lucide_icon('image', '', 15) ?></span>
-                        <input type="text" id="<?= $fid ?>-img" name="pro_imagen" class="form-control" value="<?= e($product['pro_imagen']) ?>" placeholder="https://…/imagen.jpg" data-pe-sync="img" data-pe-link>
-                        <a href="<?= e($mImage !== '' ? $mImage : '#') ?>" class="pe-affix-btn" target="_blank" rel="noopener" title="Abrir imagen" aria-label="Abrir imagen en una pestaña nueva" data-pe-open <?= $mImage === '' ? 'hidden' : '' ?>><?= lucide_icon('external-link', '', 15) ?></a>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-              </div>
-
-              <aside class="pe-aside">
-                <span class="pe-aside-label">Vista previa</span>
-                  <div class="pe-preview-media <?= $mImage === '' ? 'is-empty' : '' ?>" data-pe-media>
-                    <img src="<?= e($mImage) ?>" alt="" data-pe-img>
-                    <span class="pe-preview-empty" aria-hidden="true"><?= lucide_icon('image-off', '', 28) ?><span>Sin imagen</span></span>
-                    <span class="pe-preview-flag" data-pe-flag <?= $mOff > 0 ? '' : 'hidden' ?>>−<?= $mOff ?>%</span>
-                  </div>
-                  <div class="pe-preview-body">
-                    <span class="pe-preview-tags">
-                      <span class="pe-preview-cat" data-pe-out="cat"><?= e($mCategory !== '' ? $mCategory : 'Sin categoría') ?></span>
-                      <span class="pe-preview-brand" data-pe-out="brand" <?= $mBrand === '' ? 'hidden' : '' ?>><?= e($mBrand) ?></span>
-                    </span>
-                    <strong class="pe-preview-name" data-pe-out="name"><?= e($mName) ?></strong>
-                    <span class="pe-preview-price">
-                      <span data-pe-out="price"><?= $mPrice !== '' && (float) $mPrice > 0 ? gs($mPrice) : 'Sin precio' ?></span>
-                      <s data-pe-out="old" <?= $mOff > 0 ? '' : 'hidden' ?>><?= $mOld !== '' ? gs($mOld) : '' ?></s>
-                    </span>
-                  </div>
-
-                <div class="pe-switches">
-                  <label class="pe-switch" for="<?= $fid ?>-activo">
-                    <span class="pe-switch-copy">
-                      <strong>Publicado</strong>
-                      <small>Visible en el buscador</small>
-                    </span>
-                    <input type="hidden" name="pro_activo" value="0">
-                    <input type="checkbox" id="<?= $fid ?>-activo" class="pe-switch-input" name="pro_activo" value="1" role="switch" <?= $mActive ? 'checked' : '' ?>>
-                    <span class="pe-switch-track" aria-hidden="true"></span>
-                  </label>
-                  <label class="pe-switch" for="<?= $fid ?>-stock">
-                    <span class="pe-switch-copy">
-                      <strong>En stock</strong>
-                      <small>Apagado: “Consultar stock”</small>
-                    </span>
-                    <input type="hidden" name="pro_en_stock" value="0">
-                    <input type="checkbox" id="<?= $fid ?>-stock" class="pe-switch-input" name="pro_en_stock" value="1" role="switch" <?= $mStock ? 'checked' : '' ?>>
-                    <span class="pe-switch-track" aria-hidden="true"></span>
-                  </label>
-                </div>
-
-                <a href="producto.php?id=<?= $mId ?>" class="pe-aside-link" target="_blank" rel="noopener">
-                  <?= lucide_icon('eye', '', 15) ?><span>Ver ficha pública</span><?= lucide_icon('arrow-up-right', 'pe-aside-link-arrow', 14) ?>
-                </a>
-              </aside>
-            </div>
-          </div>
-
-          <div class="modal-footer pe-footer">
-            <span class="pe-footer-hint"><span class="pe-req" aria-hidden="true">*</span> Campos obligatorios</span>
-            <div class="pe-footer-actions">
-              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-              <button type="submit" class="btn btn-primary"><?= lucide_icon('check', '', 16) ?>Guardar cambios</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  <?php endforeach; ?>
-<?php endif; ?>
+<?php $apListParts = ['modals']; require __DIR__ . '/admin_productos_list.php'; ?>
 
 <script>
-document.querySelectorAll('[data-pe-form]').forEach(function(form) {
-  const field = function(key) { return form.querySelector('[data-pe-sync="' + key + '"]'); };
-  const out = function(key) { return form.querySelector('[data-pe-out="' + key + '"]'); };
-  const gs = function(n) { return 'Gs. ' + Math.round(n).toLocaleString('es-PY'); };
+function initProductEditForms(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('[data-pe-form]').forEach(function(form) {
+    if (form.dataset.peReady === '1') return;
+    form.dataset.peReady = '1';
 
-  const media = form.querySelector('[data-pe-media]');
-  const img = form.querySelector('[data-pe-img]');
-  const flag = form.querySelector('[data-pe-flag]');
-  const note = form.querySelector('[data-pe-note]');
-  const noteText = note.querySelector('[data-pe-note-text]');
+    const field = function(key) { return form.querySelector('[data-pe-sync="' + key + '"]'); };
+    const out = function(key) { return form.querySelector('[data-pe-out="' + key + '"]'); };
+    const gs = function(n) { return 'Gs. ' + Math.round(n).toLocaleString('es-PY'); };
 
-  img.addEventListener('load', function() { media.classList.remove('is-empty'); });
-  img.addEventListener('error', function() { media.classList.add('is-empty'); });
-  if (img.getAttribute('src') && img.complete && img.naturalWidth === 0) {
-    media.classList.add('is-empty');
-  }
+    const media = form.querySelector('[data-pe-media]');
+    const img = form.querySelector('[data-pe-img]');
+    const flag = form.querySelector('[data-pe-flag]');
+    const note = form.querySelector('[data-pe-note]');
+    const noteText = note.querySelector('[data-pe-note-text]');
 
-  const syncImage = function() {
-    const value = field('img').value.trim();
-    if (value === '' || value.startsWith('data:image')) {
-      img.removeAttribute('src');
+    img.addEventListener('load', function() { media.classList.remove('is-empty'); });
+    img.addEventListener('error', function() { media.classList.add('is-empty'); });
+    if (img.getAttribute('src') && img.complete && img.naturalWidth === 0) {
       media.classList.add('is-empty');
-    } else if (img.getAttribute('src') !== value) {
-      img.src = value;
     }
-  };
 
-  const syncText = function() {
-    const name = field('name').value.trim();
-    const brand = field('brand').value.trim();
-    const cat = field('cat');
-    out('name').textContent = name || 'Sin nombre';
-    out('brand').textContent = brand;
-    out('brand').hidden = brand === '';
-    out('cat').textContent = cat.value ? cat.options[cat.selectedIndex].text : 'Sin categoría';
-  };
+    const syncImage = function() {
+      const value = field('img').value.trim();
+      if (value === '' || value.startsWith('data:image')) {
+        img.removeAttribute('src');
+        media.classList.add('is-empty');
+      } else if (img.getAttribute('src') !== value) {
+        img.src = value;
+      }
+    };
 
-  const syncPrice = function() {
-    const price = parseFloat(field('price').value);
-    const old = parseFloat(field('old').value);
-    const hasPrice = price > 0;
-    const off = hasPrice && old > price ? Math.round((1 - price / old) * 100) : 0;
+    const syncText = function() {
+      const name = field('name').value.trim();
+      const brand = field('brand').value.trim();
+      const cat = field('cat');
+      out('name').textContent = name || 'Sin nombre';
+      out('brand').textContent = brand;
+      out('brand').hidden = brand === '';
+      out('cat').textContent = cat.value ? cat.options[cat.selectedIndex].text : 'Sin categoría';
+    };
 
-    out('price').textContent = hasPrice ? gs(price) : 'Sin precio';
-    out('old').textContent = off > 0 ? gs(old) : '';
-    out('old').hidden = off <= 0;
-    flag.textContent = '−' + off + '%';
-    flag.hidden = off <= 0;
+    const syncPrice = function() {
+      const price = parseFloat(field('price').value);
+      const old = parseFloat(field('old').value);
+      const hasPrice = price > 0;
+      const off = hasPrice && old > price ? Math.round((1 - price / old) * 100) : 0;
 
-    let message = '';
-    note.classList.remove('is-good', 'is-warn');
-    if (off > 0) {
-      note.classList.add('is-good');
-      message = 'Oferta del ' + off + '%: el usuario ahorra ' + gs(old - price) + '.';
-    } else if (hasPrice && old > 0 && old < price) {
-      note.classList.add('is-warn');
-      message = 'Precio anterior menor: no se muestra como oferta.';
-    }
-    noteText.textContent = message;
-    note.hidden = message === '';
-  };
+      out('price').textContent = hasPrice ? gs(price) : 'Sin precio';
+      out('old').textContent = off > 0 ? gs(old) : '';
+      out('old').hidden = off <= 0;
+      flag.textContent = '−' + off + '%';
+      flag.hidden = off <= 0;
 
-  const links = Array.from(form.querySelectorAll('[data-pe-link]')).map(function(input) {
-    return { input: input, open: input.parentElement.querySelector('[data-pe-open]') };
-  });
-  const syncUrl = function() {
-    links.forEach(function(link) {
-      const value = link.input.value.trim();
-      link.open.hidden = !/^https?:\/\//i.test(value);
-      link.open.href = value || '#';
+      let message = '';
+      note.classList.remove('is-good', 'is-warn');
+      if (off > 0) {
+        note.classList.add('is-good');
+        message = 'Oferta del ' + off + '%: el usuario ahorra ' + gs(old - price) + '.';
+      } else if (hasPrice && old > 0 && old < price) {
+        note.classList.add('is-warn');
+        message = 'Precio anterior menor: no se muestra como oferta.';
+      }
+      noteText.textContent = message;
+      note.hidden = message === '';
+    };
+
+    const links = Array.from(form.querySelectorAll('[data-pe-link]')).map(function(input) {
+      return { input: input, open: input.parentElement.querySelector('[data-pe-open]') };
     });
-  };
+    const syncUrl = function() {
+      links.forEach(function(link) {
+        const value = link.input.value.trim();
+        link.open.hidden = !/^https?:\/\//i.test(value);
+        link.open.href = value || '#';
+      });
+    };
 
-  field('img').addEventListener('input', syncImage);
-  ['name', 'brand'].forEach(function(key) { field(key).addEventListener('input', syncText); });
-  field('cat').addEventListener('change', syncText);
-  ['price', 'old'].forEach(function(key) { field(key).addEventListener('input', syncPrice); });
-  links.forEach(function(link) { link.input.addEventListener('input', syncUrl); });
-  form.addEventListener('reset', function() {
-    setTimeout(function() { syncImage(); syncText(); syncPrice(); syncUrl(); });
+    field('img').addEventListener('input', syncImage);
+    ['name', 'brand'].forEach(function(key) { field(key).addEventListener('input', syncText); });
+    field('cat').addEventListener('change', syncText);
+    ['price', 'old'].forEach(function(key) { field(key).addEventListener('input', syncPrice); });
+    links.forEach(function(link) { link.input.addEventListener('input', syncUrl); });
+    form.addEventListener('reset', function() {
+      setTimeout(function() { syncImage(); syncText(); syncPrice(); syncUrl(); });
+    });
+
+    syncPrice();
+    syncUrl();
   });
 
-  syncPrice();
-  syncUrl();
-});
-
-document.querySelectorAll('.pe-modal').forEach(function(modal) {
-  modal.addEventListener('hidden.bs.modal', function() {
-    const form = modal.querySelector('[data-pe-form]');
-    if (form) form.reset();
+  scope.querySelectorAll('.pe-modal').forEach(function(modal) {
+    if (modal.dataset.peModalReady === '1') return;
+    modal.dataset.peModalReady = '1';
+    modal.addEventListener('hidden.bs.modal', function() {
+      const form = modal.querySelector('[data-pe-form]');
+      if (form) form.reset();
+    });
   });
-});
+}
+
+initProductEditForms(document);
 
 document.querySelectorAll('[data-ap-carousel]').forEach(function(carousel) {
   const track = carousel.querySelector('.ap-mix-legend');
@@ -1268,6 +917,285 @@ document.querySelectorAll('[data-ap-carousel]').forEach(function(carousel) {
 });
 
 (function() {
+  let listRequest = 0;
+
+  function listPartialUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.set('partial', 'list');
+    next.hash = '';
+    return next.toString();
+  }
+
+  function publicListUrl(url) {
+    const next = new URL(url, window.location.href);
+    next.searchParams.delete('partial');
+    return next.pathname + next.search + next.hash;
+  }
+
+  function refreshListVisuals(root) {
+    if (!root) return;
+    if (window.refreshLucideIcons) window.refreshLucideIcons();
+    if (window.applyProductImageFallback) {
+      root.querySelectorAll('img').forEach(function(img) {
+        if (!(img.getAttribute('src') || '').trim()) {
+          window.applyProductImageFallback(img);
+        }
+      });
+    }
+  }
+
+  function loadProductList(url, options) {
+    const opts = options || {};
+    const list = document.querySelector('[data-ap-list]');
+    if (!list) return Promise.resolve();
+
+    const scrollY = window.scrollY;
+    const requestId = ++listRequest;
+    list.classList.add('is-loading');
+    list.setAttribute('aria-busy', 'true');
+
+    return fetch(listPartialUrl(url), {
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'text/html'
+      }
+    })
+      .then(function(response) {
+        if (!response.ok) throw new Error('No se pudo cargar el listado.');
+        return response.text();
+      })
+      .then(function(html) {
+        if (requestId !== listRequest) return;
+
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const partial = doc.querySelector('[data-ap-list-partial]') || doc.body;
+
+        ['caption', 'results'].forEach(function(slot) {
+          const next = partial.querySelector('[data-ap-slot="' + slot + '"]');
+          const current = document.querySelector('[data-ap-slot="' + slot + '"]');
+          if (!next || !current) return;
+          current.replaceWith(document.importNode(next, true));
+        });
+
+        const nextModals = partial.querySelector('[data-ap-slot="modals"]');
+        let currentModals = document.querySelector('[data-ap-slot="modals"]');
+        if (nextModals) {
+          const imported = document.importNode(nextModals, true);
+          if (currentModals) {
+            currentModals.replaceWith(imported);
+          } else {
+            list.after(imported);
+          }
+          currentModals = imported;
+          initProductEditForms(currentModals);
+        }
+
+        const pageRoot = document.querySelector('[data-ap-list]');
+        refreshListVisuals(pageRoot);
+        if (currentModals) refreshListVisuals(currentModals);
+
+        const publicUrl = publicListUrl(url);
+        if (opts.replace) {
+          history.replaceState({ adminProductos: true }, '', publicUrl);
+        } else {
+          history.pushState({ adminProductos: true }, '', publicUrl);
+        }
+
+        window.scrollTo(0, scrollY);
+      })
+      .catch(function() {
+        if (requestId !== listRequest) return;
+        window.location.href = publicListUrl(url);
+      })
+      .finally(function() {
+        if (requestId !== listRequest) return;
+        const current = document.querySelector('[data-ap-list]');
+        if (current) {
+          current.classList.remove('is-loading');
+          current.removeAttribute('aria-busy');
+        }
+      });
+  }
+
+  const FILAS_DEFAULT = '<?= AP_FILAS_DEFAULT ?>';
+  const FILTER_DEFAULTS = {
+    tienda: '0',
+    categoria: '0',
+    estado: '',
+    stock: '',
+    vista: '',
+    orden: 'recientes',
+    filas: FILAS_DEFAULT
+  };
+
+  function isAdminProductosUrl(url) {
+    try {
+      const next = new URL(url, window.location.href);
+      return next.origin === window.location.origin && /\/admin_productos\.php$/i.test(next.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function buildListUrlFromForm(form) {
+    const data = new FormData(form);
+    const params = new URLSearchParams();
+    data.forEach(function(value, key) {
+      const text = String(value);
+      if (text === '' || text === '0') return;
+      if (key === 'orden' && text === 'recientes') return;
+      if (key === 'filas' && text === FILAS_DEFAULT) return;
+      if (key === 'page') return;
+      params.set(key, text);
+    });
+    const query = params.toString();
+    return 'admin_productos.php' + (query ? '?' + query : '');
+  }
+
+  function buildResetFiltersUrl() {
+    const params = new URLSearchParams();
+    const q = document.getElementById('ap-q');
+    const rows = document.querySelector('[data-ap-rows]');
+    if (q && q.value.trim() !== '') params.set('q', q.value.trim());
+    if (rows && rows.value !== FILAS_DEFAULT) params.set('filas', rows.value);
+    const query = params.toString();
+    return 'admin_productos.php' + (query ? '?' + query : '');
+  }
+
+  function updateSearchClear() {
+    const search = document.querySelector('.ap-search');
+    const q = document.getElementById('ap-q');
+    if (!search || !q) return;
+
+    let clear = search.querySelector('.ap-search-clear');
+    const term = q.value.trim();
+    if (term !== '') {
+      const href = buildListUrlFromForm(document.querySelector('[data-ap-filters]'));
+      const next = new URL(href, window.location.href);
+      next.searchParams.delete('q');
+      if (!clear) {
+        clear = document.createElement('a');
+        clear.className = 'ap-search-clear';
+        clear.title = 'Borrar búsqueda';
+        clear.setAttribute('aria-label', 'Borrar búsqueda');
+        clear.innerHTML = <?= json_encode(lucide_icon('x', '', 14)) ?>;
+        const go = search.querySelector('.ap-search-go');
+        search.insertBefore(clear, go || null);
+        if (window.refreshLucideIcons) window.refreshLucideIcons();
+      }
+      clear.href = next.pathname + next.search;
+    } else if (clear) {
+      clear.remove();
+    }
+  }
+
+  function updateFilterChrome() {
+    const form = document.querySelector('[data-ap-filters]');
+    const tools = document.querySelector('.ap-tools');
+    if (!form || !tools) return;
+
+    let active = false;
+    form.querySelectorAll('select[name]').forEach(function(select) {
+      const def = FILTER_DEFAULTS[select.name];
+      const isSet = def !== undefined ? select.value !== def : select.value !== '' && select.value !== '0';
+      const box = select.closest('.ap-select');
+      if (box) box.classList.toggle('is-set', isSet);
+      if (isSet) active = true;
+    });
+
+    const rows = document.querySelector('[data-ap-rows]');
+    if (rows) {
+      const box = rows.closest('.ap-rows-select');
+      if (box) box.classList.toggle('is-set', rows.value !== FILAS_DEFAULT);
+      const value = box && box.querySelector('.ap-rows-select-value');
+      if (value) value.textContent = rows.value;
+    }
+
+    let reset = tools.querySelector('.ap-reset');
+    if (active) {
+      if (!reset) {
+        reset = document.createElement('a');
+        reset.className = 'ap-reset';
+        reset.innerHTML = <?= json_encode(lucide_icon('rotate-ccw', '', 13) . 'Limpiar filtros') ?>;
+        const search = tools.querySelector('.ap-search');
+        tools.insertBefore(reset, search || tools.firstChild);
+        if (window.refreshLucideIcons) window.refreshLucideIcons();
+      }
+      reset.href = buildResetFiltersUrl();
+    } else if (reset) {
+      reset.remove();
+    }
+
+    updateSearchClear();
+  }
+
+  function syncFiltersFromUrl(url) {
+    const form = document.querySelector('[data-ap-filters]');
+    if (!form) return;
+
+    const next = new URL(url, window.location.href);
+    const read = function(name, fallback) {
+      return next.searchParams.has(name) ? next.searchParams.get(name) : fallback;
+    };
+
+    Object.keys(FILTER_DEFAULTS).forEach(function(name) {
+      if (name === 'filas') return;
+      const select = form.querySelector('select[name="' + name + '"]');
+      if (select) select.value = read(name, FILTER_DEFAULTS[name]);
+    });
+
+    const rows = document.querySelector('[data-ap-rows]');
+    if (rows) rows.value = read('filas', FILAS_DEFAULT);
+
+    const q = document.getElementById('ap-q');
+    if (q) q.value = read('q', '');
+
+    updateFilterChrome();
+  }
+
+  function navigateProductList(url, options) {
+    const opts = options || {};
+    return loadProductList(url, opts).then(function() {
+      if (opts.syncForm) syncFiltersFromUrl(url);
+      else updateFilterChrome();
+    });
+  }
+
+  document.addEventListener('click', function(event) {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const pagerLink = event.target.closest('[data-ap-list] .ap-pager a.ap-page-btn[href]');
+    if (pagerLink) {
+      if (pagerLink.target === '_blank' || pagerLink.hasAttribute('download')) return;
+      if (pagerLink.classList.contains('is-disabled') || pagerLink.getAttribute('aria-disabled') === 'true') {
+        event.preventDefault();
+        return;
+      }
+      if (!isAdminProductosUrl(pagerLink.href)) return;
+      event.preventDefault();
+      navigateProductList(pagerLink.href);
+      return;
+    }
+
+    const filterLink = event.target.closest(
+      '.ap-tools .ap-reset[href], .ap-search-clear[href], [data-ap-list] .ap-empty-btn[href]'
+    );
+    if (filterLink) {
+      if (filterLink.target === '_blank' || filterLink.hasAttribute('download')) return;
+      if (!isAdminProductosUrl(filterLink.href)) return;
+      event.preventDefault();
+      navigateProductList(filterLink.href, { syncForm: true });
+    }
+  });
+
+  window.addEventListener('popstate', function() {
+    if (!document.querySelector('[data-ap-list]')) return;
+    navigateProductList(window.location.href, { replace: true, syncForm: true });
+  });
+
   const form = document.querySelector('[data-ap-filters]');
   if (form) {
     const fitSelectLabels = function() {
@@ -1285,14 +1213,22 @@ document.querySelectorAll('[data-ap-carousel]').forEach(function(carousel) {
 
     form.addEventListener('formdata', function(event) {
       Array.from(event.formData.entries()).forEach(function([key, value]) {
-        if (value === '' || value === '0' || (key === 'orden' && value === 'recientes') || (key === 'filas' && value === '<?= AP_FILAS_DEFAULT ?>')) {
+        if (value === '' || value === '0' || (key === 'orden' && value === 'recientes') || (key === 'filas' && value === FILAS_DEFAULT)) {
           event.formData.delete(key);
         }
       });
     });
 
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      const url = buildListUrlFromForm(form);
+      updateFilterChrome();
+      navigateProductList(url);
+    });
+
     form.addEventListener('change', function(event) {
       if (event.target.matches('select')) {
+        updateFilterChrome();
         form.requestSubmit();
       }
     });
@@ -1300,7 +1236,7 @@ document.querySelectorAll('[data-ap-carousel]').forEach(function(carousel) {
     const rowsSelect = document.querySelector('[data-ap-rows]');
     if (rowsSelect) {
       rowsSelect.addEventListener('change', function() {
-        rowsSelect.parentElement.querySelector('.ap-rows-select-value').textContent = rowsSelect.value;
+        updateFilterChrome();
         form.requestSubmit();
       });
     }

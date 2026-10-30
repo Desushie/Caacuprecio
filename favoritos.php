@@ -466,8 +466,6 @@ render_navbar('favoritos');
       </form>
     <?php else: ?>
       <div class="fv-empty animate-reveal-up">
-        <span class="fv-empty-mark" aria-hidden="true"><?= lucide_icon('star', '', 120) ?></span>
-
         <div class="fv-empty-main">
           <p class="pd-kicker">Planificador de compra</p>
           <h1 id="fav-title" class="fv-title">Todavía no tienes <span class="fv-empty-hl">favoritos</span></h1>

@@ -58,3 +58,38 @@ function cp_should_track(string $bucket, int $max, int $windowSeconds = 600): bo
         && !cp_is_bot_request()
         && cp_within_rate($bucket, $max, $windowSeconds);
 }
+
+/**
+ * Historial personal de productos vistos (UX de sesión).
+ * Independiente del tracking analítico: así “Vistos recientemente” sigue
+ * funcionando aunque DNT/GPC bloquee el insert en productos_vistos.
+ */
+function cp_remember_viewed_product(int $productId, int $limit = 20): void
+{
+    if ($productId <= 0) {
+        return;
+    }
+
+    $limit = max(1, $limit);
+    $history = array_values(array_filter(
+        array_map('intval', (array) ($_SESSION['recently_viewed'] ?? [])),
+        static fn(int $id): bool => $id > 0 && $id !== $productId
+    ));
+
+    array_unshift($history, $productId);
+    $_SESSION['recently_viewed'] = array_slice($history, 0, $limit);
+}
+
+/**
+ * @return list<int>
+ */
+function cp_session_viewed_product_ids(int $limit = 8): array
+{
+    $limit = max(1, $limit);
+    $ids = array_values(array_unique(array_filter(
+        array_map('intval', (array) ($_SESSION['recently_viewed'] ?? [])),
+        static fn(int $id): bool => $id > 0
+    )));
+
+    return array_slice($ids, 0, $limit);
+}

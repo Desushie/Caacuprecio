@@ -128,7 +128,7 @@ render_navbar('usuario');
   --ac-success: var(--success);
   --ac-line: var(--border-soft);
   --ac-tint: color-mix(in srgb, var(--brand) 10%, transparent);
-  padding: 1.15rem 0 3.5rem;
+  padding: 1.15rem 0 max(3.5rem, calc(2rem + env(safe-area-inset-bottom, 0px)));
 }
 
 .ac-page svg.lucide,
@@ -685,16 +685,34 @@ body.theme-light .ac-toast svg.lucide * {
 }
 
 .ac-tab-body {
+  display: grid;
   flex: 1 1 auto;
   min-height: 0;
   padding: 1.35rem 1.4rem 1.4rem;
   overflow-y: auto;
+  align-items: stretch;
 }
 
-.ac-tab-body > .ac-pane.active {
-  display: flex;
+/* Apilar paneles: la altura queda fija al más alto al cambiar de tab */
+.ac-tab-body > .ac-pane.tab-pane {
+  grid-area: 1 / 1;
+  display: flex !important;
   flex-direction: column;
+  width: 100%;
   min-height: 100%;
+  min-width: 0;
+}
+
+.ac-tab-body > .ac-pane.tab-pane:not(.show) {
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ac-tab-body > .ac-pane.tab-pane.show {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
 }
 
 .ac-pane-form {
@@ -956,10 +974,17 @@ body.theme-light .ac-page .ac-input {
 .ac-page .btn-outline-danger.ac-btn svg.lucide { --icon-c: currentColor; }
 
 /* ── Modal eliminar cuenta ── */
+.ac-delete-dialog {
+  margin: 0.75rem auto;
+  max-width: min(28rem, calc(100vw - 1.5rem));
+}
+
 .ac-delete-modal,
 body.theme-light .ac-delete-modal {
   color: var(--text-main);
   box-shadow: none;
+  border-radius: 1rem;
+  overflow: hidden;
 }
 
 .ac-delete-modal .modal-header {
@@ -1070,9 +1095,16 @@ body.theme-light .ac-delete-modal .btn-danger svg.lucide {
   opacity: 0.45;
 }
 
+/* ── Responsive: tablet y abajo ── */
 @media (max-width: 991.98px) {
+  .ac-page {
+    padding-top: 1rem;
+    padding-bottom: max(2.75rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)));
+  }
+
   .ac-board {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
   }
 
   .ac-settings {
@@ -1080,12 +1112,170 @@ body.theme-light .ac-delete-modal .btn-danger svg.lucide {
     min-height: 0;
   }
 
+  .ac-profile-body {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "avatar identity"
+      "tags tags"
+      "stat stat"
+      "nav nav";
+    column-gap: 1rem;
+    row-gap: 0.85rem;
+    align-items: start;
+  }
+
+  .ac-avatar {
+    grid-area: avatar;
+    width: 4.25rem;
+    height: 4.25rem;
+    margin-top: -2.1rem;
+    font-size: 1.4rem;
+    border-radius: 1.15rem;
+  }
+
+  .ac-identity {
+    grid-area: identity;
+    align-self: end;
+    padding-bottom: 0.15rem;
+  }
+
+  .ac-tags { grid-area: tags; }
+  .ac-stat { grid-area: stat; }
+  .ac-nav { grid-area: nav; }
+
+  .ac-name {
+    font-size: clamp(1.2rem, 3.5vw, 1.45rem);
+  }
+
+  .ac-title {
+    font-size: clamp(1.45rem, 4vw, 1.85rem);
+  }
+
+  .ac-settings-head {
+    padding: 1.15rem 1.2rem 0.9rem;
+  }
+
+  .ac-tabs {
+    padding: 0 1.2rem;
+  }
+
   .ac-tab-body {
-    overflow: visible;
+    padding: 1.2rem;
+  }
+
+  .ac-row {
+    flex-wrap: wrap;
+  }
+
+  .ac-row .ac-btn {
+    margin-left: auto;
+  }
+
+  .ac-form-foot {
+    gap: 0.65rem;
   }
 }
 
+/* ── Responsive: móvil ── */
 @media (max-width: 575.98px) {
+  .ac-page {
+    padding-top: 0.75rem;
+    padding-bottom: max(2.25rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)));
+  }
+
+  .ac-board {
+    gap: 0.65rem;
+  }
+
+  .ac-panel {
+    border-radius: 1rem;
+  }
+
+  .ac-profile-band {
+    height: 4.25rem;
+  }
+
+  .ac-profile-band span:nth-child(1) {
+    width: 7rem;
+    height: 7rem;
+    right: -2rem;
+    top: -3.5rem;
+  }
+
+  .ac-profile-band span:nth-child(2) {
+    width: 3.75rem;
+    height: 3.75rem;
+    right: 2.4rem;
+    top: 1.35rem;
+  }
+
+  .ac-profile-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "avatar"
+      "identity"
+      "tags"
+      "stat"
+      "nav";
+    padding: 0 1rem 1rem;
+    gap: 0.85rem;
+  }
+
+  .ac-avatar {
+    width: 4rem;
+    height: 4rem;
+    margin-top: -2rem;
+    font-size: 1.35rem;
+    border-radius: 1.05rem;
+    outline-width: 3px;
+  }
+
+  .ac-avatar-dot {
+    width: 0.85rem;
+    height: 0.85rem;
+    outline-width: 2px;
+  }
+
+  .ac-identity {
+    padding-top: 0;
+  }
+
+  .ac-kicker {
+    font-size: 0.68rem;
+  }
+
+  .ac-name {
+    font-size: 1.25rem;
+  }
+
+  .ac-email {
+    font-size: 0.8rem;
+  }
+
+  .ac-tag {
+    padding: 0.18rem 0.5rem;
+  }
+
+  .ac-stat {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .ac-stat-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.7rem;
+  }
+
+  .ac-nav {
+    padding-top: 0.7rem;
+  }
+
+  .ac-nav a {
+    padding: 0.6rem 0.55rem;
+    min-height: 2.6rem;
+  }
+
   .ac-settings-head,
   .ac-tabs,
   .ac-tab-body {
@@ -1093,22 +1283,237 @@ body.theme-light .ac-delete-modal .btn-danger svg.lucide {
     padding-right: 1rem;
   }
 
+  .ac-settings-head {
+    padding-top: 1.05rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .ac-title {
+    font-size: 1.4rem;
+    margin-top: 0.15rem;
+  }
+
+  .ac-lead {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
   .ac-tabs {
-    gap: 1.1rem;
+    gap: 0.15rem;
+    margin: 0 -0.15rem;
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-inline: 0.85rem;
+  }
+
+  .ac-tab {
+    flex: 0 0 auto;
+    gap: 0.4rem;
+    padding: 0.7rem 0.55rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  .ac-tab-body {
+    padding-top: 1.1rem;
+    padding-bottom: 1.15rem;
+  }
+
+  .ac-section-head {
+    margin-bottom: 0.9rem;
   }
 
   .ac-fields {
     grid-template-columns: minmax(0, 1fr);
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  .ac-page .ac-input {
+    min-height: 2.75rem;
+    font-size: 16px; /* evita zoom automático en iOS */
+  }
+
+  .ac-form-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+    padding-top: 0.9rem;
+  }
+
+  .ac-dirty {
+    order: 2;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .ac-actions {
+    order: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .ac-actions .ac-btn {
+    width: 100%;
+    min-height: 2.65rem;
   }
 
   .ac-row {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.9rem;
   }
 
-  .ac-row .ac-btn,
-  .ac-actions,
-  .ac-actions .ac-btn {
+  .ac-row-icon {
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .ac-row .ac-btn {
     width: 100%;
+    min-height: 2.65rem;
+  }
+
+  .ac-pane-note {
+    align-items: flex-start;
+    padding-top: 0.9rem;
+  }
+
+  .ac-alert {
+    padding: 0.7rem 0.75rem;
+    gap: 0.55rem;
+    border-radius: 0.8rem;
+  }
+
+  /* Modal eliminar cuenta */
+  .ac-delete-dialog {
+    margin: 0.5rem auto;
+    max-width: calc(100vw - 1rem);
+  }
+
+  .ac-delete-modal .modal-header,
+  .ac-delete-modal .modal-body,
+  .ac-delete-modal .modal-footer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .ac-delete-modal .modal-footer {
+    flex-direction: column-reverse;
+    gap: 0.45rem;
+  }
+
+  .ac-delete-modal .modal-footer .btn {
+    width: 100%;
+    margin: 0;
+    min-height: 2.65rem;
+  }
+
+  .ac-confirm {
+    align-items: flex-start;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .ac-loss-list li {
+    padding: 0.5rem 0.45rem;
+  }
+}
+
+/* ── Responsive: pantallas muy estrechas ── */
+@media (max-width: 379.98px) {
+  .ac-profile-body,
+  .ac-settings-head,
+  .ac-tab-body {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
+  .ac-tabs {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+
+  .ac-tab {
+    gap: 0.3rem;
+    padding-inline: 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  .ac-tab svg.lucide {
+    width: 14px;
+    height: 14px;
+  }
+
+  .ac-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-name {
+    font-size: 1.15rem;
+  }
+
+  .ac-title {
+    font-size: 1.3rem;
+  }
+}
+
+/* ── Responsive: landscape móvil ── */
+@media (max-width: 991.98px) and (max-height: 500px) and (orientation: landscape) {
+  .ac-profile-band {
+    height: 3.25rem;
+  }
+
+  .ac-profile-body {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "avatar identity"
+      "tags tags"
+      "stat nav";
+    align-items: start;
+  }
+
+  .ac-avatar {
+    margin-top: -1.5rem;
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1.15rem;
+  }
+
+  .ac-stat,
+  .ac-nav {
+    align-self: stretch;
+  }
+
+  .ac-nav {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+/* ── Escritorio amplio: aire cómodo sin estirar de más ── */
+@media (min-width: 1200px) {
+  .ac-board {
+    gap: 1rem;
+  }
+
+  .ac-settings-head {
+    padding: 1.45rem 1.55rem 1.1rem;
+  }
+
+  .ac-tabs {
+    padding-left: 1.55rem;
+    padding-right: 1.55rem;
+  }
+
+  .ac-tab-body {
+    padding: 1.45rem 1.55rem 1.55rem;
+  }
+
+  .ac-profile-body {
+    padding: 0 1.3rem 1.3rem;
   }
 }
 </style>
@@ -1332,7 +1737,7 @@ body.theme-light .ac-delete-modal .btn-danger svg.lucide {
 </section>
 
 <div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable ac-delete-dialog">
     <form method="post" action="usuario.php" class="modal-content suggestion-modal report-product-modal ac-delete-modal" id="ac-delete-form">
       <input type="hidden" name="action" value="delete_account">
 
@@ -1438,17 +1843,44 @@ document.querySelectorAll('[data-ac-toast]').forEach((toast) => {
   const deleteModal = document.getElementById('deleteAccountModal');
   const deleteCheck = document.getElementById('ac-delete-confirm');
   const deleteSubmit = document.getElementById('ac-delete-submit');
-  if (deleteModal && deleteCheck && deleteSubmit) {
-    deleteCheck.addEventListener('change', () => { deleteSubmit.disabled = !deleteCheck.checked; });
-    deleteModal.addEventListener('hidden.bs.modal', () => {
-      deleteCheck.checked = false;
-      deleteSubmit.disabled = true;
-    });
+  if (deleteModal) {
+    // Evita que un ancestro con transform/overflow recorte o bloquee el modal
+    if (deleteModal.parentElement !== document.body) {
+      document.body.appendChild(deleteModal);
+    }
+    if (deleteCheck && deleteSubmit) {
+      deleteCheck.addEventListener('change', () => { deleteSubmit.disabled = !deleteCheck.checked; });
+      deleteModal.addEventListener('hidden.bs.modal', () => {
+        deleteCheck.checked = false;
+        deleteSubmit.disabled = true;
+      });
+    }
   }
 
   inputs.forEach((input) => input.addEventListener('input', sync));
   form.addEventListener('reset', () => requestAnimationFrame(sync));
   sync();
+})();
+
+(() => {
+  const tabBody = document.querySelector('.ac-tab-body');
+  if (!tabBody) return;
+
+  const panes = Array.from(tabBody.querySelectorAll(':scope > .ac-pane'));
+  // Usar .active (se asigna al instante). .show llega después del fade y dejaba
+  // el panel visible con inert, bloqueando Restablecer / Eliminar.
+  const syncPaneInert = () => {
+    panes.forEach((pane) => {
+      const on = pane.classList.contains('active');
+      pane.toggleAttribute('inert', !on);
+      pane.setAttribute('aria-hidden', on ? 'false' : 'true');
+    });
+  };
+
+  syncPaneInert();
+  document.querySelectorAll('[data-bs-toggle="tab"][data-bs-target^="#ac-pane-"]').forEach((tab) => {
+    tab.addEventListener('shown.bs.tab', syncPaneInert);
+  });
 })();
 </script>
 
