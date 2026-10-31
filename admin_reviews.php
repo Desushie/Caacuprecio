@@ -23,11 +23,11 @@ const AR_CASO_ICONOS = [
     'descartado' => 'circle-slash',
 ];
 const AR_ORDENES = [
-    'mas_reportadas' => ['label' => 'Más reportadas', 'icon' => 'arrow-down-wide-narrow'],
-    'mas_recientes' => ['label' => 'Recientes', 'icon' => 'clock'],
-    'menos_reportadas' => ['label' => 'Menos reportadas', 'icon' => 'arrow-up-narrow-wide'],
-    'tienda_asc' => ['label' => 'Tienda', 'icon' => 'arrow-down-a-z'],
-    'estado' => ['label' => 'Estado', 'icon' => 'list-checks'],
+    'mas_reportadas' => ['label' => 'Más reportadas', 'short' => 'Más', 'icon' => 'arrow-down-wide-narrow'],
+    'mas_recientes' => ['label' => 'Recientes', 'short' => 'Recientes', 'icon' => 'clock'],
+    'menos_reportadas' => ['label' => 'Menos reportadas', 'short' => 'Menos', 'icon' => 'arrow-up-narrow-wide'],
+    'tienda_asc' => ['label' => 'Tienda', 'short' => 'Tienda', 'icon' => 'arrow-down-a-z'],
+    'estado' => ['label' => 'Estado', 'short' => 'Estado', 'icon' => 'list-checks'],
 ];
 const AR_MINIMOS = [1, 2, 3, 5, 10];
 const AR_AVISOS = [
@@ -574,7 +574,9 @@ render_head('Gestión de reseñas reportadas');
                   class="at-sort-item <?= $order === $key ? 'is-active' : '' ?>"
                   <?= $order === $key ? 'aria-current="true"' : '' ?>
                 >
-                  <?= lucide_icon($option['icon'], '', 14) ?><?= e($option['label']) ?>
+                  <?= lucide_icon($option['icon'], '', 14) ?>
+                  <span class="ar-sort-full"><?= e($option['label']) ?></span>
+                  <span class="ar-sort-short"><?= e($option['short']) ?></span>
                 </a>
               <?php endforeach; ?>
             </nav>
@@ -840,7 +842,7 @@ render_head('Gestión de reseñas reportadas');
 </section>
 
 <div class="modal fade" id="arReportsModal" tabindex="-1" aria-labelledby="ar-reports-title" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg ar-reports-dialog">
     <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal">
       <div class="modal-header">
         <div class="report-product-heading">

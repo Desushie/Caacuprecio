@@ -8,31 +8,33 @@ legal_page_start('cookies');
 <p>Las cookies y el almacenamiento local son pequeños datos que el sitio guarda en tu navegador. Esta página explica cuáles usa Caacuprecio y por qué no te pedimos un banner de consentimiento.</p>
 
 <h2>1. Lo que guarda Caacuprecio</h2>
-<table class="legal-table">
-  <thead>
-    <tr><th scope="col">Nombre</th><th scope="col">Tipo</th><th scope="col">Para qué sirve</th><th scope="col">Duración</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code><?= e(session_name()) ?></code></td>
-      <td>Cookie propia, técnica</td>
-      <td>Mantener tu sesión iniciada, proteger los formularios contra envíos falsos y limitar abusos. Con ella también contamos, en nuestra propia base de datos, qué productos se ven y qué enlaces se usan (ver la <a href="privacidad.php">Política de privacidad</a>).</td>
-      <td>Hasta que cierras el navegador</td>
-    </tr>
-    <tr>
-      <td><code>caacuprecio-theme</code></td>
-      <td>Almacenamiento local, preferencia</td>
-      <td>Recordar si elegiste el tema claro u oscuro.</td>
-      <td>Hasta que lo borres</td>
-    </tr>
-    <tr>
-      <td><code>fv-checked-…</code></td>
-      <td>Almacenamiento local, preferencia</td>
-      <td>Recordar qué favoritos marcaste como comprados.</td>
-      <td>Hasta que lo borres</td>
-    </tr>
-  </tbody>
-</table>
+<div class="legal-table-scroll" role="region" aria-label="Cookies y almacenamiento local" tabindex="0">
+  <table class="legal-table legal-table--stack legal-table--cookies">
+    <thead>
+      <tr><th scope="col">Nombre</th><th scope="col">Tipo</th><th scope="col">Duración</th><th scope="col">Para qué sirve</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td data-label="Nombre"><code><?= e(session_name()) ?></code></td>
+        <td data-label="Tipo">Cookie propia, técnica</td>
+        <td data-label="Duración">Hasta que cierras el navegador</td>
+        <td data-label="Para qué sirve">Mantener tu sesión iniciada, proteger los formularios contra envíos falsos y limitar abusos. Con ella también contamos, en nuestra propia base de datos, qué productos se ven y qué enlaces se usan (ver la <a href="privacidad.php">Política de privacidad</a>).</td>
+      </tr>
+      <tr>
+        <td data-label="Nombre"><code>caacuprecio-theme</code></td>
+        <td data-label="Tipo">Almacenamiento local, preferencia</td>
+        <td data-label="Duración">Hasta que lo borres</td>
+        <td data-label="Para qué sirve">Recordar si elegiste el tema claro u oscuro.</td>
+      </tr>
+      <tr>
+        <td data-label="Nombre"><code>fv-checked-…</code></td>
+        <td data-label="Tipo">Almacenamiento local, preferencia</td>
+        <td data-label="Duración">Hasta que lo borres</td>
+        <td data-label="Para qué sirve">Recordar qué favoritos marcaste como comprados.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 <p>No usamos cookies de publicidad, de redes sociales ni herramientas de analítica de terceros (como Google Analytics o Meta Pixel).</p>
 
 <h2>2. Servicios de terceros</h2>

@@ -1200,7 +1200,7 @@ if (!$isProductsPartial):
   <span class="bg-grid"></span>
 </div>
 
-<section class="hero hero-home position-relative overflow-hidden">
+<section class="hero hero-home position-relative">
   <div class="hero-band">
     <div class="hero-main">
       <p class="hero-kicker">Comparador de precios · Caacupé</p>
@@ -1226,16 +1226,20 @@ if (!$isProductsPartial):
         <span class="hero-sim-ico"><?= lucide_icon('search', '', 15) ?></span>
         <span class="hero-sim-query">Auriculares bluetooth</span>
         <span class="hero-sim-caret"></span>
+        <span class="hero-sim-search-pulse"></span>
       </div>
 
       <ol class="hero-sim-offers">
         <?php foreach ([
-            ['Tienda A', 150000, 'Mejor precio', 'is-best'],
-            ['Tienda B', 168000, '+12%', ''],
-            ['Tienda C', 186000, '+24%', ''],
-        ] as $i => [$simStore, $simPrice, $simTag, $simClass]): ?>
-          <li class="<?= $simClass ?>" style="--sim-delay: <?= $i * 0.18 ?>s">
-            <span class="hero-sim-store"><span class="hero-sim-ico"><?= lucide_icon('store', '', 14) ?></span><?= $simStore ?></span>
+            ['Tienda A', 150000, 'Mejor precio', 'is-best', '#3f6ca8'],
+            ['Tienda B', 168000, '+12%', '', '#7a6a9a'],
+            ['Tienda C', 186000, '+24%', '', '#b26f00'],
+        ] as $i => [$simStore, $simPrice, $simTag, $simClass, $simHue]): ?>
+          <li class="<?= $simClass ?>" style="--sim-delay: <?= $i * 0.18 ?>s; --sim-avatar: <?= $simHue ?>">
+            <span class="hero-sim-merchant">
+              <span class="hero-sim-avatar"><?= lucide_icon('store', '', 13) ?><?php if ($simClass): ?><span class="hero-sim-avatar-dot"></span><?php endif; ?></span>
+              <span class="hero-sim-store"><?= $simStore ?></span>
+            </span>
             <span class="hero-sim-price"><?= gs($simPrice) ?></span>
             <span class="hero-sim-tag"><?php if ($simClass): ?><?= lucide_icon('badge-check', '', 13) ?><?php endif; ?><?= $simTag ?></span>
           </li>
@@ -1244,6 +1248,18 @@ if (!$isProductsPartial):
 
       <figcaption class="hero-sim-foot">
         <span class="hero-sim-saved"><span class="hero-sim-ico"><?= lucide_icon('heart', '', 14) ?></span>Guardado en favoritos</span>
+        <span class="hero-sim-agent">
+          <img
+            src="./img/logo_horizontal.webp"
+            data-theme-logo
+            data-light-logo="./img/logo_horizontal.webp"
+            data-dark-logo="./img/logo_horizontal_dark.webp"
+            alt=""
+            class="hero-sim-agent-logo"
+            width="132"
+            height="40"
+          >
+        </span>
       </figcaption>
     </figure>
 
@@ -1451,7 +1467,6 @@ if (!$isProductsPartial):
       <div class="activity-board">
         <article class="activity-lane" data-tone="recent">
           <header class="activity-lane-head">
-            <span class="activity-lane-mark" aria-hidden="true"><?= lucide_icon('history', '', 88) ?></span>
             <span class="activity-lane-icon"><?= lucide_icon('history', '', 20) ?></span>
             <div class="activity-lane-copy">
               <h3 class="activity-lane-title">Vistos recientemente</h3>
@@ -1464,7 +1479,6 @@ if (!$isProductsPartial):
 
         <article class="activity-lane" data-tone="trend">
           <header class="activity-lane-head">
-            <span class="activity-lane-mark" aria-hidden="true"><?= lucide_icon('trending-up', '', 88) ?></span>
             <span class="activity-lane-icon"><?= lucide_icon('trending-up', '', 20) ?></span>
             <div class="activity-lane-copy">
               <h3 class="activity-lane-title">Tendencias</h3>
@@ -1477,7 +1491,6 @@ if (!$isProductsPartial):
 
         <article class="activity-lane" data-tone="search">
           <header class="activity-lane-head">
-            <span class="activity-lane-mark" aria-hidden="true"><?= lucide_icon('search', '', 88) ?></span>
             <span class="activity-lane-icon"><?= lucide_icon('search', '', 20) ?></span>
             <div class="activity-lane-copy">
               <h3 class="activity-lane-title">Los más buscados</h3>
@@ -1797,29 +1810,29 @@ if (!$isProductsPartial):
                         <span><?= e($formatFreshness($scrapedAt)) ?></span>
                       </span>
                     </div>
-
-                    <div class="product-tile-actions">
-                      <a class="product-tile-cta" href="<?= e($productUrl) ?>" title="<?= $offersCount === 1 ? 'Ver detalle y comparar precios' : 'Comparar ' . number_format($offersCount, 0, ',', '.') . ' ofertas' ?>">
-                        Comparar<?= $offersCount > 1 ? ' · ' . number_format($offersCount, 0, ',', '.') : '' ?> <?= lucide_icon('arrow-right', '', 15) ?>
-                      </a>
-                      <?php if ($offerUrl !== ''): ?>
-                        <a
-                          class="product-tile-external"
-                          href="<?= e('go.php?' . http_build_query([
-                              'id' => $productId,
-                              'source' => 'inicio',
-                              'click_type' => 'ir_oferta',
-                              'term' => $q,
-                              'target_url' => $offerUrl,
-                          ])) ?>"
-                          target="_blank"
-                          rel="noopener noreferrer nofollow"
-                        >
-                          Ver oferta <?= lucide_icon('external-link', '', 14) ?>
-                        </a>
-                      <?php endif; ?>
-                    </div>
                   </div>
+                </div>
+
+                <div class="product-tile-actions">
+                  <a class="product-tile-cta" href="<?= e($productUrl) ?>" title="<?= $offersCount === 1 ? 'Ver detalle y comparar precios' : 'Comparar ' . number_format($offersCount, 0, ',', '.') . ' ofertas' ?>">
+                    Comparar<?= $offersCount > 1 ? ' · ' . number_format($offersCount, 0, ',', '.') : '' ?> <?= lucide_icon('arrow-right', '', 15) ?>
+                  </a>
+                  <?php if ($offerUrl !== ''): ?>
+                    <a
+                      class="product-tile-external"
+                      href="<?= e('go.php?' . http_build_query([
+                          'id' => $productId,
+                          'source' => 'inicio',
+                          'click_type' => 'ir_oferta',
+                          'term' => $q,
+                          'target_url' => $offerUrl,
+                      ])) ?>"
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                    >
+                      Ver oferta <?= lucide_icon('external-link', '', 14) ?>
+                    </a>
+                  <?php endif; ?>
                 </div>
               </article>
             <?php endforeach; ?>

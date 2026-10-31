@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+/** @var array<string, array{0: string, 1: string}> */
 const LEGAL_PAGES = [
     'terminos' => ['terminos.php', 'Términos y condiciones'],
     'privacidad' => ['privacidad.php', 'Política de privacidad'],
     'cookies' => ['cookies.php', 'Política de cookies'],
     'reembolsos' => ['reembolsos.php', 'Compras y reembolsos'],
-    'aviso_legal' => ['aviso_legal.php', 'Aviso legal y contacto'],
+    'aviso_legal' => ['aviso_legal.php', 'Aviso Legal'],
 ];
 
 /**
@@ -45,7 +46,7 @@ function legal_page_start(string $key): void
     render_head($title);
     render_navbar('legal');
 
-    echo '<main class="legal-page"><div class="container"><article class="legal-doc">';
+    echo '<main class="legal-page"><div class="container"><div class="legal-shell">';
 
     $missing = array_diff(['Titulares', 'Proyecto', 'Domicilio', 'Correo electrónico'], array_keys(business_details()));
     if ($missing && is_admin()) {
@@ -53,19 +54,24 @@ function legal_page_start(string $key): void
             . e(implode(', ', $missing)) . '). Complétalos antes de publicar el sitio.</div>';
     }
 
-    echo '<nav class="legal-nav" aria-label="Documentos legales">';
+    echo '<nav class="legal-nav" aria-label="Documentos legales"><div class="legal-nav-track">';
     foreach (LEGAL_PAGES as $pageKey => [$href, $label]) {
-        $current = $pageKey === $key ? ' aria-current="page"' : '';
-        echo '<a href="' . e($href) . '"' . $current . '>' . e($label) . '</a>';
+        $attrs = $pageKey === $key ? ' aria-current="page"' : '';
+        echo '<a class="legal-nav-link" href="' . e($href) . '"' . $attrs . '>' . e($label) . '</a>';
     }
-    echo '</nav>';
+    echo '</div></nav>';
 
+    echo '<article class="legal-doc">';
+    echo '<header class="legal-header">';
     echo '<h1>' . e($title) . '</h1>';
-    echo '<p class="legal-meta">Última actualización: ' . e(date('d/m/Y', strtotime(LEGAL_LAST_UPDATED))) . '</p>';
+    echo '<p class="legal-meta">Última actualización: <time datetime="' . e(LEGAL_LAST_UPDATED) . '">'
+        . e(date('d/m/Y', strtotime(LEGAL_LAST_UPDATED))) . '</time></p>';
+    echo '</header>';
+    echo '<div class="legal-body">';
 }
 
 function legal_page_end(): void
 {
-    echo '</article></div></main>';
+    echo '</div></article></div></div></main>';
     render_footer();
 }

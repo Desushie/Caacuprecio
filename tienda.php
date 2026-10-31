@@ -1102,15 +1102,15 @@ body.theme-light .ts-page svg.lucide * {
   width: 100%;
   height: 100%;
   padding: 0;
-  background: transparent;
+  background: #ffffff;
   border-radius: 0;
   box-shadow: none;
   color: #94a3b8;
 }
 
 .ts-featured-media .img-fallback svg.lucide {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3.75rem;
+  height: 3.75rem;
   max-width: none;
   max-height: none;
   color: #94a3b8 !important;

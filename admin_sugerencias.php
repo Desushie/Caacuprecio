@@ -11,9 +11,9 @@ const SG_ESTADOS = [
     'todos' => ['label' => 'Todas', 'single' => 'Todas', 'icon' => 'inbox', 'tone' => 'var(--brand)', 'hint' => 'Historial completo'],
 ];
 const SG_ORDENES = [
-    'recientes' => ['label' => 'Recientes', 'icon' => 'clock'],
-    'antiguas' => ['label' => 'Más antiguas', 'icon' => 'history'],
-    'remitente' => ['label' => 'Remitente', 'icon' => 'arrow-down-a-z'],
+    'recientes' => ['label' => 'Recientes', 'short' => 'Recientes', 'icon' => 'clock'],
+    'antiguas' => ['label' => 'Más antiguas', 'short' => 'Antiguas', 'icon' => 'history'],
+    'remitente' => ['label' => 'Remitente', 'short' => 'Remitente', 'icon' => 'arrow-down-a-z'],
 ];
 const SG_ACCIONES = [
     'mark_read' => 'leido',
@@ -451,7 +451,9 @@ render_head('Sugerencias');
                   class="at-sort-item <?= $order === $key ? 'is-active' : '' ?>"
                   <?= $order === $key ? 'aria-current="true"' : '' ?>
                 >
-                  <?= lucide_icon($option['icon'], '', 14) ?><?= e($option['label']) ?>
+                  <?= lucide_icon($option['icon'], '', 14) ?>
+                  <span class="sg-sort-full"><?= e($option['label']) ?></span>
+                  <span class="sg-sort-short"><?= e($option['short']) ?></span>
                 </a>
               <?php endforeach; ?>
             </nav>
@@ -670,8 +672,8 @@ render_head('Sugerencias');
 </section>
 
 <div class="modal fade" id="sgReadModal" tabindex="-1" aria-labelledby="sg-read-title" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable sg-modal-dialog">
+    <div class="modal-content suggestion-modal report-product-modal dash-confirm rp-alerts-modal ar-reports-modal sg-read-modal">
       <div class="modal-header">
         <div class="report-product-heading">
           <span class="report-product-icon sg-read-icon" aria-hidden="true"><?= lucide_icon('mail-open', '', 18) ?></span>
@@ -711,8 +713,8 @@ render_head('Sugerencias');
 </div>
 
 <div class="modal fade" id="sgDeleteModal" tabindex="-1" aria-labelledby="sg-delete-title" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <form method="post" class="modal-content suggestion-modal report-product-modal dash-confirm">
+  <div class="modal-dialog modal-dialog-centered sg-modal-dialog">
+    <form method="post" class="modal-content suggestion-modal report-product-modal dash-confirm sg-delete-modal">
       <input type="hidden" name="action" value="delete">
       <input type="hidden" name="id" value="" data-sg-del="id">
 

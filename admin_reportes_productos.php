@@ -24,11 +24,11 @@ const RP_CASO_ICONOS = [
     'descartado' => 'circle-slash',
 ];
 const RP_ORDENES = [
-    'mas_reportadas' => ['label' => 'Más reportados', 'icon' => 'arrow-down-wide-narrow'],
-    'mas_recientes' => ['label' => 'Recientes', 'icon' => 'clock'],
-    'menos_reportadas' => ['label' => 'Menos reportados', 'icon' => 'arrow-up-narrow-wide'],
-    'tienda_asc' => ['label' => 'Tienda', 'icon' => 'arrow-down-a-z'],
-    'estado' => ['label' => 'Estado', 'icon' => 'list-checks'],
+    'mas_reportadas' => ['label' => 'Más reportados', 'short' => 'Más', 'icon' => 'arrow-down-wide-narrow'],
+    'mas_recientes' => ['label' => 'Recientes', 'short' => 'Recientes', 'icon' => 'clock'],
+    'menos_reportadas' => ['label' => 'Menos reportados', 'short' => 'Menos', 'icon' => 'arrow-up-narrow-wide'],
+    'tienda_asc' => ['label' => 'Tienda', 'short' => 'Tienda', 'icon' => 'arrow-down-a-z'],
+    'estado' => ['label' => 'Estado', 'short' => 'Estado', 'icon' => 'list-checks'],
 ];
 const RP_MINIMOS = [1, 2, 3, 5, 10];
 const RP_AVISOS = [
@@ -630,7 +630,9 @@ render_head('Gestión de productos reportados');
                   class="at-sort-item <?= $order === $key ? 'is-active' : '' ?>"
                   <?= $order === $key ? 'aria-current="true"' : '' ?>
                 >
-                  <?= lucide_icon($option['icon'], '', 14) ?><?= e($option['label']) ?>
+                  <?= lucide_icon($option['icon'], '', 14) ?>
+                  <span class="rp-sort-full"><?= e($option['label']) ?></span>
+                  <span class="rp-sort-short"><?= e($option['short']) ?></span>
                 </a>
               <?php endforeach; ?>
             </nav>
@@ -705,7 +707,7 @@ render_head('Gestión de productos reportados');
                 <li class="rp-item ar-card <?= $isVisible ? '' : 'is-off' ?>" style="--s-c: <?= RP_ESTADOS[$caseState]['tone'] ?>">
                   <header class="ar-review-head">
                     <a href="producto.php?id=<?= $productId ?>" class="rp-shot" target="_blank" rel="noopener" aria-label="Abrir la ficha pública de <?= h($item['pro_nombre']) ?>">
-                      <?= lucide_icon('image-off', '', 18) ?>
+                      <?= lucide_icon('image-off', '', 26) ?>
                       <?php if ($image !== ''): ?>
                         <img src="<?= h($image) ?>" alt="" loading="lazy" data-no-fallback="true" onerror="this.remove()">
                       <?php endif; ?>
@@ -830,7 +832,7 @@ render_head('Gestión de productos reportados');
                     <article class="ar-review is-full" aria-label="Producto #<?= $productId ?>">
                       <header class="ar-review-head">
                         <span class="rp-shot" aria-hidden="true">
-                          <?= lucide_icon('image-off', '', 18) ?>
+                          <?= lucide_icon('image-off', '', 26) ?>
                           <?php if ($image !== ''): ?>
                             <img src="<?= h($image) ?>" alt="" data-no-fallback="true" onerror="this.remove()">
                           <?php endif; ?>

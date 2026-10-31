@@ -88,6 +88,11 @@
       return true;
     }
 
+    // Vista previa de modales admin: ya manejan empty state con .pe-preview-empty
+    if (img.closest('.pe-preview-media') || img.hasAttribute('data-pe-img') || img.hasAttribute('data-ts-img')) {
+      return true;
+    }
+
     return false;
   }
 

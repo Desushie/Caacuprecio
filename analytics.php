@@ -1260,23 +1260,24 @@ body.theme-light .an-page .an-input {
 .an-thumb img { width: 100%; height: 100%; object-fit: contain; }
 
 .an-thumb:has(.img-fallback) {
-  background: color-mix(in srgb, #94a3b8 9%, #fff);
+  background: #ffffff;
 }
 
 .an-top-media,
 .an-top-media:has(.img-fallback),
 .an-store-logo.img-fallback {
-  background: #fff;
+  background: #ffffff;
 }
 
+body:not(.theme-light) .an-thumb,
 body:not(.theme-light) .an-thumb:has(.img-fallback) {
-  background: color-mix(in srgb, #94a3b8 14%, var(--bg-elevated));
+  background: #ffffff;
 }
 
 body:not(.theme-light) .an-top-media,
 body:not(.theme-light) .an-top-media:has(.img-fallback),
 body:not(.theme-light) .an-store-logo.img-fallback {
-  background: #fff;
+  background: #ffffff;
 }
 
 .an-thumb .img-fallback,
@@ -1291,20 +1292,20 @@ body:not(.theme-light) .an-store-logo.img-fallback {
   padding: 0;
   border: 0;
   border-radius: inherit;
-  background: transparent;
+  background: #ffffff;
   color: #94a3b8;
   box-shadow: none;
 }
 
 .an-store-logo.img-fallback {
   border: 1px solid var(--an-line);
-  background: #fff;
+  background: #ffffff;
 }
 
 .an-thumb .img-fallback svg.lucide,
 .an-page .an-thumb .img-fallback svg.lucide {
-  width: 1.55rem !important;
-  height: 1.55rem !important;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
   max-width: none !important;
   max-height: none !important;
   color: #94a3b8 !important;
@@ -1314,15 +1315,15 @@ body:not(.theme-light) .an-store-logo.img-fallback {
 
 .an-top-media .img-fallback {
   position: relative;
-  background: #fff;
+  background: #ffffff;
 }
 
 .an-top-media .img-fallback svg.lucide,
 .an-page .an-top-media .img-fallback svg.lucide {
   position: relative;
   z-index: 1;
-  width: 2.85rem !important;
-  height: 2.85rem !important;
+  width: 4.25rem !important;
+  height: 4.25rem !important;
   max-width: none !important;
   max-height: none !important;
   color: #94a3b8 !important;
@@ -1332,8 +1333,8 @@ body:not(.theme-light) .an-store-logo.img-fallback {
 
 .an-store-logo.img-fallback svg.lucide,
 .an-page .an-store-logo.img-fallback svg.lucide {
-  width: 1.55rem !important;
-  height: 1.55rem !important;
+  width: 1.85rem !important;
+  height: 1.85rem !important;
   max-width: none !important;
   max-height: none !important;
   color: #94a3b8 !important;

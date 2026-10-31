@@ -333,8 +333,8 @@ $apWant = static function (string $part) use ($apListParts): bool {
               <aside class="pe-aside">
                 <span class="pe-aside-label">Vista previa</span>
                   <div class="pe-preview-media <?= $mImage === '' ? 'is-empty' : '' ?>" data-pe-media>
-                    <img src="<?= e($mImage) ?>" alt="" data-pe-img>
-                    <span class="pe-preview-empty" aria-hidden="true"><?= lucide_icon('image-off', '', 28) ?><span>Sin imagen</span></span>
+                    <img src="<?= e($mImage) ?>" alt="" data-pe-img data-no-fallback="true">
+                    <span class="pe-preview-empty" aria-hidden="true"><?= lucide_icon('image-off', '', 56) ?></span>
                     <span class="pe-preview-flag" data-pe-flag <?= $mOff > 0 ? '' : 'hidden' ?>>−<?= $mOff ?>%</span>
                   </div>
                   <div class="pe-preview-body">

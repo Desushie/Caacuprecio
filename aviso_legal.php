@@ -9,26 +9,30 @@ $details = business_details();
 <h2>1. Responsables del sitio</h2>
 <p>Datos de identificación de los responsables de Caacuprecio, conforme a la Ley N° 4868/2013 de Comercio Electrónico:</p>
 <?php if ($details): ?>
-  <table class="legal-table">
-    <tbody>
-      <tr><th scope="row">Sitio web</th><td><?= e(APP_NAME) ?> (<?= e(APP_URL) ?>)</td></tr>
-      <?php foreach ($details as $label => $value): ?>
-        <tr>
-          <th scope="row"><?= e($label) ?></th>
-          <td>
-            <?php if ($label === 'Correo electrónico'): ?>
-              <a href="mailto:<?= e($value) ?>"><?= e($value) ?></a>
-            <?php elseif ($label === 'Teléfono'): ?>
-              <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $value)) ?>"><?= e($value) ?></a>
-            <?php else: ?>
-              <?= e($value) ?>
-            <?php endif; ?>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      <tr><th scope="row">Actividad</th><td>Comparador de precios gratuito, sin fines comerciales, desarrollado como trabajo de investigación de grado. No vende productos ni procesa pagos.</td></tr>
-    </tbody>
-  </table>
+  <dl class="legal-facts">
+    <div class="legal-fact">
+      <dt>Sitio web</dt>
+      <dd><?= e(APP_NAME) ?> (<?= e(APP_URL) ?>)</dd>
+    </div>
+    <?php foreach ($details as $label => $value): ?>
+      <div class="legal-fact">
+        <dt><?= e($label) ?></dt>
+        <dd>
+          <?php if ($label === 'Correo electrónico'): ?>
+            <a href="mailto:<?= e($value) ?>"><?= e($value) ?></a>
+          <?php elseif ($label === 'Teléfono'): ?>
+            <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $value)) ?>"><?= e($value) ?></a>
+          <?php else: ?>
+            <?= e($value) ?>
+          <?php endif; ?>
+        </dd>
+      </div>
+    <?php endforeach; ?>
+    <div class="legal-fact">
+      <dt>Actividad</dt>
+      <dd>Comparador de precios gratuito, sin fines comerciales, desarrollado como trabajo de investigación de grado. No vende productos ni procesa pagos.</dd>
+    </div>
+  </dl>
 <?php else: ?>
   <p><?= e(APP_NAME) ?> (<?= e(APP_URL) ?>), comparador de precios gratuito y sin fines comerciales, desarrollado en Caacupé, Paraguay, como trabajo de investigación de grado. Puedes contactarnos <?= legal_contact_html() ?>.</p>
 <?php endif; ?>
@@ -47,7 +51,7 @@ $details = business_details();
 <p>Revisaremos el pedido y, si corresponde, retiraremos el contenido a la brevedad.</p>
 
 <h2>4. Más información</h2>
-<ul>
+<ul class="legal-more-links">
   <li><a href="terminos.php">Términos y condiciones</a></li>
   <li><a href="privacidad.php">Política de privacidad</a></li>
   <li><a href="cookies.php">Política de cookies</a></li>

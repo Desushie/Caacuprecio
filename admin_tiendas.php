@@ -682,10 +682,10 @@ require __DIR__ . '/auth_toast.php';
                 <span class="pe-aside-label">Vista previa</span>
 
                 <div class="pe-preview-media ts-logo <?= $mLogo === '' ? 'is-empty' : '' ?>" data-ts-media>
-                  <img src="<?= e($mLogo) ?>" alt="" data-ts-img>
+                  <img src="<?= e($mLogo) ?>" alt="" data-ts-img data-no-fallback="true">
                   <span class="pe-preview-empty" aria-hidden="true">
-                    <span class="ts-initials" data-ts-out="initials"><?= e($mInitials) ?></span>
-                    <span>Sin logo</span>
+                    <?= lucide_icon('image-off', '', 56) ?>
+                    <span class="ts-initials" data-ts-out="initials" hidden><?= e($mInitials) ?></span>
                   </span>
                 </div>
 

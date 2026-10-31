@@ -12,40 +12,40 @@ $owner = BUSINESS_LEGAL_NAME !== '' ? e(BUSINESS_LEGAL_NAME) : 'los titulares in
 <p>Los responsables del tratamiento son <?= $owner ?>. Puedes contactarnos <?= legal_contact_html() ?>.</p>
 
 <h2>2. Qué datos tratamos y para qué</h2>
-<table class="legal-table">
+<table class="legal-table legal-table--stack">
   <thead>
     <tr><th scope="col">Situación</th><th scope="col">Datos</th><th scope="col">Finalidad</th></tr>
   </thead>
   <tbody>
     <tr>
-      <td>Crear y usar una cuenta</td>
-      <td>Nombre, correo electrónico y contraseña (guardada cifrada con un algoritmo de hash, nunca en texto plano). Tus favoritos y tu historial de búsquedas.</td>
-      <td>Identificarte, guardar tus favoritos y mostrarte tus búsquedas recientes.</td>
+      <td data-label="Situación">Crear y usar una cuenta</td>
+      <td data-label="Datos">Nombre, correo electrónico y contraseña (guardada cifrada con un algoritmo de hash, nunca en texto plano). Tus favoritos y tu historial de búsquedas.</td>
+      <td data-label="Finalidad">Identificarte, guardar tus favoritos y mostrarte tus búsquedas recientes.</td>
     </tr>
     <tr>
-      <td>Recuperar la contraseña</td>
-      <td>Correo electrónico y un código temporal que vence a la hora.</td>
-      <td>Enviarte el enlace para crear una contraseña nueva.</td>
+      <td data-label="Situación">Recuperar la contraseña</td>
+      <td data-label="Datos">Correo electrónico y un código temporal que vence a la hora.</td>
+      <td data-label="Finalidad">Enviarte el enlace para crear una contraseña nueva.</td>
     </tr>
     <tr>
-      <td>Navegar por el sitio</td>
-      <td>Identificador de sesión, productos que ves, enlaces a tiendas en los que haces clic, términos de búsqueda y fecha. Si iniciaste sesión, se asocian a tu cuenta.</td>
-      <td>Estadísticas internas (productos más vistos, búsquedas frecuentes) y mejorar el sitio. No se usan para publicidad ni se venden.</td>
+      <td data-label="Situación">Navegar por el sitio</td>
+      <td data-label="Datos">Identificador de sesión, productos que ves, enlaces a tiendas en los que haces clic, términos de búsqueda y fecha. Si iniciaste sesión, se asocian a tu cuenta.</td>
+      <td data-label="Finalidad">Estadísticas internas (productos más vistos, búsquedas frecuentes) y mejorar el sitio. No se usan para publicidad ni se venden.</td>
     </tr>
     <tr>
-      <td>Enviar una sugerencia o un reporte</td>
-      <td>Texto del mensaje, motivo, y de forma opcional tu nombre y correo. Dirección IP e identificador de sesión.</td>
-      <td>Atender el mensaje, responderte si dejaste tu correo, y prevenir abusos y envíos repetidos.</td>
+      <td data-label="Situación">Enviar una sugerencia o un reporte</td>
+      <td data-label="Datos">Texto del mensaje, motivo, y de forma opcional tu nombre y correo. Dirección IP e identificador de sesión.</td>
+      <td data-label="Finalidad">Atender el mensaje, responderte si dejaste tu correo, y prevenir abusos y envíos repetidos.</td>
     </tr>
     <tr>
-      <td>Publicar una reseña de una tienda</td>
-      <td>Nombre que elijas, puntuación, comentario y fecha. Son <strong>públicos</strong>.</td>
-      <td>Mostrar opiniones de usuarios sobre las tiendas.</td>
+      <td data-label="Situación">Publicar una reseña de una tienda</td>
+      <td data-label="Datos">Nombre que elijas, puntuación, comentario y fecha. Son <strong>públicos</strong>.</td>
+      <td data-label="Finalidad">Mostrar opiniones de usuarios sobre las tiendas.</td>
     </tr>
     <tr>
-      <td>Formularios con verificación de seguridad</td>
-      <td>Datos técnicos del navegador y dirección IP, procesados por Cloudflare Turnstile.</td>
-      <td>Distinguir personas de programas automáticos y evitar spam.</td>
+      <td data-label="Situación">Formularios con verificación de seguridad</td>
+      <td data-label="Datos">Datos técnicos del navegador y dirección IP, procesados por Cloudflare Turnstile.</td>
+      <td data-label="Finalidad">Distinguir personas de programas automáticos y evitar spam.</td>
     </tr>
   </tbody>
 </table>
