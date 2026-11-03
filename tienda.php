@@ -70,50 +70,34 @@ function parse_horarios(?string $horarios): array
         return [];
     }
 
+    $dayNames = 'Lunes|Martes|Miércoles|Miercoles|Jueves|Viernes|Sábado|Sabado|Domingo|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Feriados?';
     $lines = array_filter(array_map('trim', explode("\n", $horarios)));
     $parsed = [];
 
     foreach ($lines as $line) {
-        if (empty($line)) {
+        if ($line === '') {
             continue;
         }
 
-        // Try to match pattern like "Lunes: 9:00 - 18:00" or "Lunes a Viernes: 9:00 - 18:00"
-        if (preg_match('/^(.+?):\s*(.+)$/', $line, $matches)) {
+        // "Lunes: 9:00 - 18:00" o "Lunes a Viernes: 9:00 - 18:00" (solo ":" tras el día, no el de la hora)
+        if (preg_match('/^((?:' . $dayNames . ')(?:\s+a\s+(?:' . $dayNames . '))?)\s*:\s*(.+)$/iu', $line, $matches)) {
             $day = trim($matches[1]);
-            $time = trim($matches[2]);
-            
-            // Try to separate day name from number (e.g., "Lunes 7" -> "Lunes", "7")
-            if (preg_match('/^(Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s*(\d*)$/i', $day, $dayParts)) {
-                $dayName = trim($dayParts[1]);
-                $dayNumber = trim($dayParts[2] ?? '');
-                
-                $parsed[] = [
-                    'day' => $dayName,
-                    'day_number' => $dayNumber,
-                    'time' => $time,
-                    'icon' => get_day_icon($dayName),
-                ];
-            } else {
-                $parsed[] = [
-                    'day' => $day,
-                    'day_number' => '',
-                    'time' => $time,
-                    'icon' => get_day_icon($day),
-                ];
-            }
-        } elseif (preg_match('/^(Lunes|Martes|Miércoles|Miercoles|Jueves|Viernes|Sábado|Sabado|Domingo|Feriados?)\s+(.+)$/iu', $line, $matches)) {
             $parsed[] = [
-                'day' => trim($matches[1]),
-                'day_number' => '',
+                'day' => $day,
                 'time' => trim($matches[2]),
-                'icon' => get_day_icon($matches[1]),
+                'icon' => get_day_icon($day),
+            ];
+        // "Lunes 7:30 a.m. – 5:30 p.m." o "Domingo Cerrado"
+        } elseif (preg_match('/^(' . $dayNames . ')\s+(.+)$/iu', $line, $matches)) {
+            $day = trim($matches[1]);
+            $parsed[] = [
+                'day' => $day,
+                'time' => trim($matches[2]),
+                'icon' => get_day_icon($day),
             ];
         } else {
-            // If no pattern matches, treat as a note
             $parsed[] = [
                 'day' => '',
-                'day_number' => '',
                 'time' => $line,
                 'icon' => 'info',
             ];
@@ -4024,7 +4008,7 @@ html.has-mobile-search-dock .ts-page {
                     <?php $isToday = $normalizeDay((string) $horario['day']) === $todayName; ?>
                     <div class="ts-hours-row<?= $isToday ? ' is-today' : '' ?>">
                       <span class="ts-hours-day">
-                        <?= h($horario['day']) ?><?= !empty($horario['day_number']) ? ' ' . h($horario['day_number']) : '' ?>
+                        <?= h($horario['day']) ?>
                         <?php if ($isToday): ?><span class="ts-today-badge">Hoy</span><?php endif; ?>
                       </span>
                       <span class="ts-hours-time"><?= h($horario['time']) ?></span>
