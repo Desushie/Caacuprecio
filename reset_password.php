@@ -1,17 +1,19 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-if (is_logged_in()) {
-    header('Location: index.php');
-    exit;
-}
-
 $pdo = db();
 $formError = '';
 $token = $_GET['token'] ?? ($_POST['token'] ?? '');
 $tokenState = 'missing';
 $secondsLeft = 0;
 $userId = null;
+
+// Con sesión iniciada, sin token, no hay nada que hacer aquí.
+// Con token (enlace del correo) sí debe abrirse el restablecimiento.
+if (is_logged_in() && $token === '') {
+    header('Location: index.php');
+    exit;
+}
 
 if ($token) {
     $stmt = $pdo->prepare('
@@ -54,6 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
             ':id' => $userId
         ]);
 
+        // Si había sesión abierta, cerrarla para forzar login con la nueva clave.
+        unset($_SESSION['user']);
+        session_regenerate_id(true);
         $_SESSION['flash'] = ['type' => 'success', 'message' => 'Contraseña actualizada. Ya puedes entrar.'];
         header('Location: login.php');
         exit;
